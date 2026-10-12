@@ -12,3 +12,7 @@
 - 전체 native+web mechanical gate → 전체 SPEC/QUALITY와 security → fresh verify → PO acceptance → commit/push/PR 순으로 마무리한다. 아직 Phase1 자동 merge 권한은 없다.
 - Phase0 미확인 브라우저2건과 Phase2~6 실제 기능은 별도 대기다. 4개 도메인 iOS FR을 부분 연결만으로 완료 처리하지 않는다.
 - 상태 정본: state.md. 실행 로그는 local /tmp 및 ignored .dev/*.log, 요약 근거는 reports에 보존한다.
+
+## 완료
+
+최종 fresh verify: node31 tests/VM26 + native26, 전부0fail 및 양쪽buildexit0, warnings0. 코드 지문 e0adabc:fce87a1bb903. PO ACCEPT Must6/6/P1-AC4/4. 구현 commit5acdfff, PR2 https://github.com/rnqhstmd/next-step/pull/2 를 생성·태스크 연결했다. state.md는 completed이며 브랜치는 리뷰 대응을 위해 유지한다. 제품 source 변화 없이 종료 기록만 추가한다.

@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "states": 42,
+  "viewports": [
+    [
+      402,
+      874
+    ],
+    [
+      320,
+      568
+    ]
+  ],
+  "results": [
+    "gallery issuance/search cannot reset the real user onboarding, card or departure",
+    "example errors reset; genuine map failure stays available on main without blocking records or analysis",
+    "card cancel dialog supports Escape, contained Tab/Shift+Tab and focus restoration",
+    "next-journey action from records handles an existing trip and still permits restoring the original task",
+    "all 42 gallery states inspected in two phone sizes without panel overflow",
+    "Chromium synthesized touch changes minutes and releases drag state"
+  ],
+  "pageErrors": []
+}

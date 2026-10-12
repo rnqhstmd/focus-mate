@@ -9,3 +9,7 @@ __pycache__/
 !.env.example
 node_modules/
 *.log
+.impeccable/review/
+.impeccable/mocks/
+test-results/
+playwright-report/

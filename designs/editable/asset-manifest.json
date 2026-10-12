@@ -1,0 +1,469 @@
+{
+  "source": "Pencil MCP document snapshot",
+  "assets": [
+    {
+      "url": "assets/next-stop/editable/image-5-page-01.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-02.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-03.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-04.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-05.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-06.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-07.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-09.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-10.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-11.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-124-page-11.png",
+      "bytes": 1674592
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-12.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-13.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-14.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-15.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-16.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-124-page-16.png",
+      "bytes": 1674592
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-21.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-22.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-25.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-26.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-27.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-28.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-31.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-32.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/editable/image-5-page-34.png",
+      "bytes": 1716871
+    },
+    {
+      "url": "assets/next-stop/transit-card.png",
+      "bytes": 2218914
+    },
+    {
+      "url": "assets/next-stop/transit-card-next-step.png",
+      "bytes": 1847852
+    },
+    {
+      "url": "assets/next-stop/revised/prepare-filled-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/prepare-filled-image-1-fm-review-v2.png",
+      "bytes": 370159
+    },
+    {
+      "url": "assets/next-stop/revised/prepare-filled-image-2-fm-review-v2.png",
+      "bytes": 1943
+    },
+    {
+      "url": "assets/next-stop/revised/main-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/main-image-1-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/intro-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/intro-image-1-fm-review-v2.png",
+      "bytes": 625485
+    },
+    {
+      "url": "assets/next-stop/revised/search-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/search-image-1-fm-review-v2.png",
+      "bytes": 412441
+    },
+    {
+      "url": "assets/next-stop/revised/search-image-2-fm-review-v2.png",
+      "bytes": 315
+    },
+    {
+      "url": "assets/next-stop/revised/home-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/home-image-1-fm-review-v2.png",
+      "bytes": 477886
+    },
+    {
+      "url": "assets/next-stop/revised/time-empty-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/time-empty-image-1-fm-review-v2.png",
+      "bytes": 560188
+    },
+    {
+      "url": "assets/next-stop/revised/time-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/time-image-1-fm-review-v2.png",
+      "bytes": 179684
+    },
+    {
+      "url": "assets/next-stop/revised/time-image-2-fm-review-v2.png",
+      "bytes": 1164
+    },
+    {
+      "url": "assets/next-stop/revised/prepare-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/prepare-image-1-fm-review-v2.png",
+      "bytes": 536082
+    },
+    {
+      "url": "assets/next-stop/revised/prepare-image-2-fm-review-v2.png",
+      "bytes": 2803
+    },
+    {
+      "url": "assets/next-stop/revised/sound-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/sound-image-1-fm-review-v2.png",
+      "bytes": 587314
+    },
+    {
+      "url": "assets/next-stop/revised/sound-image-2-fm-review-v2.png",
+      "bytes": 2983
+    },
+    {
+      "url": "assets/next-stop/revised/board-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/board-image-1-fm-review-v2.png",
+      "bytes": 594587
+    },
+    {
+      "url": "assets/next-stop/revised/board-image-2-fm-review-v2.png",
+      "bytes": 3031
+    },
+    {
+      "url": "assets/next-stop/revised/board-success-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/focus-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/focus-image-1-fm-review-v2.png",
+      "bytes": 548109
+    },
+    {
+      "url": "assets/next-stop/revised/focus-image-2-fm-review-v2.png",
+      "bytes": 3315
+    },
+    {
+      "url": "assets/next-stop/revised/rail-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/rail-image-1-fm-review-v2.png",
+      "bytes": 543036
+    },
+    {
+      "url": "assets/next-stop/revised/rail-image-2-fm-review-v2.png",
+      "bytes": 3315
+    },
+    {
+      "url": "assets/next-stop/revised/paused-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/paused-image-1-fm-review-v2.png",
+      "bytes": 329389
+    },
+    {
+      "url": "assets/next-stop/revised/quit-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/quit-image-1-fm-review-v2.png",
+      "bytes": 327877
+    },
+    {
+      "url": "assets/next-stop/revised/arrival-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/arrival-image-1-fm-review-v2.png",
+      "bytes": 320731
+    },
+    {
+      "url": "assets/next-stop/revised/arrival-image-2-fm-review-v2.png",
+      "bytes": 1728
+    },
+    {
+      "url": "assets/next-stop/revised/main-saved-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/main-saved-image-1-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/records-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/settings-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/settings-image-1-fm-review-v2.png",
+      "bytes": 623059
+    },
+    {
+      "url": "assets/next-stop/revised/map-error-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/map-error-image-1-fm-review-v2.png",
+      "bytes": 536082
+    },
+    {
+      "url": "assets/next-stop/revised/map-error-image-2-fm-review-v2.png",
+      "bytes": 2803
+    },
+    {
+      "url": "assets/next-stop/revised/sound-error-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/sound-error-image-1-fm-review-v2.png",
+      "bytes": 548463
+    },
+    {
+      "url": "assets/next-stop/revised/sound-error-image-2-fm-review-v2.png",
+      "bytes": 3362
+    },
+    {
+      "url": "assets/next-stop/revised/analytics-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/analytics-empty-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/main-memo-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/main-memo-image-1-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/time-choice-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/time-choice-image-1-fm-review-v2.png",
+      "bytes": 477886
+    },
+    {
+      "url": "assets/next-stop/revised/boarding-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/alighting-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/alight-success-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/arrival-memo-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/arrival-memo-image-1-fm-review-v2.png",
+      "bytes": 23334
+    },
+    {
+      "url": "assets/next-stop/revised/arrival-memo-image-2-fm-review-v2.png",
+      "bytes": 321
+    },
+    {
+      "url": "assets/next-stop/revised/main-resume-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/main-resume-image-1-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/resume-replace-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/resume-replace-image-1-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/resumed-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/resumed-image-1-fm-review-v2.png",
+      "bytes": 544542
+    },
+    {
+      "url": "assets/next-stop/revised/resumed-image-2-fm-review-v2.png",
+      "bytes": 3362
+    },
+    {
+      "url": "assets/next-stop/revised/main-alight-resume-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/main-alight-resume-image-1-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/issue-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/issue-printing-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/issue-done-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/profile-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/card-studio-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/card-studio-photos-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/card-studio-photos-image-1-fm-review-v2.png",
+      "bytes": 12409
+    },
+    {
+      "url": "assets/next-stop/revised/card-studio-photos-image-2-fm-review-v2.png",
+      "bytes": 10489
+    },
+    {
+      "url": "assets/next-stop/revised/card-studio-photos-image-3-fm-review-v2.png",
+      "bytes": 130335
+    },
+    {
+      "url": "assets/next-stop/revised/card-studio-photos-image-4-fm-review-v2.png",
+      "bytes": 47866
+    },
+    {
+      "url": "assets/next-stop/revised/profile-custom-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/profile-custom-image-1-fm-review-v2.png",
+      "bytes": 130335
+    },
+    {
+      "url": "assets/next-stop/revised/profile-custom-image-2-fm-review-v2.png",
+      "bytes": 47866
+    },
+    {
+      "url": "assets/next-stop/revised/boarding-custom-image-0-fm-review-v2.png",
+      "bytes": 655799
+    },
+    {
+      "url": "assets/next-stop/revised/boarding-custom-image-1-fm-review-v2.png",
+      "bytes": 72394
+    },
+    {
+      "url": "assets/next-stop/revised/boarding-custom-image-2-fm-review-v2.png",
+      "bytes": 26306
+    }
+  ]
+}

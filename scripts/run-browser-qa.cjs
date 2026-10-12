@@ -1,0 +1,4 @@
+const {spawnSync}=require('node:child_process');const path=require('node:path');
+const suites=['research-flow-browser-qa.cjs','pass-issue-browser-qa.cjs','minute-first-browser-qa.cjs','fare-tag-browser-qa.cjs','reader-feedback-browser-qa.cjs','journey-resume-browser-qa.cjs','records-calendar-qa.cjs','analytics-memo-qa.cjs','card-studio-browser-qa.cjs','main-welcome-qa.cjs','home-preview-layout-qa.cjs','recorded-audio-browser-qa.cjs'];
+for(const suite of suites){process.stdout.write('\nRunning '+suite+'\n');const result=spawnSync(process.execPath,[path.join(__dirname,suite)],{stdio:'inherit',timeout:180000});if(result.error||result.status!==0){if(result.error)process.stderr.write(result.error.message+'\n');process.exit(result.status||1);}}
+process.stdout.write('\nAll '+suites.length+' browser suites passed.\n');

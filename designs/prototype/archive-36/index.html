@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111111">
+  <meta name="description" content="다음 정류장의 정류장 선택, 준비, 탑승, 집중, 하차와 기록을 직접 체험하는 프로토타입.">
+  <title>다음 정류장 · 앱 흐름</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+  <header class="review-header">
+    <a class="wordmark" href="./">다음 정류장<span>앱 흐름 프로토타입</span></a>
+    <div class="toolbar">
+      <button id="tour" class="primary" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg><span>흐름 재생</span></button>
+      <button id="restart" type="button">처음부터</button>
+    </div>
+  </header>
+  <main class="workspace">
+    <aside class="journey-nav" aria-label="주요 앱 흐름">
+      <h1>나만의 여행이<br>한 번의 집중으로.</h1>
+      <p class="intro-copy">화면의 버튼을 직접 눌러보세요.<br>시작부터 기록까지 이어집니다.</p>
+      <ol id="journeySteps"></ol>
+      <details id="allScreens"><summary>전체 36개 화면 보기</summary><div id="screenList"></div></details>
+    </aside>
+    <section class="stage" aria-label="앱 미리보기">
+      <div class="screen-caption"><span id="screenNumber">01</span><strong id="screenName">첫 이용</strong><label class="hint-toggle"><input id="hints" type="checkbox">눌러볼 곳 표시</label></div>
+      <div id="phoneSpace" class="phone-space"><div id="phone" class="phone" aria-label="다음 정류장 앱 화면" aria-busy="true"><div class="loading">시안을 불러오고 있습니다.</div></div></div>
+      <div class="stage-controls"><button id="previous" type="button" aria-label="이전 화면"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><p id="interactionHint" aria-live="polite">출발 정류장 선택을 눌러 시작하세요.</p><button id="next" type="button" aria-label="다음 주요 장면"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div>
+    </section>
+    <aside class="scene-guide" aria-label="현재 화면 설명">
+      <div class="guide-main"><h2 id="guideTitle">처음 만나는 정류장</h2><p id="guideText"></p><p id="guideAction" class="guide-action"></p></div>
+      <div class="trip-summary"><h3>이번 여행</h3><dl><div><dt>출발</dt><dd id="summaryOrigin">성수역</dd></div><div><dt>버스</dt><dd>2014</dd></div><div><dt>집중 시간</dt><dd id="summaryDuration">2시간</dd></div><div><dt>할 일</dt><dd id="summaryTask">책 한 챕터 읽기</dd></div><div><dt>태그</dt><dd id="summaryTag">독서</dd></div></dl></div>
+      <p class="preview-note">복원한 36개 원본 시안의 흐름입니다.<br>최신 16개 화면의 HTML과 다를 수 있습니다.<br>여행은 30초로 압축해 재생합니다.<br>지도와 노선은 가상 예시입니다.</p>
+    </aside>
+  </main>
+  <div id="announcement" class="visually-hidden" role="status" aria-live="polite"></div>
+  <script type="module" src="prototype.js"></script>
+</body>
+</html>

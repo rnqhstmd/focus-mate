@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "results": [
+    "fresh launch starts with issue; press prints one persistent card, disables duplicates and requests supported haptics; reload/cancel preserve the same card; direct departure selection skips the old intro",
+    "issued identity is shared by boarding and alighting; repeat trips and completed-trip reload never reissue the pass",
+    "issuance gallery and interactive example printing do not change real pass, location or history",
+    "closing/reloading during print resumes its completed card instead of minting another",
+    "reduced motion finishes with a static card/check and no haptic calls; Space/Enter work",
+    "blocked storage truthfully labels the current-page card and still permits departure selection",
+    "existing users receive a pass without replaying onboarding or changing saved departure/direction",
+    "unknown pass data stays untouched until an explicit reissue action",
+    "five viewports keep issue headline, printed card, confirmation and CTA separate; shared fare-card text remains contained"
+  ],
+  "pageErrors": []
+}

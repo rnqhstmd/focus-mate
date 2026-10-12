@@ -1,0 +1,87 @@
+{
+  "passed": true,
+  "decoded": [
+    {
+      "id": "white",
+      "decoded": {
+        "state": "running",
+        "loop": true,
+        "channels": 2,
+        "duration": 30,
+        "gain": 0.6499999761581421
+      },
+      "startAndStopFade": true
+    },
+    {
+      "id": "rain",
+      "decoded": {
+        "state": "running",
+        "loop": true,
+        "channels": 1,
+        "duration": 40,
+        "gain": 0.6499999761581421
+      },
+      "startAndStopFade": true
+    },
+    {
+      "id": "forest",
+      "decoded": {
+        "state": "running",
+        "loop": true,
+        "channels": 2,
+        "duration": 40,
+        "gain": 0.6499999761581421
+      },
+      "startAndStopFade": true
+    },
+    {
+      "id": "bus",
+      "decoded": {
+        "state": "running",
+        "loop": true,
+        "channels": 2,
+        "duration": 40,
+        "gain": 0.6499999761581421
+      },
+      "startAndStopFade": true
+    }
+  ],
+  "offlineRendered": [
+    {
+      "id": "white",
+      "peak": 0.15468809008598328,
+      "seam": 0.004784654825925827,
+      "adjacentP99": 0.043242283165454865,
+      "frames": 1440000,
+      "rate": 48000
+    },
+    {
+      "id": "rain",
+      "peak": 0.24234899878501892,
+      "seam": 0.01604772370774299,
+      "adjacentP99": 0.02126464620232582,
+      "frames": 1920000,
+      "rate": 48000
+    },
+    {
+      "id": "forest",
+      "peak": 0.20031434297561646,
+      "seam": 0.0034515380393713713,
+      "adjacentP99": 0.02424011379480362,
+      "frames": 1920000,
+      "rate": 48000
+    },
+    {
+      "id": "bus",
+      "peak": 0.3165298402309418,
+      "seam": 0.0006546229124069214,
+      "adjacentP99": 0.00474105030298233,
+      "frames": 1920000,
+      "rate": 48000
+    }
+  ],
+  "cachedAcrossScenes": true,
+  "failureRecovery": true,
+  "pageErrors": [],
+  "limit": "Real Web Audio decoding/rendering; no speaker or headphone listening assessment."
+}

@@ -1,0 +1,379 @@
+{
+  "date": "2026-10-12",
+  "browser": "Chromium / installed Chrome",
+  "suites": [
+    {
+      "suite": "full-review",
+      "passed": true,
+      "states": 42,
+      "viewports": [
+        [
+          402,
+          874
+        ],
+        [
+          320,
+          568
+        ]
+      ],
+      "results": [
+        "gallery issuance/search cannot reset the real user onboarding, card or departure",
+        "example errors reset; genuine map failure stays available on main without blocking records or analysis",
+        "card cancel dialog supports Escape, contained Tab/Shift+Tab and focus restoration",
+        "next-journey action from records handles an existing trip and still permits restoring the original task",
+        "all 42 gallery states inspected in two phone sizes without panel overflow",
+        "Chromium synthesized touch changes minutes and releases drag state"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "pass-issue",
+      "passed": true,
+      "results": [
+        "fresh launch starts with issue; press prints one persistent card, disables duplicates and requests supported haptics; reload/cancel preserve the same card; direct departure selection skips the old intro",
+        "issued identity is shared by boarding and alighting; repeat trips and completed-trip reload never reissue the pass",
+        "issuance gallery and interactive example printing do not change real pass, location or history",
+        "closing/reloading during print resumes its completed card instead of minting another",
+        "reduced motion finishes with a static card/check and no haptic calls; Space/Enter work",
+        "blocked storage truthfully labels the current-page card and still permits departure selection",
+        "existing users receive a pass without replaying onboarding or changing saved departure/direction",
+        "unknown pass data stays untouched until an explicit reissue action",
+        "five viewports keep issue headline, printed card, confirmation and CTA separate; shared fare-card text remains contained"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "minute-first",
+      "passed": true,
+      "results": [
+        "first setup confirms directly into time; back returns to main; records and analysis start the next trip with one action",
+        "no bus-first input or time shortcuts; exact-minute options; bus/station choice preserves time; 1-minute keyboard/tap and wheel; stale choice cleared; empty state blocks preparation",
+        "all 346 minutes, 9 starting stops and both directions: 3,096 valid candidate combinations",
+        "one-click saved departure → minute choice; actual boarding → arrival → record; reload and next trip keep the new origin and require a fresh choice",
+        "five viewport sizes: selected, unselected and unavailable; no candidate count or repeated route/distance summary; two/three cards scroll horizontally, selection and focus remain visible, new minute resets the row, CTA stays visible"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "fare-tag",
+      "passed": true,
+      "states": 42,
+      "results": [
+        "ticket only reviews journey; fullscreen reader and bottom card; wrong drops, canceled drags and canceled tags never board; successful drag boards",
+        "natural arrival waits for alighting; successful tag saves exactly once then task/time/destination summary; optional multiline memo and reached origin survive reload",
+        "Enter/Space, explicit tap alternative and reduced motion finish both tag steps",
+        "gallery tags, summaries and example memos never change stored history or location",
+        "five viewports keep reader separate from card, instructions and CTA visible, summary/memo scrollable without horizontal clipping"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "reader-feedback",
+      "passed": true,
+      "results": [
+        "black housing/LCD and approved branding; incorrect drop never vibrates; successful contact vibrates once, shows the same issued pass in the LCD and checkpoints boarding before celebration finishes",
+        "alighting saves once at confirmed contact; leaving during the LCD success cannot lose completion or resurrect the journey",
+        "five viewport sizes contain the display, target and card; black LCD stays black before/after tags; compact success preview stays inside the device",
+        "reduced motion keeps success/state changes and omits guidance motion and haptics"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "journey-resume",
+      "passed": true,
+      "results": [
+        "real boarding → pause → close tab → reopen on main; progress does not advance; resume restores reverse route, bus, custom tag/task and sound with one action",
+        "pause return preserves the trip; records/settings keep it; new-trip confirmation supports Escape/Tab/cancel, discards only on explicit action and starts at the reached stop without a completed record",
+        "backgrounding a running journey pauses and checkpoints it; hidden time never advances and foregrounding does not automatically resume",
+        "pagehide/reload and arrival awaiting alight can resume; successful alight removes checkpoint; a completed ID suppresses stale recovery and duplicate records after an interrupted cleanup",
+        "explicit quit clears recovery and never adds a completed record",
+        "unknown versions and invalid route/progress/tag/sound data are preserved and never executed; explicit new-trip cleanup is required",
+        "blocked storage offers same-page recovery and accurately says closing the page may lose the trip",
+        "new recovery gallery states never write real history, location or active journey",
+        "five viewports keep welcome, recovery card, resume/new CTAs and pause actions contained; long task labels wrap inside the card"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "records-calendar",
+      "passed": true,
+      "results": [
+        "28 completed journeys survive reload; duplicate-arrival guard; 10-at-a-time list; saved memo",
+        "complete year with 7 weekday rows and 12 month labels; 365/366 days and 54-week years; annual totals, year buttons, date picker, daily colors, keyboard day/week/year crossing and local midnight",
+        "example history, memos and demonstration arrivals cannot alter saved real history",
+        "five viewport sizes; full year fits without horizontal overflow; optional enlarged chart scrolls inside its own region; memo editing and fixed close/next-journey actions",
+        "blocked storage retains session records; unreadable storage is preserved and accurately labeled"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "analytics-memo",
+      "passed": true,
+      "results": [
+        "month/week totals, tag shares/filtering, leap day, year crossing, no-data periods, comparison and record deep link",
+        "actual alight → optional memo → record; multiline save/edit/reload; cancelling does not change saved memo",
+        "analysis and alight demonstration notes never write to real saved history",
+        "five viewport sizes; analysis scrolling, inline memo and main CTA stay contained",
+        "blocked storage accurately labels the optional memo as session-only"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "card-studio",
+      "passed": true,
+      "results": [
+        "default black card; draft background never changes saved pass; real multi-photo import, keyboard/drag movement, range/corner resize, z-order, delete/undo; chip stays fixed and photos clip at rounded card bounds",
+        "saved layout reloads without reissuing; unsaved cancel preserves it; settings returns to my page; same customized card appears on boarding, alighting and black LCD",
+        "reset is undoable; gallery edits never overwrite the user card",
+        "blocked storage gives honest same-page notice; unknown style version is preserved until explicit replacement",
+        "five viewport sizes keep editable canvas and save action visible; tools scroll vertically without horizontal overflow"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "main-welcome",
+      "passed": true,
+      "results": [
+        "first-use and four time periods; all nine saved stations",
+        "alight, persisted relaunch, and normal start",
+        "five viewport sizes: welcome, tools, location pin, and start remain separate"
+      ],
+      "pageErrors": []
+    },
+    {
+      "suite": "home-preview",
+      "passed": true,
+      "cases": [
+        {
+          "width": 1280,
+          "height": 1040,
+          "minutes": 40,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 1280,
+          "height": 1040,
+          "minutes": 360,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "minutes": 40,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 390,
+          "height": 844,
+          "minutes": 360,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 390,
+          "height": 650,
+          "minutes": 40,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 390,
+          "height": 650,
+          "minutes": 360,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 320,
+          "height": 568,
+          "minutes": 40,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 320,
+          "height": 568,
+          "minutes": 360,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 280,
+          "height": 656,
+          "minutes": 40,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        },
+        {
+          "width": 280,
+          "height": 656,
+          "minutes": 360,
+          "layout": {
+            "panel": true,
+            "footer": true,
+            "scroll": true,
+            "legacyHidden": true
+          }
+        }
+      ]
+    },
+    {
+      "suite": "recorded-audio",
+      "passed": true,
+      "decoded": [
+        {
+          "id": "white",
+          "decoded": {
+            "state": "running",
+            "loop": true,
+            "channels": 2,
+            "duration": 30,
+            "gain": 0.6499999761581421
+          },
+          "startAndStopFade": true
+        },
+        {
+          "id": "rain",
+          "decoded": {
+            "state": "running",
+            "loop": true,
+            "channels": 1,
+            "duration": 40,
+            "gain": 0.6499999761581421
+          },
+          "startAndStopFade": true
+        },
+        {
+          "id": "forest",
+          "decoded": {
+            "state": "running",
+            "loop": true,
+            "channels": 2,
+            "duration": 40,
+            "gain": 0.6499999761581421
+          },
+          "startAndStopFade": true
+        },
+        {
+          "id": "bus",
+          "decoded": {
+            "state": "running",
+            "loop": true,
+            "channels": 2,
+            "duration": 40,
+            "gain": 0.6499999761581421
+          },
+          "startAndStopFade": true
+        }
+      ],
+      "offlineRendered": [
+        {
+          "id": "white",
+          "peak": 0.15468809008598328,
+          "seam": 0.004784654825925827,
+          "adjacentP99": 0.043242283165454865,
+          "frames": 1440000,
+          "rate": 48000
+        },
+        {
+          "id": "rain",
+          "peak": 0.24234899878501892,
+          "seam": 0.01604772370774299,
+          "adjacentP99": 0.02126464620232582,
+          "frames": 1920000,
+          "rate": 48000
+        },
+        {
+          "id": "forest",
+          "peak": 0.20031434297561646,
+          "seam": 0.0034515380393713713,
+          "adjacentP99": 0.02424011379480362,
+          "frames": 1920000,
+          "rate": 48000
+        },
+        {
+          "id": "bus",
+          "peak": 0.3165298402309418,
+          "seam": 0.0006546229124069214,
+          "adjacentP99": 0.00474105030298233,
+          "frames": 1920000,
+          "rate": 48000
+        }
+      ],
+      "cachedAcrossScenes": true,
+      "failureRecovery": true,
+      "pageErrors": [],
+      "limit": "Real Web Audio decoding/rendering; no speaker or headphone listening assessment."
+    }
+  ],
+  "core": {
+    "passed": true,
+    "logicalScenes": 21,
+    "sceneTransitions": 441,
+    "cancelledTagTransitions": 882,
+    "numericAndRouteAssertions": 433440
+  },
+  "reviewer": {
+    "disposition": "ship",
+    "allFourMaterialFindings": "resolved"
+  },
+  "source": {
+    "html_sha256": "5f9ec689ecdae45256085e418fd1927c1c7f2e28318ead7683a1b4ba59bba415",
+    "viewer_sha256": "a3dd737a1f74208588694c3135856c2368ee439302beaad05cdc68ab8931a8e2"
+  },
+  "pen": {
+    "file": "designs/focus-mate.pen",
+    "roots": 94,
+    "currentScreenStates": 42,
+    "currentNativeText": 745,
+    "currentNativeVectors": 1561,
+    "referencedImages": 116,
+    "missingReferences": 0,
+    "placeholders": 0
+  },
+  "deployment": {
+    "status": "succeeded",
+    "id": "appgdep_6accac526f708191af745ca55f2182a3",
+    "sourceCommit": "62ca9d16a2aa4e8583888e49ea902e9421484aa9",
+    "url": "https://next-step-app-flow.sqisoft-3053.chatgpt.site/"
+  }
+}

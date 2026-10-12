@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "results": [
+    "month/week totals, tag shares/filtering, leap day, year crossing, no-data periods, comparison and record deep link",
+    "actual alight → optional memo → record; multiline save/edit/reload; cancelling does not change saved memo",
+    "analysis and alight demonstration notes never write to real saved history",
+    "five viewport sizes; analysis scrolling, inline memo and main CTA stay contained",
+    "blocked storage accurately labels the optional memo as session-only"
+  ],
+  "pageErrors": []
+}

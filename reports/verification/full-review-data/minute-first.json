@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "results": [
+    "first setup confirms directly into time; back returns to main; records and analysis start the next trip with one action",
+    "no bus-first input or time shortcuts; exact-minute options; bus/station choice preserves time; 1-minute keyboard/tap and wheel; stale choice cleared; empty state blocks preparation",
+    "all 346 minutes, 9 starting stops and both directions: 3,096 valid candidate combinations",
+    "one-click saved departure → minute choice; actual boarding → arrival → record; reload and next trip keep the new origin and require a fresh choice",
+    "five viewport sizes: selected, unselected and unavailable; no candidate count or repeated route/distance summary; two/three cards scroll horizontally, selection and focus remain visible, new minute resets the row, CTA stays visible"
+  ],
+  "pageErrors": []
+}

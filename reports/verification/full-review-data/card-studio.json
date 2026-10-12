@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "results": [
+    "default black card; draft background never changes saved pass; real multi-photo import, keyboard/drag movement, range/corner resize, z-order, delete/undo; chip stays fixed and photos clip at rounded card bounds",
+    "saved layout reloads without reissuing; unsaved cancel preserves it; settings returns to my page; same customized card appears on boarding, alighting and black LCD",
+    "reset is undoable; gallery edits never overwrite the user card",
+    "blocked storage gives honest same-page notice; unknown style version is preserved until explicit replacement",
+    "five viewport sizes keep editable canvas and save action visible; tools scroll vertically without horizontal overflow"
+  ],
+  "pageErrors": []
+}

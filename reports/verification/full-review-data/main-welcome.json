@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "results": [
+    "first-use and four time periods; all nine saved stations",
+    "alight, persisted relaunch, and normal start",
+    "five viewport sizes: welcome, tools, location pin, and start remain separate"
+  ],
+  "pageErrors": []
+}

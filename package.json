@@ -1,0 +1,16 @@
+{
+  "name": "focus-mate-design-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Focus Mate 집중동행카드 디자인 및 브라우저 프로토타입",
+  "scripts": {
+    "preview": "python -m http.server 8796 --bind 127.0.0.1 --directory designs/final",
+    "build": "python scripts/build-flow-prototype.py",
+    "test": "node scripts/prototype-edge-qa.cjs",
+    "test:browser": "node scripts/run-browser-qa.cjs",
+    "capture": "node scripts/capture-flow-scenes.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0"
+  }
+}

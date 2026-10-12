@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "results": [
+    "black housing/LCD and approved branding; incorrect drop never vibrates; successful contact vibrates once, shows the same issued pass in the LCD and checkpoints boarding before celebration finishes",
+    "alighting saves once at confirmed contact; leaving during the LCD success cannot lose completion or resurrect the journey",
+    "five viewport sizes contain the display, target and card; black LCD stays black before/after tags; compact success preview stays inside the device",
+    "reduced motion keeps success/state changes and omits guidance motion and haptics"
+  ],
+  "pageErrors": []
+}

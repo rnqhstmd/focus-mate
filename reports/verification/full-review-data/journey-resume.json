@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "results": [
+    "real boarding → pause → close tab → reopen on main; progress does not advance; resume restores reverse route, bus, custom tag/task and sound with one action",
+    "pause return preserves the trip; records/settings keep it; new-trip confirmation supports Escape/Tab/cancel, discards only on explicit action and starts at the reached stop without a completed record",
+    "backgrounding a running journey pauses and checkpoints it; hidden time never advances and foregrounding does not automatically resume",
+    "pagehide/reload and arrival awaiting alight can resume; successful alight removes checkpoint; a completed ID suppresses stale recovery and duplicate records after an interrupted cleanup",
+    "explicit quit clears recovery and never adds a completed record",
+    "unknown versions and invalid route/progress/tag/sound data are preserved and never executed; explicit new-trip cleanup is required",
+    "blocked storage offers same-page recovery and accurately says closing the page may lose the trip",
+    "new recovery gallery states never write real history, location or active journey",
+    "five viewports keep welcome, recovery card, resume/new CTAs and pause actions contained; long task labels wrap inside the card"
+  ],
+  "pageErrors": []
+}

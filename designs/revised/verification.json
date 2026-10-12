@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "checks": [
+    "first-use search",
+    "blank preparation and optional sound",
+    "inline tag then task",
+    "sound cancellation preserves task",
+    "tag validation and draft return",
+    "time change cancels preview without trip progress",
+    "one-tap boarding",
+    "pause and cancelled quit",
+    "quit without completed record",
+    "next-trip reset",
+    "arrival save, updated home, optional memo",
+    "map retry keeps preparation",
+    "audio silent recovery keeps the journey",
+    "mobile touch",
+    "reduced-motion boarding"
+  ],
+  "cases": 22,
+  "pageErrors": []
+}

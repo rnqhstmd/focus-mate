@@ -1,18 +1,22 @@
-# 여행 소리 합성 시안
+# 여행 소리 · CC0 녹음과 노이즈 샘플
 
-이 네 파일은 외부 녹음·다운로드·AI 오디오 모델 없이, 프로젝트용 Python DSP 스크립트로 생성한 원본 합성 시안이다. 실제 버스 주행이나 숲 현장 녹음이라고 표시하지 않는다. 사용자에게는 `합성 소리 시안`이라고 설명한다.
+2026-10-12. 기존 Python DSP 합성 시안을 외부 원본 WAV 기반 샘플로 교체했다. 음원 제공자는 **Joseph SARDIN / BigSoundBank**다. 각 원본 페이지와 [제공자의 이용 조건](https://bigsoundbank.com/licenses.html)에서 CC0를 확인했고, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)에 따라 앱에 포함·편집·재배포·상업 이용할 수 있다. 표시 의무는 없으나 출처를 보존한다.
 
-| 파일 | 소리 구성 |
-|---|---|
-| white-noise.wav | 고역을 크게 줄인 따뜻한 필터 잡음. 엄밀한 전대역 백색 잡음은 아님 |
-| rain-window.wav | 부드러운 연속 빗소리와 느리고 작은 물방울 층. 날카로운 유리 공명 제거 |
-| forest.wav | 저역 중심 바람·잎사귀와 낮은 음량의 천천한 합성 새 울음 |
-| bus-ride.wav | 일정한 55 Hz 엔진과 약한 배음·낮은 차내 공기. 떨림 충격·공기 배출음 제거 |
+| 앱 소리 | 현재 파일 | 원본 | 원래 형식 |
+|---|---|---|---|
+| 빗소리 | rain-windshield-cc0-v1.wav | [Rain on car windshield · 1295](https://bigsoundbank.com/rain-on-car-windshield-s1295.html) | 48 kHz, mono, 24-bit · 차량 안에서 유리에 떨어지는 비 |
+| 숲 소리 | forest-edge-cc0-v1.wav | [Forest: On the Edge · 0905](https://bigsoundbank.com/forest-on-the-edge-s0905.html) | 48 kHz, stereo, 16-bit · 숲 가장자리의 새·바람 |
+| 버스 주행 | bus-london-cc0-v1.wav | [London bus · 0644](https://bigsoundbank.com/london-bus-s0644.html) | 48 kHz, stereo, 16-bit · 런던 2층 버스 차내 |
+| 핑크 노이즈 | pink-noise-cc0-v1.wav | [Pink Noise · 0432](https://bigsoundbank.com/pink-noise-s0432.html) | 44.1 kHz, stereo, 16-bit · 스튜디오 노이즈 샘플 |
 
-24초, 24 kHz, mono, 16-bit PCM WAV. 사용자의 "노이즈가 심하고 일관된 소리가 필요하다"는 실제 청취 피드백을 반영해 목표 RMS를 -21에서 -26 dBFS로 낮췄다. 3 kHz 초과 에너지를 강하게 줄이고 완만한 레벨 보정으로 1초 RMS 변동을 제한한다. 경적이나 갑작스러운 큰 충격음은 포함하지 않는다. 기존 12 ms 무음 페이드를 제거하고 양끝을 같은 공유값으로 부드럽게 연결해 반복 시 무음으로 꺼지는 현상을 피했다. 수치상 경계 step은 0이며, 실제 장치에서 반복 경계가 자연스러운지는 청취 검증이 필요하다.
+빗소리·숲·버스는 실제 녹음이며, 핑크 노이즈는 의도적인 잡음 샘플이다. 서울 노선 현장 녹음으로 표현하지 않는다. 기존 ‘화이트 노이즈’ 선택은 ‘핑크 노이즈’로 바꿨다.
 
-현재 측정: RMS -26 dBFS, peak -17.420~-21.406 dBFS, 클리핑 0. 3 kHz 초과 에너지는 각 파일 약 0.000002%, 1초 RMS 최대-최소 차이는 0.101~0.157 dB다. 이는 파일 분석 결과이며 사용자가 듣는 음압이나 편안함을 보장하는 값은 아니다. 이번 수정본은 에이전트가 실제 청취하지 않았다.
+## 앱용 편집
 
-재생성: 번들 Python에 NumPy가 있는 환경에서 `python3 scripts/generate-travel-audio.py`. 고정 seed 20261011을 사용하며 외부 설치나 네트워크가 필요하지 않다. 정량 측정은 audio-stats.json을 참고한다. 실제 청취 품질은 이번 생성 과정에서 검증하지 않았다.
+원본 WAV를 정상 다운로드 버튼과 5초 대기 흐름으로 받았다. `sources.json`에는 원본 URL·파일명·SHA-256·작성자·라이선스를 보존했다. 원본은 `.impeccable/review/audio-sources/`, 이전 합성 파일은 `.impeccable/review/audio-before/`에 있다.
 
-이 프로젝트가 생성한 합성 자산과 생성 스크립트이므로 별도 제3자 녹음 라이선스는 없다. 앱 배포 시 볼륨·루프·이어폰/스피커와 실제 기기 배터리 영향은 별도로 확인한다.
+평온한 구간을 1초 음량 변동과 피크로 선택했고, 2초 equal-power 교차 연결로 반복 가능한 파일을 만들었다. 자연 소리는 40초, 핑크 노이즈는 30초다. 샘플레이트와 채널 수를 유지하고 앱 파일은 16-bit PCM WAV로 저장한다. 강한 저역통과 필터나 노이즈 제거로 고음을 뭉개지 않는다. DC 오프셋을 제거하고 이전 시안과 같은 RMS -26 dBFS로 맞춰, 단순히 더 큰 소리로 비교하지 않게 했다. 기기에서 출력하는 음압은 이 수치와 다르다.
+
+현재 앱 파일의 클리핑 표본은 0이다. 실제 재생 함수를 Web Audio로 두 바퀴 렌더링했고, 반복 경계의 변화량이 일반 인접 표본 변화의 99백분위 범위 안에 있는지 확인했다. 시작 120 ms·중지 60 ms의 음량 페이드도 검사했다. 자세한 값은 `audio-stats.json`과 `.impeccable/review/recorded-audio/verification.json`에 있다. 이것은 디코딩·렌더링·수치 검사이며 스피커·이어폰으로 직접 청취한 검증은 아니다.
+
+재현: `node scripts/download-ambient-sources.cjs` → `python scripts/prepare-recorded-ambience.py`. Chrome·Playwright, FFmpeg, NumPy를 사용한다. 이전 `generate-travel-audio.py`는 과거 합성 시안 생성기이며 현재 앱에서 사용하지 않는다.

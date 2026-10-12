@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "results": [
+    "28 completed journeys survive reload; duplicate-arrival guard; 10-at-a-time list; saved memo",
+    "complete year with 7 weekday rows and 12 month labels; 365/366 days and 54-week years; annual totals, year buttons, date picker, daily colors, keyboard day/week/year crossing and local midnight",
+    "example history, memos and demonstration arrivals cannot alter saved real history",
+    "five viewport sizes; full year fits without horizontal overflow; optional enlarged chart scrolls inside its own region; memo editing and fixed close/next-journey actions",
+    "blocked storage retains session records; unreadable storage is preserved and accurately labeled"
+  ],
+  "pageErrors": []
+}

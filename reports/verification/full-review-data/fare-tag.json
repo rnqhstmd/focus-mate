@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "states": 42,
+  "results": [
+    "ticket only reviews journey; fullscreen reader and bottom card; wrong drops, canceled drags and canceled tags never board; successful drag boards",
+    "natural arrival waits for alighting; successful tag saves exactly once then task/time/destination summary; optional multiline memo and reached origin survive reload",
+    "Enter/Space, explicit tap alternative and reduced motion finish both tag steps",
+    "gallery tags, summaries and example memos never change stored history or location",
+    "five viewports keep reader separate from card, instructions and CTA visible, summary/memo scrollable without horizontal clipping"
+  ],
+  "pageErrors": []
+}

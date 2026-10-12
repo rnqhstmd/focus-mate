@@ -1,0 +1,115 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "width": 1280,
+      "height": 1040,
+      "minutes": 40,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 1280,
+      "height": 1040,
+      "minutes": 360,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "minutes": 40,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "minutes": 360,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 390,
+      "height": 650,
+      "minutes": 40,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 390,
+      "height": 650,
+      "minutes": 360,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 320,
+      "height": 568,
+      "minutes": 40,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 320,
+      "height": 568,
+      "minutes": 360,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 280,
+      "height": 656,
+      "minutes": 40,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    },
+    {
+      "width": 280,
+      "height": 656,
+      "minutes": 360,
+      "layout": {
+        "panel": true,
+        "footer": true,
+        "scroll": true,
+        "legacyHidden": true
+      }
+    }
+  ]
+}

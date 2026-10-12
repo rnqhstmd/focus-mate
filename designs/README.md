@@ -4,7 +4,10 @@
 
 ## 현재 실행 자료
 
-- [프로토타입](final/animation-preview.html): 현재 16장면 여행 흐름
+- [앱 흐름 프로토타입](prototype/README.md): 최신 조사 반영 흐름과 자동 재생. HTML·Pen과 같은 제품 규칙을 사용한다.
+
+- [프로토타입](final/animation-preview.html): 현재 18개 제품 장면의 여행 흐름
+- [개선 시안](revised/README.md): 42개 상태·편집 가능한 Pen 레이어·PDF
 - [버스·서체 비교](final/bus-guide.html): 버스 유형 색상과 서체의 시각 참고
 - [현재 상태](../docs/CURRENT-STATE.md): 최신 화면·동작 결정
 
@@ -22,13 +25,21 @@
 - [38페이지 PDF](final/next-stop-final.pdf)
 - [브랜드](final/brand.png), [아이콘](final/app-icon-1024.png), [모션 보드](final/motion-storyboard.png)
 
-편집 가능한 `.pen` 원본은 이 저장소에 포함하지 않았습니다. 화면 목록의 Pen 노드 ID는 과거 작업 식별용이며 원본 파일 없이 편집 가능한 디자인으로 열리지는 않습니다.
+편집 가능한 원본은 [focus-mate.pen](focus-mate.pen)입니다. 최신 42개 상태와 이전 36개 시안·흐름 보드를 함께 보존합니다. 저장소를 내려받아 이 파일을 Pencil에서 열고 `assets/` 폴더를 같은 위치에 유지하세요. 최신 노드 ID는 [revised/pencil-node-ids.json](revised/pencil-node-ids.json), 참조 이미지 목록은 [editable/asset-manifest.json](editable/asset-manifest.json)입니다.
+
+최신 42개 PNG·PDF와 `revised/flow-overview.png`는 최종 검수 뒤 다시 생성했습니다. [전체 검수 결과](../reports/full-ui-flow-review-2026-10-12.md)를 함께 확인하세요.
 
 ## 자산 출처
 
 - [서울 서체](final/assets/fonts/SOURCE.md): 사용 파일과 공식 출처·이용 조건
 - [버스 그래픽](final/assets/bus/SOURCE.md): 유형별 시각 표현과 예시의 범위
-- [합성 오디오](final/assets/audio/SOURCE.md): DSP 합성 과정·청취 검증 한계
+- [여행 오디오](final/assets/audio/SOURCE.md): CC0 원본·편집 과정·청취 검증 한계
 - [오디오 측정](final/assets/audio/audio-stats.json): 최신 정량 결과
 
-지도는 생성 이미지이며 실제 MapKit 출력이 아닙니다. 합성 소리는 현장 녹음이나 외부 AI 오디오 모델의 결과가 아닙니다.
+지도는 생성 이미지이며 실제 MapKit 출력이 아닙니다. 현재 빗소리·숲·버스 소리는 CC0 현장 녹음이며 핑크 노이즈는 스튜디오 샘플입니다. 현장 녹음 장소는 가상 서울 노선과 다릅니다.
+
+- [전체 화면 승하차 태그와 여행 요약](../reports/fare-tag-and-journey-summary-2026-10-12.md): 간단한 승차권 → 카드와 단말기 → 하차 태그 후 요약·선택 메모.
+
+- [멈춘 여정 이어가기](../reports/journey-resume-2026-10-12.md): 앱 복귀 시 남은 여정을 직접 재개하고 새 여정은 정리 여부를 확인합니다.
+
+- [Focus Mate · 집중동행카드와 검은 단말기](../reports/focus-mate-card-and-reader-2026-10-12.md): 첫 카드 발급, 검은 LCD의 카드 표시, 접촉 순간 진동과 상태 저장.

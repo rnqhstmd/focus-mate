@@ -13,3 +13,5 @@ node_modules/
 .impeccable/mocks/
 test-results/
 playwright-report/
+dist/
+.dev/.active

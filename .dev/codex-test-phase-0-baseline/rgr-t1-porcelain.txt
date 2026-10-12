@@ -1,0 +1,20 @@
+M  .claude/config.json
+AM .dev/codex-test-phase-0-baseline/ac.md
+A  .dev/codex-test-phase-0-baseline/codemap.md
+AM .dev/codex-test-phase-0-baseline/decisions.md
+AM .dev/codex-test-phase-0-baseline/reports/t1-impl.md
+AM .dev/codex-test-phase-0-baseline/reports/t1-red.md
+AM .dev/codex-test-phase-0-baseline/rgr-t1-porcelain.txt
+AM .dev/codex-test-phase-0-baseline/state.md
+M  .gitignore
+ M designs/final/animation-preview.html
+ M designs/prototype/index.html
+M  docs/DEVELOPMENT-PHASES.md
+AM docs/PHASE-0-BASELINE.md
+A  docs/design-baseline.json
+M  package.json
+AM scripts/check-design-baseline.cjs
+AM scripts/design-baseline.test.cjs
+?? .dev/codex-test-phase-0-baseline/reports/t1-diff.txt
+?? .dev/codex-test-phase-0-baseline/reports/t1-review.md
+?? .dev/codex-test-phase-0-baseline/trust-ledger.md

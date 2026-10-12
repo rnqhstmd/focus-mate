@@ -1,0 +1,11 @@
+ .claude/config.json               |   5 +-
+ .gitignore                        |   2 +
+ docs/DEVELOPMENT-PHASES.md        |   2 +-
+ docs/PHASE-0-BASELINE.md          |  47 +++++
+ docs/design-baseline.json         | 398 ++++++++++++++++++++++++++++++++++++++
+ package.json                      |   5 +-
+ scripts/check-design-baseline.cjs | 102 ++++++++++
+ scripts/design-baseline.test.cjs  | 344 ++++++++++++++++++++++++++++++++
+ 8 files changed, 900 insertions(+), 5 deletions(-)
+
+500줄 이상 변경은 통계로 전달합니다. 위 변경 파일을 직접 읽어 검토하세요. .dev는 코드 리뷰 대상에서 제외합니다.

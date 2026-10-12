@@ -1,6 +1,6 @@
 {
   "vcs": "git",
-  "modelProfile": "",
+  "modelProfile": "standard",
   "issueKey": {
     "pattern": "^[A-Z]+-[0-9]+$",
     "description": "대문자 영문 1자 이상 + '-' + 숫자 1자 이상 (e.g., JIRA-123, AFS-6)"
@@ -74,7 +74,8 @@
       "artifacts": [
         "node_modules/",
         "dist/"
-      ]
+      ],
+      "focusedTest": "node --test {files}"
     }
   },
   "notifications": {

@@ -15,3 +15,7 @@ test-results/
 playwright-report/
 dist/
 .dev/.active
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/

@@ -1,11 +1,11 @@
 # Focus Mate · 집중동행카드
 
-> 현재 기준 (2026-10-12): [현재 상태](docs/CURRENT-STATE.md) · [MVP 범위](docs/MVP.md) · [화면·저장 계약](docs/FLOWS.md). 과거 변경 기록은 당시 검증 증거로 보존합니다.
+> 현재 기준 (2026-10-13): [현재 상태](docs/CURRENT-STATE.md) · [MVP 범위](docs/MVP.md) · [화면·저장 계약](docs/FLOWS.md) · [iOS 앱 기반](docs/PHASE-1-FOUNDATION.md). 과거 변경 기록은 당시 검증 증거로 보존합니다.
 
 
 서울 버스를 타고 떠나는 버스 여행의 디자인과 브라우저 프로토타입입니다. 검정 화면, 버스 유형별 색상, 지도 위 가상 이동을 중심으로 구성했습니다. 실제 교통 안내나 완성된 iOS 앱은 아닙니다.
 
-현재 HTML은 화면과 상호작용을 검토하는 시안입니다. 실제 iPhone 앱은 확정된 흐름과 자산을 바탕으로 SwiftUI에서 구현할 예정이며, 이 저장소에 Swift 앱은 아직 포함되어 있지 않습니다.
+현재 HTML은 화면과 상호작용을 검토하는 시안입니다. `ios/`에는 SwiftUI 앱 기반과 기본 화면 연결·로컬 상태 저장이 추가됐습니다. 실제 카드 발급·여행·지도·기록 기능은 후속 단계이며, 웹 전체 화면이 네이티브로 옮겨진 상태는 아닙니다.
 
 ## 실행
 
@@ -20,6 +20,15 @@ python3 -m http.server 8794 --bind 127.0.0.1 --directory designs/final
 브라우저에서 [프로토타입](http://127.0.0.1:8794/animation-preview.html)을 엽니다. 종료는 터미널에서 `Ctrl+C`입니다. 포트가 사용 중이면 다른 포트 번호로 바꾸세요.
 
 ## 검증과 재생성
+
+macOS의 Xcode와 iOS Simulator 런타임이 준비되면 `ios/FocusMate.xcodeproj`의 `FocusMate` 스킴을 열거나 아래 명령으로 네이티브를 검사합니다. 작업 기준은 iOS 17 이상이며 배포 서명·출시 bundle ID는 아직 확정하지 않았습니다.
+
+```sh
+python3 scripts/check-ios.py build
+python3 scripts/check-ios.py test
+```
+
+스크립트는 설치된 최신 iPhone Simulator를 선택합니다. 특정 기기는 `FOCUSMATE_SIMULATOR_ID`로 지정합니다. 상세 범위와 검증 근거는 [Phase 1 앱 기반](docs/PHASE-1-FOUNDATION.md)을 확인하세요.
 
 ```sh
 npm ci
@@ -46,6 +55,7 @@ npm test
 
 ```text
 docs/             현재 상태와 문서 안내
+ios/              SwiftUI 앱 기반 및 XCTest 단위·UI 타깃
 designs/final/    실행 가능한 HTML, 디자인 스냅샷과 자산
 reports/          조사·디자인·회귀 검증 기록
 scripts/          상태·브라우저 검사, 화면·Pen 레이어·오디오 재생성

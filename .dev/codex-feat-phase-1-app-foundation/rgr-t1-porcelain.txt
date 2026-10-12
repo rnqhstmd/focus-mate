@@ -1,0 +1,41 @@
+ M .claude/config.json
+ M .gitignore
+ M README.md
+ M context/README.md
+ M docs/CURRENT-STATE.md
+ M docs/DEVELOPMENT-PHASES.md
+ M docs/MVP.md
+ M package.json
+?? .dev/codex-feat-phase-1-app-foundation/ac.md
+?? .dev/codex-feat-phase-1-app-foundation/codemap.md
+?? .dev/codex-feat-phase-1-app-foundation/decisions.md
+?? .dev/codex-feat-phase-1-app-foundation/design-draft.md
+?? .dev/codex-feat-phase-1-app-foundation/design-revision2.md
+?? .dev/codex-feat-phase-1-app-foundation/design.md
+?? .dev/codex-feat-phase-1-app-foundation/harness-ac.md
+?? .dev/codex-feat-phase-1-app-foundation/harness-bootstrap.md
+?? .dev/codex-feat-phase-1-app-foundation/native-references.md
+?? .dev/codex-feat-phase-1-app-foundation/prd-draft.md
+?? .dev/codex-feat-phase-1-app-foundation/prd.md
+?? .dev/codex-feat-phase-1-app-foundation/reports/t1-diff.txt
+?? .dev/codex-feat-phase-1-app-foundation/reports/t1-impl.md
+?? .dev/codex-feat-phase-1-app-foundation/reports/t1-red-r1.md
+?? .dev/codex-feat-phase-1-app-foundation/reports/t1-red.md
+?? .dev/codex-feat-phase-1-app-foundation/reports/t1-review.md
+?? .dev/codex-feat-phase-1-app-foundation/rgr-t1-porcelain.txt
+?? .dev/codex-feat-phase-1-app-foundation/rgr-task1.md
+?? .dev/codex-feat-phase-1-app-foundation/session-notes.md
+?? .dev/codex-feat-phase-1-app-foundation/state.md
+?? docs/PHASE-1-FOUNDATION.md
+?? ios/FocusMate.xcodeproj/project.pbxproj
+?? ios/FocusMate.xcodeproj/xcshareddata/xcschemes/FocusMate.xcscheme
+?? ios/FocusMate/AppModel.swift
+?? ios/FocusMate/AppSnapshot.swift
+?? ios/FocusMate/FocusMateApp.swift
+?? ios/FocusMate/LocalSnapshotStore.swift
+?? ios/FocusMate/RootView.swift
+?? ios/FocusMate/UITestBootstrap.swift
+?? ios/FocusMateTests/HarnessTests.swift
+?? ios/FocusMateUITests/HarnessUITests.swift
+?? ios/FocusMateUITests/Phase1FlowTests.swift
+?? scripts/check-ios.py

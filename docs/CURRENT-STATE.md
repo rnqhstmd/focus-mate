@@ -38,3 +38,7 @@
 ## 자료 위치
 
 [문서 안내](README.md) · [실행 README](../README.md) · [디자인 안내](../designs/README.md) · [보고서 목록](../reports/README.md) · [현재 Pen 파일](../designs/focus-mate.pen). Pen 파일 존재/저장은 별도 담당 확인을 기준으로 하며 이 문서 작업에서 파일 내용을 읽지 않았습니다.
+
+## 네이티브 앱 기반 — 2026-10-13
+
+[Phase 1](PHASE-1-FOUNDATION.md)에 SwiftUI 기본 진입·네 화면 왕복·버전 로컬 상태 저장을 추가했고 iOS27에서 제품 UI10건·Unit14건과 smoke2건, 전체26건을 통과했다. 웹31 tests와 VM26 경계 검사도 통과했으며 전체 리뷰가 통과했으며 최종 인수·PR 상태는 Phase1 작업 기록에서 확인한다. 기존 웹의 카드/여정/지도/기록 전체 기능을 iOS 완료로 치환하지 않는다. 실기기·접근성·오디오와 Phase0 미확인 화면은 기존 대기를 유지한다.

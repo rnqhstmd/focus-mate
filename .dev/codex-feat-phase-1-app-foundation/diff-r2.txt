@@ -1,0 +1,1497 @@
+diff --git a/.claude/config.json b/.claude/config.json
+index 0a66f17..6b9b9bb 100644
+--- a/.claude/config.json
++++ b/.claude/config.json
+@@ -76,6 +76,21 @@
+         "dist/"
+       ],
+       "focusedTest": "node --test {files}"
++    },
++    "ios-swiftui": {
++      "detect": [
++        "ios/FocusMate.xcodeproj/project.pbxproj"
++      ],
++      "build": "python3 scripts/check-ios.py build",
++      "test": "python3 scripts/check-ios.py test",
++      "focusedTest": "python3 scripts/check-ios.py test {files}",
++      "warningPattern": "warning:",
++      "artifacts": [
++        ".build/",
++        "DerivedData/",
++        "*.xcuserstate",
++        "xcuserdata/"
++      ]
+     }
+   },
+   "notifications": {
+diff --git a/.gitignore b/.gitignore
+index 456c105..3365809 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -15,3 +15,7 @@ test-results/
+ playwright-report/
+ dist/
+ .dev/.active
++.build/
++DerivedData/
++*.xcuserstate
++xcuserdata/
+diff --git a/README.md b/README.md
+index 8762373..f820e1d 100644
+--- a/README.md
++++ b/README.md
+@@ -1,11 +1,11 @@
+ # Focus Mate · 집중동행카드
+ 
+-> 현재 기준 (2026-10-12): [현재 상태](docs/CURRENT-STATE.md) · [MVP 범위](docs/MVP.md) · [화면·저장 계약](docs/FLOWS.md). 과거 변경 기록은 당시 검증 증거로 보존합니다.
++> 현재 기준 (2026-10-13): [현재 상태](docs/CURRENT-STATE.md) · [MVP 범위](docs/MVP.md) · [화면·저장 계약](docs/FLOWS.md) · [iOS 앱 기반](docs/PHASE-1-FOUNDATION.md). 과거 변경 기록은 당시 검증 증거로 보존합니다.
+ 
+ 
+ 서울 버스를 타고 떠나는 버스 여행의 디자인과 브라우저 프로토타입입니다. 검정 화면, 버스 유형별 색상, 지도 위 가상 이동을 중심으로 구성했습니다. 실제 교통 안내나 완성된 iOS 앱은 아닙니다.
+ 
+-현재 HTML은 화면과 상호작용을 검토하는 시안입니다. 실제 iPhone 앱은 확정된 흐름과 자산을 바탕으로 SwiftUI에서 구현할 예정이며, 이 저장소에 Swift 앱은 아직 포함되어 있지 않습니다.
++현재 HTML은 화면과 상호작용을 검토하는 시안입니다. `ios/`에는 SwiftUI 앱 기반과 기본 화면 연결·로컬 상태 저장이 추가됐습니다. 실제 카드 발급·여행·지도·기록 기능은 후속 단계이며, 웹 전체 화면이 네이티브로 옮겨진 상태는 아닙니다.
+ 
+ ## 실행
+ 
+@@ -21,6 +21,15 @@ python3 -m http.server 8794 --bind 127.0.0.1 --directory designs/final
+ 
+ ## 검증과 재생성
+ 
++macOS의 Xcode와 iOS Simulator 런타임이 준비되면 `ios/FocusMate.xcodeproj`의 `FocusMate` 스킴을 열거나 아래 명령으로 네이티브를 검사합니다. 작업 기준은 iOS 17 이상이며 배포 서명·출시 bundle ID는 아직 확정하지 않았습니다.
++
++```sh
++python3 scripts/check-ios.py build
++python3 scripts/check-ios.py test
++```
++
++스크립트는 설치된 최신 iPhone Simulator를 선택합니다. 특정 기기는 `FOCUSMATE_SIMULATOR_ID`로 지정합니다. 상세 범위와 검증 근거는 [Phase 1 앱 기반](docs/PHASE-1-FOUNDATION.md)을 확인하세요.
++
+ ```sh
+ npm ci
+ npm test
+@@ -46,6 +55,7 @@ npm test
+ 
+ ```text
+ docs/             현재 상태와 문서 안내
++ios/              SwiftUI 앱 기반 및 XCTest 단위·UI 타깃
+ designs/final/    실행 가능한 HTML, 디자인 스냅샷과 자산
+ reports/          조사·디자인·회귀 검증 기록
+ scripts/          상태·브라우저 검사, 화면·Pen 레이어·오디오 재생성
+diff --git a/context/README.md b/context/README.md
+index 04c8544..8aba7b8 100644
+--- a/context/README.md
++++ b/context/README.md
+@@ -31,7 +31,7 @@ Focus Mate의 도메인 지식·구현 경계·용어를 정리합니다. 현재
+ - [실행·작업 안내](../README.md) · [현재 HTML](../designs/final/animation-preview.html)
+ - 현재 레포: [rnqhstmd/next-step](https://github.com/rnqhstmd/next-step), `git remote get-url origin` 직접 확인
+ 
+-브라우저 검증과 이후 VM/Pen 검증은 [현재 상태](../docs/CURRENT-STATE.md)의 시점을 구분합니다. 네이티브 SwiftUI·MapKit·실제 분 타이머·클라우드는 현재 구현으로 간주하지 않습니다. 도메인 구성은 확인됐으며 담당 정보는 아직 확정하지 않았습니다.
++브라우저 검증과 이후 VM/Pen 검증은 [현재 상태](../docs/CURRENT-STATE.md)의 시점을 구분합니다. SwiftUI 앱 기반은 Phase 1에서 추가됐으며, MapKit·실제 분 타이머·클라우드는 구현되지 않았습니다. 도메인 구성은 확인됐으며 담당 정보는 아직 확정하지 않았습니다.
+ 
+ 
+ ## 개발 진행
+@@ -39,4 +39,4 @@ Focus Mate의 도메인 지식·구현 경계·용어를 정리합니다. 현재
+ - [개발 단계와 완료 기준](../docs/DEVELOPMENT-PHASES.md)
+ - 요구사항 원장: [여정](journey/status.md) · [카드](card/status.md) · [기록](records/status.md) · [환경설정](preferences/status.md)
+ 
+-현재 Swift 소스·Xcode 프로젝트가 없어 네이티브 단계는 미착수입니다. 웹 VM 통과와 Pen 렌더 확인을 실제 iPhone 검증으로 치환하지 않습니다. 일정·담당·최소 iOS 버전·배포 환경이 결정되기 전에는 완료 날짜를 예측해 기록하지 않습니다.
++현재 Swift 소스·Xcode 프로젝트와 앱 진입·기본 탐색·로컬 상태 기반은 추가됐으며 [Phase 1 검증](../docs/PHASE-1-FOUNDATION.md)을 참고합니다. 도메인별 실제 기능인 Phase 2~6은 미착수입니다. 웹 VM 통과와 Pen 렌더 확인을 실제 iPhone 검증으로 치환하지 않습니다. 최소 iOS 17은 작업 기준이며 출시 버전은 미정입니다. 일정·담당·배포 환경이 결정되기 전에는 완료 날짜를 예측해 기록하지 않습니다.
+diff --git a/docs/CURRENT-STATE.md b/docs/CURRENT-STATE.md
+index 929be8f..168df95 100644
+--- a/docs/CURRENT-STATE.md
++++ b/docs/CURRENT-STATE.md
+@@ -38,3 +38,7 @@
+ ## 자료 위치
+ 
+ [문서 안내](README.md) · [실행 README](../README.md) · [디자인 안내](../designs/README.md) · [보고서 목록](../reports/README.md) · [현재 Pen 파일](../designs/focus-mate.pen). Pen 파일 존재/저장은 별도 담당 확인을 기준으로 하며 이 문서 작업에서 파일 내용을 읽지 않았습니다.
++
++## 네이티브 앱 기반 — 2026-10-13
++
++[Phase 1](PHASE-1-FOUNDATION.md)에 SwiftUI 기본 진입·네 화면 왕복·버전 로컬 상태 저장을 추가했고 iOS27에서 제품 UI10건·Unit14건과 smoke2건, 전체26건을 통과했다. 웹31 tests와 VM26 경계 검사도 통과했으며 전체 리뷰·완료 검증 진행 중이다. 기존 웹의 카드/여정/지도/기록 전체 기능을 iOS 완료로 치환하지 않는다. 실기기·접근성·오디오와 Phase0 미확인 화면은 기존 대기를 유지한다.
+diff --git a/docs/DEVELOPMENT-PHASES.md b/docs/DEVELOPMENT-PHASES.md
+index 3fdf538..a604708 100644
+--- a/docs/DEVELOPMENT-PHASES.md
++++ b/docs/DEVELOPMENT-PHASES.md
+@@ -1,18 +1,20 @@
+ # Focus Mate 개발 phase
+ 
+-개발은 **총 7개 phase(0~6)**로 구분합니다. 현재 웹 프로토타입이 있으며 네이티브 Swift 구현은 모두 미착수입니다.
++개발은 **총 7개 phase(0~6)**로 구분합니다. 현재 웹 프로토타입과 Phase 1의 네이티브 앱 기반이 있으며, Phase 2~6 기능은 미착수입니다.
+ 
+ | Phase | 단계 | 범위 | 현재 상태 |
+ |---|---|---|---|
+ | 0 | 시안 기준선 | 현재 화면·흐름·저장 규칙 확정 | 진행 중 — [자료·연결 자동 검사 통과](PHASE-0-BASELINE.md), 승차/태그 중간 화면 확인 대기 |
+-| 1 | 앱 기반 | iOS 앱 구조·화면 전환·로컬 저장 | 미착수 |
++| 1 | 앱 기반 | iOS 앱 구조·화면 전환·로컬 저장 | 구현 검토 중 — 진입/탐색/로컬 저장 native26건·웹 회귀 통과, 전체 리뷰·완료 검증 진행 |
+ | 2 | 카드·준비·승차 | 카드 발급·첫 정류장·시간/버스 선택·태그/할 일/소리·승차 태그 | 미착수 |
+ | 3 | 지도·타이머·재개 | 가상 코스 지도·실제 선택 시간·일시정지·여정 복원 | 미착수 |
+ | 4 | 하차·기록·분석 | 하차 태그·완료 기록·선택 메모·잔디·분석 | 미착수 |
+ | 5 | 꾸미기·설정 | 카드 사진/색 편집·마이페이지·동작/환경 설정 | 미착수 |
+ | 6 | QA·출시 | 실기기 화면·터치·접근성·오디오·저장/복원 검증과 출시 준비 | 미착수 |
+ 
+-Xcode 27.0 설치는 확인됐지만 라이선스 동의가 선행 조건입니다. 최소 iOS·시뮬레이터·서명/배포 정보·담당은 미정이며 출시일은 정하지 않았습니다.
++Xcode 27.0 약관은 사용자가 동의했고 iOS 27 Simulator 실행을 확인했습니다. 작업 기준은 iOS 17 이상이며 출시 최소 버전·서명/배포 정보·담당·출시일은 미정입니다.
++
++Phase 1은 사용자의 전체 과정 전환 요청에 따라 **PRD → 설계·테스트 가능성 검토 → RED·GREEN·REFACTOR → 요구사항·품질·보안 리뷰 → 검증·인수 → 커밋·PR**로 진행합니다. 표준 모델 프로파일과 승인된 앱 기반 범위는 유지합니다. 전체 과정은 개발 절차이며, Phase 2~6의 제품 기능을 Phase 1에 추가한다는 뜻은 아닙니다. 최소 iOS 17은 작업 기준으로 승인됐으며 출시 대상 버전은 아직 확정하지 않았습니다.
+ 
+ 현재 웹의 30초 압축 시연을 네이티브 완료로 간주하지 않습니다. 네이티브는 실제 선택 시간을 사용하며, 실제 GPS·실시간 버스 API·클라우드 동기화는 MVP 후순위입니다.
+ 
+diff --git a/docs/MVP.md b/docs/MVP.md
+index dfe596d..5579e20 100644
+--- a/docs/MVP.md
++++ b/docs/MVP.md
+@@ -40,4 +40,4 @@ iOS 출시 전에는 실제 시간 타이머·앱 생명주기·작은 화면과
+ 
+ ## 개발 준비
+ 
+-[Phase 0~6](DEVELOPMENT-PHASES.md)에 개발 구분과 범위를 연결한다. 네이티브 단계는 미착수다. [도메인 요구사항 원장](../context/README.md)의 웹 ✅를 iOS 구현 완료로 해석하지 않는다.
++[Phase 0~6](DEVELOPMENT-PHASES.md)에 개발 구분과 범위를 연결한다. Phase 1의 앱 기반·진입/탐색·로컬 상태가 추가됐고 실제 여정 기능은 후속 단계다. [앱 기반 범위와 검증](PHASE-1-FOUNDATION.md)을 참고한다. [도메인 요구사항 원장](../context/README.md)의 웹 ✅를 iOS 구현 완료로 해석하지 않는다.
+diff --git a/docs/PHASE-1-FOUNDATION.md b/docs/PHASE-1-FOUNDATION.md
+new file mode 100644
+index 0000000..2db4792
+--- /dev/null
++++ b/docs/PHASE-1-FOUNDATION.md
+@@ -0,0 +1,54 @@
++# Phase 1 iOS 앱 기반
++
++2026-10-13. 상태: 전체 native/web 검사 통과, 전체 리뷰·완료 검증 진행 중. PRD와 후속 전체 과정은 사용자 “모두 진행”으로 승인했다.
++
++## 포함 범위
++
++- iOS 17 이상 SwiftUI 앱, 앱·XCTest Unit·XCTest UI 타깃과 공유 FocusMate 스킴.
++- 저장 데이터 없음 → 집중동행카드 진입. 카드 발급 상태만 있음 → 최초 정류장 진입. 최초/현재 정류장이 저장됨 → 현재 정류장 메인.
++- 메인에서 여행 준비·기록·설정·마이페이지 기본 화면 왕복. 탐색으로 저장 상태가 바뀌지 않는다.
++- Application Support/FocusMate/app-state.json의 version 1 상태 저장과 복원. 발급 여부·최초/현재 정류장 ID/이름/방향만 저장한다.
++- 손상·미지원 버전·읽기 실패는 초기 상태로 덮어쓰지 않는다. 실패한 저장은 이전 메모리·경로를 유지하고 성공으로 안내하지 않는다. 파일은 Foundation의 atomic write를 사용하며, 주입된 쓰기 전 실패에서 기존 바이트 보존을 확인했다. 실제 파일 교체 중 실패·전원 장애·다중 writer는 아직 검증하지 않았다.
++
++실제 카드 발급·최초 정류장 선택·버스/시간/태그/소리·승하차·MapKit/타이머·기록 작성은 후속 Phase 2~5다. 기본 진입 화면에는 해당 기능을 완료하는 버튼이 없다. 서버·계정·GPS·실시간 버스 API·클라우드도 추가하지 않았다. 승인된 시안의 전체 네이티브 화면 재현이나 실기기 완료를 뜻하지 않는다.
++
++## 실행
++
++Xcode에서 ios/FocusMate.xcodeproj → FocusMate → 설치된 iPhone Simulator를 선택한다. 로컬 Simulator 빌드에는 배포 Team을 요구하지 않으며 임시 개발 ID app.focusmate.prototype를 사용한다.
++
++```sh
++python3 scripts/check-ios.py build
++python3 scripts/check-ios.py test
++# 한 테스트 클래스만 검사
++python3 scripts/check-ios.py test ios/FocusMateUITests/Phase1FlowTests.swift
++```
++
++FOCUSMATE_SIMULATOR_ID로 기기를, FOCUSMATE_DERIVED_DATA로 빌드 캐시 경로를 지정할 수 있다. 기본은 최신 설치 iOS 17+ iPhone Pro와 .build/ios다. Simulator의 선택과 실제 런타임 설치는 별개이며 런타임이 없으면 명시적으로 종료한다.
++
++## 직접 검증 근거
++
++- Xcode 27.0 약관은 사용자가 직접 동의했다. Swift 6.4·iOS 27 SDK·iOS 27 런타임 조회가 성공했다.
++- iPhone 18 Pro / iOS 27 (529B88AF-5286-43EA-938A-4233F6B226CD)에서 빈 하네스 단위1/UI1을 실제 실행해 0 failures 확인.
++- 동일 기능 UI 테스트 8건이 빈 앱에서 실제 assertion RED(8 failures, exit65) → 구현 후 GREEN(8 pass, 0 failures, exit0)으로 바뀌었다. 테스트 파일 해시는 유지했다.
++- 리뷰 지적 재현을 위해 UI2건을 추가했다. 잘못된 시험 UUID는 setup 오류를 표시하고 load를 중단하며, 네 목적지에는 뒤로가기 외 완료 동작이 없음을 확인했다. R1 RED는 9 pass/1 failure(exit65), 수정 후 10 pass/0 failures(exit0)이며 독립 재검토 SPEC/QUALITY가 통과했다.
++- 카드만 있는 진입, 최초·현재 정류장 구별, 네 기본 화면 왕복, seed 없이 실제 terminate/launch 복원, 손상·미지원 원본 바이트 보존, 주입된 쓰기 전 실패의 이전 snapshot/파일 바이트 유지와 안내를 검사했다.
++- 실제 재실행은 동일 Application Support 시험 경로를 사용한다. 새 저장소 인스턴스나 임시 파일 round-trip만으로 재실행을 통과로 보고하지 않았다.
++- 실패 진단 수집에서 종료가 지연된 실행은 취소로 기록했다. 직렬 재검증과 collect-test-diagnostics never 적용 후 정상 exit65를 확인했다.
++
++전체 회귀는 Unit15(제품14+smoke1), UI11(제품10+smoke1) 합계26건/0 failures, 웹31 tests/0 failures + VM26 PASS 항목을 확인했다. 양쪽 build/test exit0이다. Release generic Simulator build도 성공했고 시험 인자와 진단 문자열은 Release 바이너리에서 제외됐다. 리뷰·인수·완료 검증 결과는 진행이 끝난 뒤 작업 기록에 추가한다. 최초 전체 컴파일의 AppIntents 메타데이터 경고는 기존 도구 경고로 분리하며 신규 Swift 경고와 혼동하지 않는다.
++
++## 시험 데이터와 안전 경계
++
++DEBUG의 --fm-ui-test-id UUID에서만 시험 경로를 활성화한다. seed는 신규 UUID에만 쓰고 재실행에서는 seed를 전달하지 않는다. 상태/파일 바이트 진단은 읽기만 하며 Release에서 시험 인자·주입·진단은 제외한다. 운영 저장 파일을 시험 seed로 덮어쓰지 않는다.
++
++## 작업 기록
++
++[PRD](../.dev/codex-feat-phase-1-app-foundation/prd.md) · [설계와 테스트 가능성 평가](../.dev/codex-feat-phase-1-app-foundation/design.md) · [RGR 구현](../.dev/codex-feat-phase-1-app-foundation/reports/t1-impl.md) · [진행 상태](../.dev/codex-feat-phase-1-app-foundation/state.md).
++
++Phase 0의 승차·태그 브라우저 화면 확인 2건은 계속 대기이며 이번 iOS 기반 검증으로 대체하지 않는다. 기존 네 도메인 요구사항 원장의 iOS 기능은 이번 부분 연결만으로 완료 처리하지 않는다.
++
++## 후속 검증·복구 경계
++
++Phase1은 저장 오류를 감지하고 원본을 보호하는 단계다. 오류 화면에서의 재시도·내보내기·명시적 정리 기능은 제공하지 않아 복구 전에는 진행할 수 없다. 복구 동작은 Phase5 환경·복구 설정에서 정의하고 Phase6 출시 검증에서 확인한다.
++
++파일 크기와 필드 길이 한도, 가상 정류장 데이터의 분류·백업·파일 보호 정책은 출시 전에 확정할 항목이다. 현재 단계에서 해당 정책 또는 실제 교체 실패·전원 장애 복구가 완료됐다고 보고하지 않는다. 상세 유예는 작업 원장에 기록한다.
+diff --git a/ios/FocusMate.xcodeproj/project.pbxproj b/ios/FocusMate.xcodeproj/project.pbxproj
+new file mode 100644
+index 0000000..a368b10
+--- /dev/null
++++ b/ios/FocusMate.xcodeproj/project.pbxproj
+@@ -0,0 +1,71 @@
++// !$*UTF8*$!
++{
++	archiveVersion = 1;
++	classes = {};
++	objectVersion = 77;
++	objects = {
++
++/* Begin PBXContainerItemProxy section */
++		A30000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000001; remoteInfo = FocusMate; };
++		A30000000000000000000002 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000001; remoteInfo = FocusMate; };
++/* End PBXContainerItemProxy section */
++/* Begin PBXFileReference section */
++		A20000000000000000000011 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
++		A20000000000000000000012 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
++		A20000000000000000000013 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
++/* End PBXFileReference section */
++/* Begin PBXFrameworksBuildPhase section */
++		A60000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000012 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000013 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++/* End PBXFrameworksBuildPhase section */
++/* Begin PBXFileSystemSynchronizedRootGroup section */
++		A40000000000000000000002 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMate; sourceTree = "<group>"; };
++		A40000000000000000000003 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMateTests; sourceTree = "<group>"; };
++		A40000000000000000000004 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMateUITests; sourceTree = "<group>"; };
++/* End PBXFileSystemSynchronizedRootGroup section */
++/* Begin PBXGroup section */
++		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002, A40000000000000000000003, A40000000000000000000004, A40000000000000000000005); sourceTree = "<group>"; };
++		A40000000000000000000005 = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013); name = Products; sourceTree = "<group>"; };
++/* End PBXGroup section */
++/* Begin PBXNativeTarget section */
++		A50000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000001; buildPhases = (A60000000000000000000001, A60000000000000000000011, A60000000000000000000021); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000002); dependencies = (); name = FocusMate; productName = FocusMate; productReference = A20000000000000000000011; productType = "com.apple.product-type.application"; };
++		A50000000000000000000002 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000002; buildPhases = (A60000000000000000000002, A60000000000000000000012, A60000000000000000000022); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000003); dependencies = (A70000000000000000000001); name = FocusMateTests; productName = FocusMateTests; productReference = A20000000000000000000012; productType = "com.apple.product-type.bundle.unit-test"; };
++		A50000000000000000000003 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000003; buildPhases = (A60000000000000000000003, A60000000000000000000013, A60000000000000000000023); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000004); dependencies = (A70000000000000000000002); name = FocusMateUITests; productName = FocusMateUITests; productReference = A20000000000000000000013; productType = "com.apple.product-type.bundle.ui-testing"; };
++/* End PBXNativeTarget section */
++/* Begin PBXProject section */
++		A90000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2700; TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 27.0; }; A50000000000000000000002 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000003 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; }; }; buildConfigurationList = AA0000000000000000000000; preferredProjectObjectVersion = 77; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A40000000000000000000001; productRefGroup = A40000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001, A50000000000000000000002, A50000000000000000000003); };
++/* End PBXProject section */
++/* Begin PBXResourcesBuildPhase section */
++		A60000000000000000000021 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000023 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++/* End PBXResourcesBuildPhase section */
++/* Begin PBXSourcesBuildPhase section */
++		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000003 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++/* End PBXSourcesBuildPhase section */
++/* Begin PBXTargetDependency section */
++		A70000000000000000000001 = {isa = PBXTargetDependency; target = A50000000000000000000001; targetProxy = A30000000000000000000001; };
++		A70000000000000000000002 = {isa = PBXTargetDependency; target = A50000000000000000000001; targetProxy = A30000000000000000000002; };
++/* End PBXTargetDependency section */
++/* Begin XCBuildConfiguration section */
++		AB0000000000000000000000 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; }; name = Debug; };
++		AB0000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
++		AB0000000000000000000010 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
++		AB0000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
++		AB0000000000000000000020 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.tests; PRODUCT_NAME = "$(TARGET_NAME)"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FocusMate"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
++		AB0000000000000000000021 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.tests; PRODUCT_NAME = "$(TARGET_NAME)"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FocusMate"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
++		AB0000000000000000000030 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = FocusMate; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
++		AB0000000000000000000031 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = FocusMate; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
++/* End XCBuildConfiguration section */
++/* Begin XCConfigurationList section */
++		AA0000000000000000000000 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000000, AB0000000000000000000001); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
++		AA0000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000010, AB0000000000000000000011); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
++		AA0000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000020, AB0000000000000000000021); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
++		AA0000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000030, AB0000000000000000000031); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
++/* End XCConfigurationList section */
++	};
++	rootObject = A90000000000000000000001;
++}
+diff --git a/ios/FocusMate.xcodeproj/xcshareddata/xcschemes/FocusMate.xcscheme b/ios/FocusMate.xcodeproj/xcshareddata/xcschemes/FocusMate.xcscheme
+new file mode 100644
+index 0000000..0e0a623
+--- /dev/null
++++ b/ios/FocusMate.xcodeproj/xcshareddata/xcschemes/FocusMate.xcscheme
+@@ -0,0 +1,30 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<Scheme LastUpgradeVersion="2700" version="1.3">
++  <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">
++    <BuildActionEntries>
++      <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
++        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000001" BuildableName="FocusMate.app" BlueprintName="FocusMate" ReferencedContainer="container:FocusMate.xcodeproj"/>
++      </BuildActionEntry>
++      <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
++        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000002" BuildableName="FocusMateTests.xctest" BlueprintName="FocusMateTests" ReferencedContainer="container:FocusMate.xcodeproj"/>
++      </BuildActionEntry>
++      <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
++        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000003" BuildableName="FocusMateUITests.xctest" BlueprintName="FocusMateUITests" ReferencedContainer="container:FocusMate.xcodeproj"/>
++      </BuildActionEntry>
++    </BuildActionEntries>
++  </BuildAction>
++  <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES">
++    <Testables>
++      <TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000002" BuildableName="FocusMateTests.xctest" BlueprintName="FocusMateTests" ReferencedContainer="container:FocusMate.xcodeproj"/></TestableReference>
++      <TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000003" BuildableName="FocusMateUITests.xctest" BlueprintName="FocusMateUITests" ReferencedContainer="container:FocusMate.xcodeproj"/></TestableReference>
++    </Testables>
++  </TestAction>
++  <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">
++    <BuildableProductRunnable runnableDebuggingMode="0"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000001" BuildableName="FocusMate.app" BlueprintName="FocusMate" ReferencedContainer="container:FocusMate.xcodeproj"/></BuildableProductRunnable>
++  </LaunchAction>
++  <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES">
++    <BuildableProductRunnable runnableDebuggingMode="0"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A50000000000000000000001" BuildableName="FocusMate.app" BlueprintName="FocusMate" ReferencedContainer="container:FocusMate.xcodeproj"/></BuildableProductRunnable>
++  </ProfileAction>
++  <AnalyzeAction buildConfiguration="Debug"/>
++  <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
++</Scheme>
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+new file mode 100644
+index 0000000..c6d0868
+--- /dev/null
++++ b/ios/FocusMate/AppModel.swift
+@@ -0,0 +1,69 @@
++import Foundation
++import Observation
++
++enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
++enum Destination: String, Hashable, CaseIterable {
++    case preparation, records, settings, profile
++    var title: String {
++        switch self {
++        case .preparation: "여행 준비"
++        case .records: "기록"
++        case .settings: "설정"
++        case .profile: "마이페이지"
++        }
++    }
++}
++
++@MainActor @Observable
++final class AppModel {
++    private(set) var launchState: LaunchState = .loading
++    private(set) var snapshot: AppSnapshot?
++    var path: [Destination] = []
++    private(set) var saveFailure: StorageIssue?
++    private let store: LocalSnapshotStore
++    @ObservationIgnored private var hasLoaded = false
++    init(store: LocalSnapshotStore) { self.store = store }
++
++    func loadIfNeeded() {
++        guard !hasLoaded else { return }
++        hasLoaded = true
++        do {
++            let restored = try store.load() ?? .empty
++            let route = try restored.launchRoute()
++            snapshot = restored
++            launchState = .ready(route)
++        } catch let issue as StorageIssue {
++            snapshot = nil; path = []; launchState = .failed(issue)
++        } catch {
++            snapshot = nil; path = []; launchState = .failed(.unreadable)
++        }
++    }
++
++    @discardableResult
++    func save(_ candidate: AppSnapshot) -> Bool {
++        guard case let .ready(previousRoute) = launchState else {
++            if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
++            else { saveFailure = .notReady }
++            return false
++        }
++        do {
++            let nextRoute = try candidate.launchRoute()
++            try store.save(candidate)
++            snapshot = candidate; launchState = .ready(nextRoute); saveFailure = nil
++            if previousRoute != nextRoute { path = [] }
++            return true
++        } catch let issue as SnapshotValidationIssue { saveFailure = .invalidState(issue) }
++        catch let issue as StorageIssue { saveFailure = issue }
++        catch { saveFailure = .writeFailed }
++        return false
++    }
++
++    func open(_ destination: Destination) {
++        guard launchState == .ready(.main) else { return }
++        path.append(destination)
++    }
++    func goBack() {
++        guard launchState == .ready(.main), !path.isEmpty else { return }
++        path.removeLast()
++    }
++}
+diff --git a/ios/FocusMate/AppSnapshot.swift b/ios/FocusMate/AppSnapshot.swift
+new file mode 100644
+index 0000000..e4598c4
+--- /dev/null
++++ b/ios/FocusMate/AppSnapshot.swift
+@@ -0,0 +1,46 @@
++import Foundation
++
++struct StationSnapshot: Codable, Equatable {
++    let id: String
++    let name: String
++    let direction: Int
++}
++
++enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
++enum SnapshotValidationIssue: Error, Equatable {
++    case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
++}
++
++struct AppSnapshot: Codable, Equatable {
++    let cardIssued: Bool
++    let initialStation: StationSnapshot?
++    let currentStation: StationSnapshot?
++    static let empty = AppSnapshot(cardIssued: false, initialStation: nil, currentStation: nil)
++
++    func validate() throws {
++        let noStations = initialStation == nil && currentStation == nil
++        let bothStations = initialStation != nil && currentStation != nil
++        guard noStations || (cardIssued && bothStations) else { throw SnapshotValidationIssue.inconsistentStage }
++        for station in [initialStation, currentStation].compactMap({ $0 }) {
++            guard !station.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationID }
++            guard !station.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationName }
++            guard station.direction == 1 || station.direction == -1 else { throw SnapshotValidationIssue.invalidDirection(station.direction) }
++        }
++    }
++
++    func launchRoute() throws -> LaunchRoute {
++        try validate()
++        if !cardIssued { return .cardEntry }
++        return currentStation == nil ? .initialStationEntry : .main
++    }
++
++    private enum CodingKeys: String, CodingKey { case cardIssued, initialStation, currentStation }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(cardIssued, forKey: .cardIssued)
++        if let initialStation { try c.encode(initialStation, forKey: .initialStation) }
++        else { try c.encodeNil(forKey: .initialStation) }
++        if let currentStation { try c.encode(currentStation, forKey: .currentStation) }
++        else { try c.encodeNil(forKey: .currentStation) }
++    }
++}
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+new file mode 100644
+index 0000000..63a50c6
+--- /dev/null
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -0,0 +1,62 @@
++import SwiftUI
++
++@main @MainActor
++struct FocusMateApp: App {
++    @State private var model: AppModel
++    @State private var hasStarted = false
++    #if DEBUG
++    private let testBootstrap: UITestBootstrap?
++    @State private var testSetupError: String?
++    #endif
++
++    init() {
++        do {
++            let support = try FileManager.default.url(for: .applicationSupportDirectory,
++                in: .userDomainMask, appropriateFor: nil, create: false)
++            let operationalURL = support.appendingPathComponent("FocusMate", isDirectory: true).appendingPathComponent("app-state.json")
++            #if DEBUG
++            let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
++            testBootstrap = bootstrap
++            _model = State(initialValue: AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL)))
++            #else
++            _model = State(initialValue: AppModel(store: LocalSnapshotStore(fileURL: operationalURL)))
++            #endif
++        } catch {
++            // This store never reads or writes a fallback location.
++            let unavailable = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unavailable-focusmate-state"),
++                readData: { _ in throw StorageIssue.unreadable })
++            _model = State(initialValue: AppModel(store: unavailable))
++            #if DEBUG
++            testBootstrap = nil
++            if ProcessInfo.processInfo.arguments.contains("--fm-ui-test-id") {
++                _testSetupError = State(initialValue: String(describing: error))
++            }
++            #endif
++        }
++    }
++
++    var body: some Scene {
++        WindowGroup {
++            #if DEBUG
++            RootView(model: model, testBootstrap: testBootstrap, testSetupError: testSetupError).task { start() }
++            #else
++            RootView(model: model).task { start() }
++            #endif
++        }
++    }
++
++    private func start() {
++        guard !hasStarted else { return }
++        hasStarted = true
++        #if DEBUG
++        guard testSetupError == nil else { return }
++        do { try testBootstrap?.prepare() }
++        catch { testSetupError = String(describing: error); return }
++        #endif
++        model.loadIfNeeded()
++        #if DEBUG
++        do { try testBootstrap?.applySaveScenario(to: model) }
++        catch { testSetupError = String(describing: error) }
++        #endif
++    }
++}
+diff --git a/ios/FocusMate/LocalSnapshotStore.swift b/ios/FocusMate/LocalSnapshotStore.swift
+new file mode 100644
+index 0000000..62b4697
+--- /dev/null
++++ b/ios/FocusMate/LocalSnapshotStore.swift
+@@ -0,0 +1,57 @@
++import Foundation
++
++indirect enum StorageIssue: Error, Equatable {
++    case unreadable, corrupt, unsupportedVersion(Int), invalidState(SnapshotValidationIssue)
++    case writeFailed, writeBlocked(StorageIssue), notReady
++}
++
++final class LocalSnapshotStore {
++    let fileURL: URL
++    private let readData: (URL) throws -> Data
++    private let createDirectory: (URL) throws -> Void
++    private let writeData: (Data, URL) throws -> Void
++
++    init(fileURL: URL,
++         readData: @escaping (URL) throws -> Data = { try Data(contentsOf: $0) },
++         createDirectory: @escaping (URL) throws -> Void = { try FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true) },
++         writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
++        self.fileURL = fileURL
++        self.readData = readData
++        self.createDirectory = createDirectory
++        self.writeData = writeData
++    }
++
++    private struct VersionHeader: Decodable { let version: Int }
++    private struct Envelope: Codable { let version: Int; let state: AppSnapshot }
++
++    func load() throws -> AppSnapshot? {
++        let data: Data
++        do { data = try readData(fileURL) }
++        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
++        catch { throw StorageIssue.unreadable }
++        let header: VersionHeader
++        do { header = try JSONDecoder().decode(VersionHeader.self, from: data) }
++        catch { throw StorageIssue.corrupt }
++        guard header.version == 1 else { throw StorageIssue.unsupportedVersion(header.version) }
++        do {
++            let state = try JSONDecoder().decode(Envelope.self, from: data).state
++            try state.validate()
++            return state
++        } catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
++        catch { throw StorageIssue.corrupt }
++    }
++
++    func save(_ snapshot: AppSnapshot) throws {
++        do { try snapshot.validate() }
++        catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
++        do { _ = try load() }
++        catch let issue as StorageIssue { throw StorageIssue.writeBlocked(issue) }
++        do {
++            let encoder = JSONEncoder()
++            encoder.outputFormatting = [.sortedKeys]
++            let data = try encoder.encode(Envelope(version: 1, state: snapshot))
++            try createDirectory(fileURL.deletingLastPathComponent())
++            try writeData(data, fileURL)
++        } catch { throw StorageIssue.writeFailed }
++    }
++}
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+new file mode 100644
+index 0000000..adbb724
+--- /dev/null
++++ b/ios/FocusMate/RootView.swift
+@@ -0,0 +1,95 @@
++import SwiftUI
++
++@MainActor
++struct RootView: View {
++    @Bindable var model: AppModel
++    #if DEBUG
++    var testBootstrap: UITestBootstrap?
++    var testSetupError: String?
++    #endif
++
++    var body: some View {
++        NavigationStack(path: $model.path) {
++            VStack(alignment: .leading, spacing: 24) {
++                content
++                if model.saveFailure != nil {
++                    Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
++                        .accessibilityIdentifier("storage.saveFailure").foregroundStyle(.secondary)
++                }
++                Spacer(minLength: 0)
++            }
++            .padding(24)
++            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
++            .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
++            .navigationDestination(for: Destination.self) { destination in
++                VStack(alignment: .leading, spacing: 16) {
++                    Text(destination.title).font(.largeTitle.bold())
++                        .accessibilityIdentifier("screen.\(destination.rawValue)")
++                    if destination == .records { Text("아직 여행 기록이 없어요.").foregroundStyle(.secondary) }
++                    Spacer()
++                }
++                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
++                .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
++            }
++        }
++        .preferredColorScheme(.dark)
++        #if DEBUG
++        .overlay(alignment: .bottomLeading) {
++            VStack(spacing: 0) {
++                if let testBootstrap {
++                    Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
++                    Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
++                }
++                if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
++            }
++            .font(.system(size: 1)).foregroundStyle(.clear)
++        }
++        #endif
++    }
++
++    @ViewBuilder private var content: some View {
++        switch model.launchState {
++        case .loading:
++            Text("불러오는 중").accessibilityIdentifier("screen.loading")
++        case .ready(.cardEntry):
++            Text("집중동행카드").font(.largeTitle.bold()).accessibilityIdentifier("screen.cardEntry")
++            Text("나만의 카드로 함께 떠나요.").foregroundStyle(.secondary)
++        case .ready(.initialStationEntry):
++            Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
++            Text("여행을 시작할 정류장을 골라요.").foregroundStyle(.secondary)
++        case .ready(.main):
++            Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
++            if let station = model.snapshot?.currentStation {
++                Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
++                Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
++                    .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
++            }
++            ForEach(Destination.allCases, id: \.self) { destination in
++                Button(destination.title) { model.open(destination) }.buttonStyle(.bordered)
++                    .accessibilityIdentifier("open.\(destination.rawValue)")
++            }
++        case let .failed(issue):
++            Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
++            Text(message(for: issue)).accessibilityIdentifier("storage.error")
++            Text("기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
++        }
++    }
++
++    private func message(for issue: StorageIssue) -> String {
++        switch issue {
++        case .corrupt: "저장된 데이터 형식을 읽을 수 없어요."
++        case .unsupportedVersion: "이 버전의 앱에서 열 수 없는 데이터예요."
++        case .invalidState: "저장된 이용 상태를 확인할 수 없어요."
++        default: "저장된 데이터를 읽지 못했어요."
++        }
++    }
++
++    #if DEBUG
++    private var snapshotJSON: String {
++        guard let snapshot = model.snapshot else { return "null" }
++        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
++        guard let data = try? encoder.encode(snapshot), let json = String(data: data, encoding: .utf8) else { return "null" }
++        return json
++    }
++    #endif
++}
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+new file mode 100644
+index 0000000..00b12e9
+--- /dev/null
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -0,0 +1,64 @@
++#if DEBUG
++import Foundation
++
++struct UITestBootstrap {
++    let fileURL: URL
++    let seed: String?
++    let shouldFailSave: Bool
++    enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
++
++    init?(arguments: [String], applicationSupport: URL) throws {
++        func argument(_ key: String) throws -> String? {
++            guard let index = arguments.firstIndex(of: key) else { return nil }
++            guard index + 1 < arguments.count else { throw SetupIssue.invalidArguments }
++            return arguments[index + 1]
++        }
++        guard let id = try argument("--fm-ui-test-id") else { return nil }
++        guard let uuid = UUID(uuidString: id) else { throw SetupIssue.invalidArguments }
++        seed = try argument("--fm-ui-seed")
++        guard seed == nil || ["none", "cardOnly", "ready", "corrupt", "unsupported"].contains(seed!) else { throw SetupIssue.invalidArguments }
++        let save = try argument("--fm-ui-save")
++        guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
++        shouldFailSave = save == "fail"
++        fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
++            .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
++    }
++
++    func prepare() throws {
++        guard let seed else { return }
++        guard !FileManager.default.fileExists(atPath: fileURL.path) else { throw SetupIssue.existingSeed }
++        switch seed {
++        case "none": break
++        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot(cardIssued: true, initialStation: nil, currentStation: nil))
++        case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
++        case "corrupt", "unsupported":
++            let raw = seed == "corrupt" ? "{broken" : #"{"version":999,"state":null}"#
++            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
++            try Data(raw.utf8).write(to: fileURL, options: .atomic)
++        default: throw SetupIssue.invalidArguments
++        }
++    }
++
++    var modelStore: LocalSnapshotStore {
++        if shouldFailSave { return LocalSnapshotStore(fileURL: fileURL, writeData: { _, _ in throw StorageIssue.writeFailed }) }
++        return LocalSnapshotStore(fileURL: fileURL)
++    }
++
++    @MainActor func applySaveScenario(to model: AppModel) throws {
++        guard shouldFailSave else { return }
++        guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
++        model.save(AppSnapshot(cardIssued: original.cardIssued, initialStation: original.initialStation,
++                              currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
++    }
++
++    var persistedBytes: String {
++        do { return try Data(contentsOf: fileURL).base64EncodedString() }
++        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return "absent" }
++        catch { return "unreadable" }
++    }
++
++    private static let readySnapshot = AppSnapshot(cardIssued: true,
++        initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
++        currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++}
++#endif
+diff --git a/ios/FocusMateTests/AppFoundationTests.swift b/ios/FocusMateTests/AppFoundationTests.swift
+new file mode 100644
+index 0000000..8e00c88
+--- /dev/null
++++ b/ios/FocusMateTests/AppFoundationTests.swift
+@@ -0,0 +1,386 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class AppFoundationTests: XCTestCase {
++    private enum ProbeError: Error { case expected }
++
++    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
++    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
++    private static let readySnapshot = AppSnapshot(
++        cardIssued: true,
++        initialStation: initialStation,
++        currentStation: currentStation
++    )
++    private static let cardOnlySnapshot = AppSnapshot(
++        cardIssued: true,
++        initialStation: nil,
++        currentStation: nil
++    )
++    private static let readyEnvelope = Data(
++        #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
++    )
++    private static let corruptBytes = Data("{broken".utf8)
++    private static let unsupportedBytes = Data(#"{"version":999,"state":null}"#.utf8)
++
++    func testLaunchRouteAcceptsTheThreeValidStages() throws {
++        let cases: [(snapshot: AppSnapshot, route: LaunchRoute)] = [
++            (.empty, .cardEntry),
++            (Self.cardOnlySnapshot, .initialStationEntry),
++            (Self.readySnapshot, .main),
++        ]
++
++        for item in cases {
++            XCTAssertNoThrow(try item.snapshot.validate())
++            XCTAssertEqual(try item.snapshot.launchRoute(), item.route)
++        }
++    }
++
++    func testValidationRejectsStageAndStationBoundaryViolationsInContractOrder() {
++        let blankID = StationSnapshot(id: " \n", name: "성수", direction: 1)
++        let blankName = StationSnapshot(id: "seongsu", name: "\n ", direction: 1)
++        let zeroDirection = StationSnapshot(id: "seongsu", name: "성수", direction: 0)
++        let cases: [(snapshot: AppSnapshot, issue: SnapshotValidationIssue)] = [
++            (AppSnapshot(cardIssued: false, initialStation: Self.initialStation, currentStation: Self.currentStation), .inconsistentStage),
++            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: nil), .inconsistentStage),
++            (AppSnapshot(cardIssued: true, initialStation: nil, currentStation: Self.currentStation), .inconsistentStage),
++            (AppSnapshot(cardIssued: true, initialStation: blankID, currentStation: Self.currentStation), .emptyStationID),
++            (AppSnapshot(cardIssued: true, initialStation: blankName, currentStation: Self.currentStation), .emptyStationName),
++            (AppSnapshot(cardIssued: true, initialStation: zeroDirection, currentStation: Self.currentStation), .invalidDirection(0)),
++            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: blankID), .emptyStationID),
++            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: blankName), .emptyStationName),
++            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: zeroDirection), .invalidDirection(0)),
++        ]
++
++        for item in cases {
++            assertValidationIssue(item.issue) {
++                try item.snapshot.validate()
++            }
++        }
++    }
++
++    func testMissingLoadReturnsNilWithoutDirectoryOrWriteSideEffects() throws {
++        var readCalls = 0
++        var directoryCalls = 0
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in
++                readCalls += 1
++                throw CocoaError(.fileReadNoSuchFile)
++            },
++            createDirectory: { _ in directoryCalls += 1 },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++
++        XCTAssertNil(try store.load())
++        XCTAssertEqual(readCalls, 1)
++        XCTAssertEqual(directoryCalls, 0)
++        XCTAssertEqual(writeCalls, 0)
++    }
++
++    func testPermissionReadFailureIsUnreadableRatherThanMissing() {
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in throw CocoaError(.fileReadNoPermission) }
++        )
++
++        assertStorageIssue(.unreadable) {
++            _ = try store.load()
++        }
++    }
++
++    func testLoadClassifiesMalformedBytesAndUnsupportedVersionBeforePayload() {
++        let cases: [(bytes: Data, issue: StorageIssue)] = [
++            (Self.corruptBytes, .corrupt),
++            (Self.unsupportedBytes, .unsupportedVersion(999)),
++        ]
++
++        for item in cases {
++            let store = LocalSnapshotStore(
++                fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++                readData: { _ in item.bytes }
++            )
++            assertStorageIssue(item.issue) {
++                _ = try store.load()
++            }
++        }
++    }
++
++    func testSaveBlocksOnProtectedExistingFilesAndPreservesExactBytes() throws {
++        let cases: [(bytes: Data, issue: StorageIssue)] = [
++            (Self.corruptBytes, .corrupt),
++            (Self.unsupportedBytes, .unsupportedVersion(999)),
++        ]
++
++        for item in cases {
++            try withTemporaryFile { fileURL in
++                try FileManager.default.createDirectory(
++                    at: fileURL.deletingLastPathComponent(),
++                    withIntermediateDirectories: true
++                )
++                try item.bytes.write(to: fileURL)
++                var directoryCalls = 0
++                var writeCalls = 0
++                let store = LocalSnapshotStore(
++                    fileURL: fileURL,
++                    createDirectory: { _ in directoryCalls += 1 },
++                    writeData: { _, _ in writeCalls += 1 }
++                )
++
++                assertStorageIssue(.writeBlocked(item.issue)) {
++                    try store.save(Self.readySnapshot)
++                }
++                XCTAssertEqual(directoryCalls, 0)
++                XCTAssertEqual(writeCalls, 0)
++                XCTAssertEqual(try Data(contentsOf: fileURL), item.bytes)
++            }
++        }
++    }
++
++    func testInvalidCandidateIsRejectedBeforeReadDirectoryAndWrite() {
++        var readCalls = 0
++        var directoryCalls = 0
++        var writeCalls = 0
++        let invalid = AppSnapshot(
++            cardIssued: true,
++            initialStation: StationSnapshot(id: " ", name: "성수", direction: 1),
++            currentStation: Self.currentStation
++        )
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in
++                readCalls += 1
++                return Self.readyEnvelope
++            },
++            createDirectory: { _ in directoryCalls += 1 },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++
++        assertStorageIssue(.invalidState(.emptyStationID)) {
++            try store.save(invalid)
++        }
++        XCTAssertEqual(readCalls, 0)
++        XCTAssertEqual(directoryCalls, 0)
++        XCTAssertEqual(writeCalls, 0)
++    }
++
++    func testFirstSaveCreatesNestedDirectoryAndFreshStoreRestoresExactSnapshot() throws {
++        try withTemporaryFile { fileURL in
++            let store = LocalSnapshotStore(fileURL: fileURL)
++
++            try store.save(Self.readySnapshot)
++
++            XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
++            let restored = try LocalSnapshotStore(fileURL: fileURL).load()
++            XCTAssertEqual(restored, Self.readySnapshot)
++        }
++    }
++
++    func testDirectoryAndWriteFailuresPropagateAsWriteFailed() {
++        var directoryFailureWriteCalls = 0
++        let directoryFailureStore = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in throw CocoaError(.fileReadNoSuchFile) },
++            createDirectory: { _ in throw ProbeError.expected },
++            writeData: { _, _ in directoryFailureWriteCalls += 1 }
++        )
++        assertStorageIssue(.writeFailed) {
++            try directoryFailureStore.save(Self.readySnapshot)
++        }
++        XCTAssertEqual(directoryFailureWriteCalls, 0)
++
++        var writeFailureDirectoryCalls = 0
++        var writeFailureCalls = 0
++        let writeFailureStore = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in throw CocoaError(.fileReadNoSuchFile) },
++            createDirectory: { _ in writeFailureDirectoryCalls += 1 },
++            writeData: { _, _ in
++                writeFailureCalls += 1
++                throw ProbeError.expected
++            }
++        )
++        assertStorageIssue(.writeFailed) {
++            try writeFailureStore.save(Self.readySnapshot)
++        }
++        XCTAssertEqual(writeFailureDirectoryCalls, 1)
++        XCTAssertEqual(writeFailureCalls, 1)
++    }
++
++    @MainActor
++    func testModelLoadsOnlyOnceAndIgnoresOpenOutsideMain() {
++        var readCalls = 0
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in
++                readCalls += 1
++                throw CocoaError(.fileReadNoSuchFile)
++            },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++        let model = AppModel(store: store)
++
++        model.loadIfNeeded()
++        model.loadIfNeeded()
++        for destination in Destination.allCases {
++            model.open(destination)
++        }
++
++        XCTAssertEqual(readCalls, 1)
++        XCTAssertEqual(writeCalls, 0)
++        XCTAssertEqual(model.snapshot, .empty)
++        XCTAssertEqual(model.launchState, .ready(.cardEntry))
++        XCTAssertEqual(model.path, [])
++    }
++
++    @MainActor
++    func testMainDestinationsRoundTripSynchronouslyWithoutWrites() {
++        var directoryCalls = 0
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in Self.readyEnvelope },
++            createDirectory: { _ in directoryCalls += 1 },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++
++        for destination in [Destination.preparation, .records, .settings, .profile] {
++            model.open(destination)
++            XCTAssertEqual(model.path, [destination])
++            model.goBack()
++            XCTAssertEqual(model.path, [])
++        }
++
++        XCTAssertEqual(model.snapshot, Self.readySnapshot)
++        XCTAssertEqual(model.launchState, .ready(.main))
++        XCTAssertEqual(directoryCalls, 0)
++        XCTAssertEqual(writeCalls, 0)
++        XCTAssertNil(model.saveFailure)
++    }
++
++    @MainActor
++    func testFailedSaveKeepsPreviousSnapshotRouteAndPath() {
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in Self.readyEnvelope },
++            createDirectory: { _ in },
++            writeData: { _, _ in throw ProbeError.expected }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++        model.open(.records)
++
++        XCTAssertFalse(model.save(Self.cardOnlySnapshot))
++
++        XCTAssertEqual(model.snapshot, Self.readySnapshot)
++        XCTAssertEqual(model.launchState, .ready(.main))
++        XCTAssertEqual(model.path, [.records])
++        XCTAssertEqual(model.saveFailure, .writeFailed)
++    }
++
++    @MainActor
++    func testSuccessfulSaveClearsPriorFailureAndClearsPathWhenRouteChanges() {
++        var shouldFailWrite = true
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in Self.readyEnvelope },
++            createDirectory: { _ in },
++            writeData: { _, _ in
++                writeCalls += 1
++                if shouldFailWrite { throw ProbeError.expected }
++            }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++        model.open(.profile)
++        XCTAssertFalse(model.save(Self.readySnapshot))
++        XCTAssertEqual(model.saveFailure, .writeFailed)
++        XCTAssertEqual(model.path, [.profile])
++
++        shouldFailWrite = false
++        XCTAssertTrue(model.save(Self.cardOnlySnapshot))
++
++        XCTAssertEqual(writeCalls, 2)
++        XCTAssertNil(model.saveFailure)
++        XCTAssertEqual(model.snapshot, Self.cardOnlySnapshot)
++        XCTAssertEqual(model.launchState, .ready(.initialStationEntry))
++        XCTAssertEqual(model.path, [])
++    }
++
++    @MainActor
++    func testFailedLoadBlocksLaterSaveWithoutAdditionalFileAccess() {
++        var readCalls = 0
++        var directoryCalls = 0
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in
++                readCalls += 1
++                throw CocoaError(.fileReadNoPermission)
++            },
++            createDirectory: { _ in directoryCalls += 1 },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++        XCTAssertEqual(model.launchState, .failed(.unreadable))
++
++        XCTAssertFalse(model.save(Self.readySnapshot))
++
++        XCTAssertEqual(readCalls, 1)
++        XCTAssertEqual(directoryCalls, 0)
++        XCTAssertEqual(writeCalls, 0)
++        XCTAssertNil(model.snapshot)
++        XCTAssertEqual(model.path, [])
++        XCTAssertEqual(model.launchState, .failed(.unreadable))
++        XCTAssertEqual(model.saveFailure, .writeBlocked(.unreadable))
++    }
++
++    private func assertValidationIssue(
++        _ expected: SnapshotValidationIssue,
++        file: StaticString = #filePath,
++        line: UInt = #line,
++        operation: () throws -> Void
++    ) {
++        do {
++            try operation()
++            XCTFail("Expected SnapshotValidationIssue", file: file, line: line)
++        } catch let actual as SnapshotValidationIssue {
++            XCTAssertEqual(actual, expected, file: file, line: line)
++        } catch {
++            XCTFail("Expected SnapshotValidationIssue", file: file, line: line)
++        }
++    }
++
++    private func assertStorageIssue(
++        _ expected: StorageIssue,
++        file: StaticString = #filePath,
++        line: UInt = #line,
++        operation: () throws -> Void
++    ) {
++        do {
++            try operation()
++            XCTFail("Expected StorageIssue", file: file, line: line)
++        } catch let actual as StorageIssue {
++            XCTAssertEqual(actual, expected, file: file, line: line)
++        } catch {
++            XCTFail("Expected StorageIssue", file: file, line: line)
++        }
++    }
++
++    private func withTemporaryFile(_ operation: (URL) throws -> Void) throws {
++        let root = FileManager.default.temporaryDirectory
++            .appendingPathComponent("FocusMate-AppFoundationTests-\(UUID().uuidString)", isDirectory: true)
++        let fileURL = root
++            .appendingPathComponent("nested", isDirectory: true)
++            .appendingPathComponent("FocusMate", isDirectory: true)
++            .appendingPathComponent("app-state.json", isDirectory: false)
++        defer { try? FileManager.default.removeItem(at: root) }
++        try operation(fileURL)
++    }
++}
+diff --git a/ios/FocusMateTests/HarnessTests.swift b/ios/FocusMateTests/HarnessTests.swift
+new file mode 100644
+index 0000000..dd3622f
+--- /dev/null
++++ b/ios/FocusMateTests/HarnessTests.swift
+@@ -0,0 +1,7 @@
++import XCTest
++
++final class HarnessTests: XCTestCase {
++    func testHarnessLoads() {
++        XCTAssertTrue(true)
++    }
++}
+diff --git a/ios/FocusMateUITests/HarnessUITests.swift b/ios/FocusMateUITests/HarnessUITests.swift
+new file mode 100644
+index 0000000..216526a
+--- /dev/null
++++ b/ios/FocusMateUITests/HarnessUITests.swift
+@@ -0,0 +1,10 @@
++import XCTest
++
++final class HarnessUITests: XCTestCase {
++    @MainActor
++    func testHarnessLaunches() {
++        let app = XCUIApplication()
++        app.launch()
++        XCTAssertTrue(app.staticTexts["Focus Mate"].waitForExistence(timeout: 5))
++    }
++}
+diff --git a/ios/FocusMateUITests/Phase1FlowTests.swift b/ios/FocusMateUITests/Phase1FlowTests.swift
+new file mode 100644
+index 0000000..dd5e9f8
+--- /dev/null
++++ b/ios/FocusMateUITests/Phase1FlowTests.swift
+@@ -0,0 +1,255 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class Phase1FlowTests: XCTestCase {
++    private let timeout: TimeInterval = 3
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    func testNoSavedDataOpensCardEntryWithoutCreatingAFile() throws {
++        let app = launch(seed: "none")
++
++        XCTAssertTrue(element("screen.cardEntry", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), "absent")
++    }
++
++    func testCardOnlyOpensInitialStationEntryAndPublishesSnapshotSchema() throws {
++        let app = launch(seed: "cardOnly")
++
++        XCTAssertTrue(element("screen.initialStationEntry", in: app).waitForExistence(timeout: timeout))
++        let snapshot = try snapshot(in: app)
++        XCTAssertEqual(snapshot["cardIssued"] as? Bool, true)
++        XCTAssertTrue(snapshot["initialStation"] is NSNull)
++        XCTAssertTrue(snapshot["currentStation"] is NSNull)
++        XCTAssertNotEqual(try diagnosticValue("test.persistedBytes", in: app), "absent")
++    }
++
++    func testReadyStateOpensMainWithSavedCurrentStationAndDirection() throws {
++        let app = launch(seed: "ready")
++
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
++        XCTAssertEqual(try value("main.direction", in: app), "역방향")
++
++        let snapshot = try snapshot(in: app)
++        try assertStation(snapshot["initialStation"], id: "seongsu", name: "성수", direction: 1)
++        try assertStation(snapshot["currentStation"], id: "seoulForest", name: "서울숲", direction: -1)
++    }
++
++    func testDestinationRoundTripsPreserveStateAndExposeNoCompletionAction() throws {
++        let app = launch(seed: "ready")
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++
++        let initialSnapshot = try diagnosticValue("test.snapshot", in: app)
++        let initialBytes = try diagnosticValue("test.persistedBytes", in: app)
++        let destinations = [
++            (button: "여행 준비", screen: "screen.preparation"),
++            (button: "기록", screen: "screen.records"),
++            (button: "설정", screen: "screen.settings"),
++            (button: "마이페이지", screen: "screen.profile"),
++        ]
++
++        for destination in destinations {
++            app.buttons[destination.button].tap()
++            XCTAssertTrue(element(destination.screen, in: app).waitForExistence(timeout: timeout))
++            XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "완료")).count, 0)
++            XCTAssertEqual(try diagnosticValue("test.snapshot", in: app), initialSnapshot)
++            XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), initialBytes)
++
++            let backButton = app.navigationBars.buttons.firstMatch
++            XCTAssertTrue(backButton.waitForExistence(timeout: timeout))
++            backButton.tap()
++            XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++            XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
++            XCTAssertEqual(try value("main.direction", in: app), "역방향")
++        }
++    }
++
++    func testReadyStateRestoresAfterTerminationWithoutReseeding() throws {
++        let testID = UUID()
++        let app = launch(testID: testID, seed: "ready")
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        let before = try snapshot(in: app)
++
++        app.terminate()
++        relaunch(app, testID: testID)
++
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
++        XCTAssertEqual(try value("main.direction", in: app), "역방향")
++        let restored = try snapshot(in: app)
++        XCTAssertEqual(restored["cardIssued"] as? Bool, true)
++        try assertStation(restored["initialStation"], id: "seongsu", name: "성수", direction: 1)
++        try assertStation(restored["currentStation"], id: "seoulForest", name: "서울숲", direction: -1)
++        XCTAssertEqual(try jsonData(restored), try jsonData(before))
++    }
++
++    func testCorruptDataReportsErrorAndPreservesExactBytesAcrossRelaunch() throws {
++        let testID = UUID()
++        let app = launch(testID: testID, seed: "corrupt")
++        let expectedBytes = Data("{broken".utf8).base64EncodedString()
++
++        XCTAssertTrue(element("screen.storageError", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(app.staticTexts["저장된 데이터 형식을 읽을 수 없어요."].exists)
++        XCTAssertTrue(app.staticTexts["기존 데이터는 변경하지 않았어요."].exists)
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), expectedBytes)
++
++        app.terminate()
++        relaunch(app, testID: testID)
++        XCTAssertTrue(element("screen.storageError", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), expectedBytes)
++    }
++
++    func testUnsupportedDataReportsErrorAndPreservesExactBytesAcrossRelaunch() throws {
++        let testID = UUID()
++        let app = launch(testID: testID, seed: "unsupported")
++        let expectedBytes = Data(#"{"version":999,"state":null}"#.utf8).base64EncodedString()
++
++        XCTAssertTrue(element("screen.storageError", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(app.staticTexts["이 버전의 앱에서 열 수 없는 데이터예요."].exists)
++        XCTAssertTrue(app.staticTexts["기존 데이터는 변경하지 않았어요."].exists)
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), expectedBytes)
++
++        app.terminate()
++        relaunch(app, testID: testID)
++        XCTAssertTrue(element("screen.storageError", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), expectedBytes)
++    }
++
++    func testFailedSaveKeepsReadySnapshotAndBytesThenRestoresNormally() throws {
++        let testID = UUID()
++        let app = launch(testID: testID, seed: "ready")
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        let readySnapshot = try diagnosticValue("test.snapshot", in: app)
++        let readyBytes = try diagnosticValue("test.persistedBytes", in: app)
++
++        app.terminate()
++        launch(app, testID: testID, save: "fail")
++
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(element("storage.saveFailure", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(app.staticTexts["저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요."].exists)
++        XCTAssertEqual(try diagnosticValue("test.snapshot", in: app), readySnapshot)
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), readyBytes)
++
++        app.terminate()
++        relaunch(app, testID: testID)
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(try diagnosticValue("test.snapshot", in: app), readySnapshot)
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), readyBytes)
++        XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
++        XCTAssertEqual(try value("main.direction", in: app), "역방향")
++    }
++
++    func testMalformedTestIDReportsSetupErrorAndStaysLoading() {
++        let app = XCUIApplication()
++        app.launchArguments = ["--fm-ui-test-id", "not-a-uuid"]
++        app.launch()
++
++        XCTAssertTrue(element("test.setupError", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(element("screen.loading", in: app).exists)
++        XCTAssertFalse(element("screen.cardEntry", in: app).exists)
++        XCTAssertFalse(element("screen.initialStationEntry", in: app).exists)
++        XCTAssertFalse(element("screen.main", in: app).exists)
++        XCTAssertFalse(element("screen.storageError", in: app).exists)
++    }
++
++    func testNoCompletionActionsBeyondNavigationButtonsInDefaultDestinations() {
++        let app = launch(seed: "ready")
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++
++        let destinations = [
++            (button: "여행 준비", screen: "screen.preparation"),
++            (button: "기록", screen: "screen.records"),
++            (button: "설정", screen: "screen.settings"),
++            (button: "마이페이지", screen: "screen.profile"),
++        ]
++
++        for destination in destinations {
++            app.buttons[destination.button].tap()
++            XCTAssertTrue(element(destination.screen, in: app).waitForExistence(timeout: timeout))
++
++            let navigationBar = app.navigationBars.firstMatch
++            XCTAssertTrue(navigationBar.waitForExistence(timeout: timeout))
++            XCTAssertEqual(navigationBar.buttons.count, 1)
++            XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
++
++            let backButton = navigationBar.buttons.firstMatch
++            XCTAssertTrue(backButton.exists)
++            backButton.tap()
++            XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        }
++    }
++
++    private func launch(testID: UUID = UUID(), seed: String) -> XCUIApplication {
++        let app = XCUIApplication()
++        launch(app, testID: testID, seed: seed)
++        return app
++    }
++
++    private func launch(
++        _ app: XCUIApplication,
++        testID: UUID,
++        seed: String? = nil,
++        save: String? = nil
++    ) {
++        var arguments = ["--fm-ui-test-id", testID.uuidString]
++        if let seed {
++            arguments += ["--fm-ui-seed", seed]
++        }
++        if let save {
++            arguments += ["--fm-ui-save", save]
++        }
++        app.launchArguments = arguments
++        app.launch()
++    }
++
++    private func relaunch(_ app: XCUIApplication, testID: UUID) {
++        app.launchArguments = ["--fm-ui-test-id", testID.uuidString]
++        app.launch()
++    }
++
++    private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
++        app.descendants(matching: .any)[identifier]
++    }
++
++    private func diagnosticValue(_ identifier: String, in app: XCUIApplication) throws -> String {
++        let diagnostic = element(identifier, in: app)
++        XCTAssertTrue(diagnostic.waitForExistence(timeout: timeout), "Missing diagnostic: \(identifier)")
++        return try XCTUnwrap(diagnostic.value as? String, "Diagnostic has no string value: \(identifier)")
++    }
++
++    private func value(_ identifier: String, in app: XCUIApplication) throws -> String {
++        let observed = element(identifier, in: app)
++        XCTAssertTrue(observed.waitForExistence(timeout: timeout), "Missing value element: \(identifier)")
++        return try XCTUnwrap(observed.value as? String, "Element has no string value: \(identifier)")
++    }
++
++    private func snapshot(in app: XCUIApplication) throws -> [String: Any] {
++        let raw = try diagnosticValue("test.snapshot", in: app)
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++
++    private func assertStation(
++        _ rawStation: Any?,
++        id: String,
++        name: String,
++        direction: Int,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) throws {
++        let station = try XCTUnwrap(rawStation as? [String: Any], file: file, line: line)
++        XCTAssertEqual(station["id"] as? String, id, file: file, line: line)
++        XCTAssertEqual(station["name"] as? String, name, file: file, line: line)
++        XCTAssertEqual(station["direction"] as? Int, direction, file: file, line: line)
++    }
++
++    private func jsonData(_ object: [String: Any]) throws -> Data {
++        try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
++    }
++}
+diff --git a/package.json b/package.json
+index c1def02..cff9966 100644
+--- a/package.json
++++ b/package.json
+@@ -4,8 +4,8 @@
+   "private": true,
+   "description": "Focus Mate 집중동행카드 디자인 및 브라우저 프로토타입",
+   "scripts": {
+-    "preview": "python -m http.server 8796 --bind 127.0.0.1 --directory designs/final",
+-    "build": "python scripts/build-flow-prototype.py",
++    "preview": "python3 -m http.server 8796 --bind 127.0.0.1 --directory designs/final",
++    "build": "python3 scripts/build-flow-prototype.py",
+     "test": "node --test scripts/design-baseline.test.cjs && node scripts/prototype-edge-qa.cjs",
+     "test:browser": "node scripts/run-browser-qa.cjs",
+     "capture": "node scripts/capture-flow-scenes.cjs",
+diff --git a/scripts/check-ios.py b/scripts/check-ios.py
+new file mode 100644
+index 0000000..d5cb74a
+--- /dev/null
++++ b/scripts/check-ios.py
+@@ -0,0 +1,43 @@
++#!/usr/bin/env python3
++"""Build/test the local iOS app, selecting an installed iPhone simulator."""
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++
++root = Path(__file__).resolve().parent.parent
++if len(sys.argv) < 2 or sys.argv[1] not in {"build", "test"}:
++    raise SystemExit("Usage: python3 scripts/check-ios.py build|test [test files...]")
++action = sys.argv[1]
++device_id = os.environ.get("FOCUSMATE_SIMULATOR_ID")
++if not device_id:
++    inventory = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "-j"]))
++    candidates = []
++    for runtime, devices in inventory["devices"].items():
++        if ".iOS-" not in runtime:
++            continue
++        version = tuple(int(part) for part in runtime.split(".iOS-")[1].split("-"))
++        if version[0] < 17:
++            continue
++        for device in devices:
++            if device.get("isAvailable") and device["name"].startswith("iPhone"):
++                candidates.append((version, "Pro" in device["name"] and "Max" not in device["name"], device["name"], device["udid"]))
++    if not candidates:
++        raise SystemExit("No available iPhone simulator with iOS 17 or later. Install a runtime in Xcode.")
++    device_id = max(candidates)[3]
++command = ["xcodebuild", "-project", "ios/FocusMate.xcodeproj", "-scheme", "FocusMate",
++           "-destination", f"platform=iOS Simulator,id={device_id}",
++           "-derivedDataPath", os.environ.get("FOCUSMATE_DERIVED_DATA", str(root / ".build/ios")),
++           "-parallel-testing-enabled", "NO", action, "CODE_SIGNING_ALLOWED=NO"]
++if action == "test":
++    command.extend(["-collect-test-diagnostics", "never"])
++    for file in sys.argv[2:]:
++        path = Path(file)
++        if path.parent.name not in {"FocusMateTests", "FocusMateUITests"} or path.suffix != ".swift":
++            raise SystemExit(f"Unsupported test file: {file}")
++        command.append(f"-only-testing:{path.parent.name}/{path.stem}")
++elif len(sys.argv) != 2:
++    raise SystemExit("Build does not accept test-file arguments.")
++print(f"iOS {action}: simulator {device_id}", flush=True)
++raise SystemExit(subprocess.call(command, cwd=root))

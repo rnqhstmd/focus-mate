@@ -31,7 +31,7 @@ Focus Mate의 도메인 지식·구현 경계·용어를 정리합니다. 현재
 - [실행·작업 안내](../README.md) · [현재 HTML](../designs/final/animation-preview.html)
 - 현재 레포: [rnqhstmd/next-step](https://github.com/rnqhstmd/next-step), `git remote get-url origin` 직접 확인
 
-브라우저 검증과 이후 VM/Pen 검증은 [현재 상태](../docs/CURRENT-STATE.md)의 시점을 구분합니다. 네이티브 SwiftUI·MapKit·실제 분 타이머·클라우드는 현재 구현으로 간주하지 않습니다. 도메인 구성은 확인됐으며 담당 정보는 아직 확정하지 않았습니다.
+브라우저 검증과 이후 VM/Pen 검증은 [현재 상태](../docs/CURRENT-STATE.md)의 시점을 구분합니다. SwiftUI 앱 기반은 Phase 1에서 추가됐으며, MapKit·실제 분 타이머·클라우드는 구현되지 않았습니다. 도메인 구성은 확인됐으며 담당 정보는 아직 확정하지 않았습니다.
 
 
 ## 개발 진행
@@ -39,4 +39,4 @@ Focus Mate의 도메인 지식·구현 경계·용어를 정리합니다. 현재
 - [개발 단계와 완료 기준](../docs/DEVELOPMENT-PHASES.md)
 - 요구사항 원장: [여정](journey/status.md) · [카드](card/status.md) · [기록](records/status.md) · [환경설정](preferences/status.md)
 
-현재 Swift 소스·Xcode 프로젝트가 없어 네이티브 단계는 미착수입니다. 웹 VM 통과와 Pen 렌더 확인을 실제 iPhone 검증으로 치환하지 않습니다. 일정·담당·최소 iOS 버전·배포 환경이 결정되기 전에는 완료 날짜를 예측해 기록하지 않습니다.
+현재 Swift 소스·Xcode 프로젝트와 앱 진입·기본 탐색·로컬 상태 기반은 추가됐으며 [Phase 1 검증](../docs/PHASE-1-FOUNDATION.md)을 참고합니다. 도메인별 실제 기능인 Phase 2~6은 미착수입니다. 웹 VM 통과와 Pen 렌더 확인을 실제 iPhone 검증으로 치환하지 않습니다. 최소 iOS 17은 작업 기준이며 출시 버전은 미정입니다. 일정·담당·배포 환경이 결정되기 전에는 완료 날짜를 예측해 기록하지 않습니다.

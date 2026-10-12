@@ -1,0 +1,14 @@
+ ios/FocusMate.xcodeproj/project.pbxproj            |  71 +++++++
+ .../xcshareddata/xcschemes/FocusMate.xcscheme      |  30 +++
+ ios/FocusMate/AppModel.swift                       |  69 +++++++
+ ios/FocusMate/AppSnapshot.swift                    |  46 +++++
+ ios/FocusMate/FocusMateApp.swift                   |  59 ++++++
+ ios/FocusMate/LocalSnapshotStore.swift             |  57 ++++++
+ ios/FocusMate/RootView.swift                       |  95 +++++++++
+ ios/FocusMate/UITestBootstrap.swift                |  64 ++++++
+ ios/FocusMateTests/HarnessTests.swift              |   7 +
+ ios/FocusMateUITests/HarnessUITests.swift          |  10 +
+ ios/FocusMateUITests/Phase1FlowTests.swift         | 215 +++++++++++++++++++++
+ 11 files changed, 723 insertions(+)
+
+500줄초과. ios/변경파일을직접읽어검토한다. .dev산출물은source diff대상아님.

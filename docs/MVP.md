@@ -40,4 +40,4 @@ iOS 출시 전에는 실제 시간 타이머·앱 생명주기·작은 화면과
 
 ## 개발 준비
 
-[Phase 0~6](DEVELOPMENT-PHASES.md)에 개발 구분과 범위를 연결한다. 네이티브 단계는 미착수다. [도메인 요구사항 원장](../context/README.md)의 웹 ✅를 iOS 구현 완료로 해석하지 않는다.
+[Phase 0~6](DEVELOPMENT-PHASES.md)에 개발 구분과 범위를 연결한다. Phase 1의 앱 기반·진입/탐색·로컬 상태가 추가됐고 실제 여정 기능은 후속 단계다. [앱 기반 범위와 검증](PHASE-1-FOUNDATION.md)을 참고한다. [도메인 요구사항 원장](../context/README.md)의 웹 ✅를 iOS 구현 완료로 해석하지 않는다.

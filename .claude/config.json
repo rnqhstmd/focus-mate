@@ -76,6 +76,21 @@
         "dist/"
       ],
       "focusedTest": "node --test {files}"
+    },
+    "ios-swiftui": {
+      "detect": [
+        "ios/FocusMate.xcodeproj/project.pbxproj"
+      ],
+      "build": "python3 scripts/check-ios.py build",
+      "test": "python3 scripts/check-ios.py test",
+      "focusedTest": "python3 scripts/check-ios.py test {files}",
+      "warningPattern": "warning:",
+      "artifacts": [
+        ".build/",
+        "DerivedData/",
+        "*.xcuserstate",
+        "xcuserdata/"
+      ]
     }
   },
   "notifications": {

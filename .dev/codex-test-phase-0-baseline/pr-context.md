@@ -17,3 +17,8 @@
 ## Remaining product checks
 
 최신 승차 단말기 실제 브라우저 렌더·터치 및 tags 중간 화면의 Pen/브라우저 확인은 pending. 이 PR은 기준선 검사 작업 완료이며 제품 Phase0 전체 완료가 아니다. 네이티브 도메인 FR/status를 완료로 바꾸지 않음.
+
+## 산출물
+
+PR: https://github.com/rnqhstmd/next-step/pull/1
+기준선 검사·문서 작업 파이프라인 완료. 실제 화면 확인2건은 대기로 유지합니다.

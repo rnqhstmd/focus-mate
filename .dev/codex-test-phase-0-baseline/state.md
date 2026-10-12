@@ -1,5 +1,5 @@
 phase: complete
-status: in_progress
+status: completed
 pipeline: gx-tdd
 verify-status: passed
 verify-fingerprint: 95939b2:2190ce4b9c39
@@ -14,11 +14,11 @@ project-type: node
 project-root: ./
 args: "제품 Phase 0 — 시안 기준선 확정"
 started: 2026-10-12T22:22:58+09:00
-last-known-head: 95939b23bf72655d2763baa4807bb19825ed4100
+last-known-head: f561d6bbfdb634d6f395fdcff84898c880871c52
 auto-stashed: false
 config-setup-attempts: 0
-current-step: "AC 자가 검증 통과; commit/PR"
-phases: { setup: completed, requirements: completed, implement: completed, complete: in_progress }
+current-step: "검사 작업 완료; 제품 화면 확인 2건 대기"
+phases: { setup: completed, requirements: completed, implement: completed, complete: completed }
 warnings-baseline: 0
 steps:
   implement:
@@ -41,3 +41,7 @@ execution-log:
   - { phase: complete, gate: verify, result: "fresh npm test31pass + VM 회귀 exit0, build exit0, 경고0(baseline0), 코드 지문 기록" }
   - { phase: complete, gate: acceptance, result: "AC1~5 모두 테스트/구현 대조 통과; 제품 실제 화면 검증pending2 유지" }
   - { phase: complete, result: "커밋 훅의 지문 불일치는 따옴표 직렬화 때문. 설치 guard의 raw 비교 형식에 맞춤; helper 재계산 실제 tree 동일 확인" }
+pull-request: https://github.com/rnqhstmd/next-step/pull/1
+product-phase-0: awaiting_visual_review
+execution-completed-scope: baseline_audit_tool_and_documentation
+  # 실제 제품 Phase0 완료와 자동 검사 작업 완료를 구분합니다.

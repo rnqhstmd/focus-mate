@@ -15,7 +15,7 @@
 - 최신 승차 렌더/터치와 tags 중간 화면 캡처 미완료. 제품 Phase 0 완료로 선언하지 않음.
 - 위험 수용 답변은 아직 없으며 통과/면제로 기록하지 않음.
 
-### 승인된 수정안 (RED R3 진행 중)
+### 승인된 수정안 (R3 수정·재검토 완료)
 
 사용자가 자동 수정을 선택하면 두 finding을 G-W-T로 추가하고 RED 격리 역할에 맡긴다. 원본 HTML의 requiredBaselineReviews metadata를 독립 기준으로 삼아 browser/productScreenCoverage 누락을 검사한다. fixture의 기존 passed 기대값은 필수 productScreenCoverage passed 선언을 추가해 보존하고 누락 사례를 추가한다. CLI는 무인자 또는 --root <경로>만 허용하며 잘못된 인자·경로 누락·추가 인자는 JSON 오류+exit1로 보고한다. 기존 제품/상태 매핑과20+1 leaf 회귀를 유지한다.
 

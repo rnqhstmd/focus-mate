@@ -67,7 +67,7 @@
 
 - [현재 프로토타입 소스](../designs/final/animation-preview.html), [게시용 묶음](../designs/prototype/index.html).
 - [개선 Pen 레이어 정의](../designs/revised/pencil-layers.json), [개선 화면 PDF](../designs/revised/next-stop-revised.pdf).
-- Pen의 최신 영역은 `다음 정류장 · 조사 반영 개선 시안 · 2026-10-12`. 기존 36개 및 그룹 보드는 오른쪽에 `이전 시안`으로 보존했다. 현재 파일은 `C:/Users/SQI/.pencil/documents/721cacdd-91ea-46aa-92b6-9bd399546861/pencil-new.pen`이다.
+- Pen의 최신 영역은 `다음 정류장 · 조사 반영 개선 시안 · 2026-10-12`. 기존 36개 및 그룹 보드는 오른쪽에 `이전 시안`으로 보존했다. 현재 파일은 `designs/focus-mate.pen`이다.
 - 웹·Pen의 지도와 카드 사진은 별도 비트맵이며, UI 글자와 도형은 개별 편집 레이어다.
 - 최종 Pen 상태는 22개 화면, 텍스트 315개, 벡터 경로 558개다. 8단계 전체 흐름 보드는 화면 컴포넌트에 연결했다. 현재 화면과 흐름 보드의 잘림 문제 0건, 미완료 표시 0건이며 문자 수정·복원도 직접 확인했다.
 - 브라우저 검증: 최초 설정, 태그 후 입력, 소리 취소, 새 태그 중복 오류, 초안 복귀, 미리보기 취소, 카드 승하차, 멈춤/종료 취소, 중도 종료 기록 방지, 새 여행 초기화, 기록/메모, 지도 재시도, 무음 복구, 모바일 터치, 동작 줄이기를 검사한다. 결과는 `.impeccable/review/research-flow/verification.json`.

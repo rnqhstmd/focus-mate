@@ -1,5 +1,8 @@
 # 디자인 안내
 
+> 현재 기준 (2026-10-12): [현재 상태](../docs/CURRENT-STATE.md) · [MVP 범위](../docs/MVP.md) · [화면·저장 계약](../docs/FLOWS.md). 과거 변경 기록은 당시 검증 증거로 보존합니다.
+
+
 최신 인터랙션은 [final/animation-preview.html](final/animation-preview.html)입니다. 저장소 루트의 [실행 방법](../README.md)을 따라 로컬 서버로 열어주세요. 소스와 이미지 경로를 유지하기 위해 파일을 옮기지 않습니다.
 
 ## 현재 실행 자료
@@ -43,3 +46,7 @@
 - [멈춘 여정 이어가기](../reports/journey-resume-2026-10-12.md): 앱 복귀 시 남은 여정을 직접 재개하고 새 여정은 정리 여부를 확인합니다.
 
 - [Focus Mate · 집중동행카드와 검은 단말기](../reports/focus-mate-card-and-reader-2026-10-12.md): 첫 카드 발급, 검은 LCD의 카드 표시, 접촉 순간 진동과 상태 저장.
+
+최신 후속 변경: [승차 단말기 정리](../reports/boarding-reader-refinement-2026-10-12.md). 브라우저 검증 이전/이후 범위는 현재 상태 문서를 확인합니다.
+
+현재 편집 보드 내보내기: [42개 상태 PDF](revised/pen-updates/focus-mate-current-42.pdf) · [전체 흐름 PNG](revised/pen-updates/focus-mate-current-flow.png).

@@ -20,7 +20,7 @@ Pencil에서 열려 있던 문서에 기존 이미지 프레임을 편집 가능
 
 Pencil 작업 문서:
 
-`C:/Users/SQI/.pencil/documents/721cacdd-91ea-46aa-92b6-9bd399546861/pencil-new.pen`
+`designs/focus-mate.pen`
 
 저장소 배포본은 [../focus-mate.pen](../focus-mate.pen)이다. 작업 문서의 네이티브 원본을 파일 형식 변환 없이 백업했으며, 참조 이미지도 `../assets/next-stop/`에 함께 보존했다. 다른 PC에서는 이 저장소의 원본을 열면 된다.
 
@@ -31,7 +31,7 @@ Pencil 작업 문서:
 `pencil-layers.json`은 38개 PDF 페이지의 편집 레이어 정의이며 `.pen` 파일이 아니다. `scripts/rebuild-pencil-from-pdf.py`가 생성한다. Pencil의 execute API에서 화면을 하위 레이어와 함께 교체하는 방식으로 반영한다. 이 스크립트는 `.pen` 파일을 읽거나 쓰지 않는다.
 
 ```powershell
-python scripts/rebuild-pencil-from-pdf.py --asset-dir "C:/Users/SQI/.pencil/documents/721cacdd-91ea-46aa-92b6-9bd399546861/assets/next-stop/editable"
+python scripts/rebuild-pencil-from-pdf.py --asset-dir "designs/assets/next-stop/editable"
 ```
 
 ## 검증

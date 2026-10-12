@@ -1,5 +1,8 @@
 # Focus Mate · 집중동행카드
 
+> 현재 기준 (2026-10-12): [현재 상태](docs/CURRENT-STATE.md) · [MVP 범위](docs/MVP.md) · [화면·저장 계약](docs/FLOWS.md). 과거 변경 기록은 당시 검증 증거로 보존합니다.
+
+
 서울 버스를 타고 떠나는 버스 여행의 디자인과 브라우저 프로토타입입니다. 검정 화면, 버스 유형별 색상, 지도 위 가상 이동을 중심으로 구성했습니다. 실제 교통 안내나 완성된 iOS 앱은 아닙니다.
 
 현재 HTML은 화면과 상호작용을 검토하는 시안입니다. 실제 iPhone 앱은 확정된 흐름과 자산을 바탕으로 SwiftUI에서 구현할 예정이며, 이 저장소에 Swift 앱은 아직 포함되어 있지 않습니다.
@@ -52,3 +55,7 @@ scripts/          상태·브라우저 검사, 화면·Pen 레이어·오디오 
 - [멈춘 여정 이어가기](reports/journey-resume-2026-10-12.md): 앱 복귀 시 남은 여정을 직접 재개하고 새 여정은 정리 여부를 확인합니다.
 
 - [Focus Mate · 집중동행카드와 검은 단말기](reports/focus-mate-card-and-reader-2026-10-12.md): 첫 카드 발급, 검은 LCD의 카드 표시, 접촉 순간 진동과 상태 저장.
+
+최신 후속 변경: [승차 단말기 정리](reports/boarding-reader-refinement-2026-10-12.md). 브라우저 검증 이전/이후 범위는 현재 상태 문서를 확인합니다.
+
+현재 편집 보드 내보내기: [42개 상태 PDF](designs/revised/pen-updates/focus-mate-current-42.pdf) · [전체 흐름 PNG](designs/revised/pen-updates/focus-mate-current-flow.png).

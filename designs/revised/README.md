@@ -41,3 +41,7 @@ R15 일시정지에 메인 복귀를 추가하고 R31 이전 여정 이어가기
 R35~R37은 카드 발급 전·출력·발급 완료입니다. R38~R42는 마이페이지·꾸미기 빈 상태·사진 배치·꾸민 카드·같은 카드 승차입니다. 카드 캔버스는 사진·글자·칩 레이어를 둥근 프레임 안에서 클리핑합니다. 최신 검증은 [카드 꾸미기](../../reports/card-customization-2026-10-12.md)와 [발급·단말기](../../reports/focus-mate-card-and-reader-2026-10-12.md)에서 확인합니다.
 
 최종 UI·UX·플로우 전체 재검수 결과는 [최종 검수 보고서](../../reports/full-ui-flow-review-2026-10-12.md)를 사용한다. 42개 상태를 실제 반응형 화면에서 검사했으며, 최신 통합 결과는 [검증 JSON](../../reports/verification/full-review-2026-10-12.json)에 기록했다. 이 폴더의 `verification.json`은 최초 개선판 결과를 보존한 기록이다.
+
+
+## 승차 단말기 후속 수정 — 2026-10-12
+[승차 화면 수정 기록](../../reports/boarding-reader-refinement-2026-10-12.md)을 반영해 Pen의 R27·R12·R42를 갱신했다. [대기 화면](pen-updates/boarding-reader-2026-10-12/kxUUR.png), [인식 완료](pen-updates/boarding-reader-2026-10-12/JmXmQ.png), [꾸민 카드 승차](pen-updates/boarding-reader-2026-10-12/Vts6F.png)는 최신 Pen 렌더다. 수정한 세 화면의 네이티브 레이어를 pencil-layers.json과 document-snapshot.json에도 동기화했다. [최신 Pen 42개 화면 PDF](pen-updates/focus-mate-current-42.pdf)와 [최신 전체 흐름 보드](pen-updates/focus-mate-current-flow.png)를 새로 내보냈다. 기존 브라우저 캡처·PDF는 이전 검수 시점의 자료이며 최신 동작은 HTML을 기준으로 확인한다.

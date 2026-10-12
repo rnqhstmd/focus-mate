@@ -1,0 +1,398 @@
+{
+  "version": 1,
+  "artifacts": {
+    "sourceHtml": "designs/final/animation-preview.html",
+    "packagedHtml": "designs/prototype/index.html",
+    "viewer": "designs/final/flow-viewer.js",
+    "layers": "designs/revised/pencil-layers.json",
+    "snapshot": "designs/editable/document-snapshot.json",
+    "pen": "designs/focus-mate.pen",
+    "requiredFiles": [
+      "designs/final/flow-viewer.js",
+      "designs/final/city-map.png",
+      "designs/final/transit-card-next-step.png",
+      "designs/final/bus-guide.html",
+      "designs/final/assets/audio/SOURCE.md",
+      "designs/final/assets/audio/audio-stats.json",
+      "designs/final/assets/audio/bus-london-cc0-v1.wav",
+      "designs/final/assets/audio/forest-edge-cc0-v1.wav",
+      "designs/final/assets/audio/pink-noise-cc0-v1.wav",
+      "designs/final/assets/audio/rain-windshield-cc0-v1.wav",
+      "designs/final/assets/audio/sources.json",
+      "designs/final/assets/bus/LUCIDE-LICENSE.txt",
+      "designs/final/assets/bus/SOURCE.md",
+      "designs/final/assets/bus/branch.svg",
+      "designs/final/assets/bus/bus-front.svg",
+      "designs/final/assets/bus/circular.svg",
+      "designs/final/assets/bus/express.svg",
+      "designs/final/assets/bus/tokens.json",
+      "designs/final/assets/bus/trunk.svg",
+      "designs/final/assets/bus/village.svg",
+      "designs/final/assets/fonts/SOURCE.md",
+      "designs/final/assets/fonts/SeoulAlrim-Bold.ttf",
+      "designs/final/assets/fonts/SeoulAlrim-Medium.ttf",
+      "docs/FLOWS.md",
+      "docs/MVP.md",
+      "docs/CURRENT-STATE.md"
+    ],
+    "copies": [
+      {
+        "source": "designs/final/flow-viewer.js",
+        "target": "designs/prototype/flow-viewer.js"
+      },
+      {
+        "source": "designs/final/city-map.png",
+        "target": "designs/prototype/city-map.png"
+      },
+      {
+        "source": "designs/final/transit-card-next-step.png",
+        "target": "designs/prototype/transit-card-next-step.png"
+      },
+      {
+        "source": "designs/final/bus-guide.html",
+        "target": "designs/prototype/bus-guide.html"
+      },
+      {
+        "source": "designs/final/assets/audio/SOURCE.md",
+        "target": "designs/prototype/assets/audio/SOURCE.md"
+      },
+      {
+        "source": "designs/final/assets/audio/audio-stats.json",
+        "target": "designs/prototype/assets/audio/audio-stats.json"
+      },
+      {
+        "source": "designs/final/assets/audio/bus-london-cc0-v1.wav",
+        "target": "designs/prototype/assets/audio/bus-london-cc0-v1.wav"
+      },
+      {
+        "source": "designs/final/assets/audio/forest-edge-cc0-v1.wav",
+        "target": "designs/prototype/assets/audio/forest-edge-cc0-v1.wav"
+      },
+      {
+        "source": "designs/final/assets/audio/pink-noise-cc0-v1.wav",
+        "target": "designs/prototype/assets/audio/pink-noise-cc0-v1.wav"
+      },
+      {
+        "source": "designs/final/assets/audio/rain-windshield-cc0-v1.wav",
+        "target": "designs/prototype/assets/audio/rain-windshield-cc0-v1.wav"
+      },
+      {
+        "source": "designs/final/assets/audio/sources.json",
+        "target": "designs/prototype/assets/audio/sources.json"
+      },
+      {
+        "source": "designs/final/assets/bus/LUCIDE-LICENSE.txt",
+        "target": "designs/prototype/assets/bus/LUCIDE-LICENSE.txt"
+      },
+      {
+        "source": "designs/final/assets/bus/SOURCE.md",
+        "target": "designs/prototype/assets/bus/SOURCE.md"
+      },
+      {
+        "source": "designs/final/assets/bus/branch.svg",
+        "target": "designs/prototype/assets/bus/branch.svg"
+      },
+      {
+        "source": "designs/final/assets/bus/bus-front.svg",
+        "target": "designs/prototype/assets/bus/bus-front.svg"
+      },
+      {
+        "source": "designs/final/assets/bus/circular.svg",
+        "target": "designs/prototype/assets/bus/circular.svg"
+      },
+      {
+        "source": "designs/final/assets/bus/express.svg",
+        "target": "designs/prototype/assets/bus/express.svg"
+      },
+      {
+        "source": "designs/final/assets/bus/tokens.json",
+        "target": "designs/prototype/assets/bus/tokens.json"
+      },
+      {
+        "source": "designs/final/assets/bus/trunk.svg",
+        "target": "designs/prototype/assets/bus/trunk.svg"
+      },
+      {
+        "source": "designs/final/assets/bus/village.svg",
+        "target": "designs/prototype/assets/bus/village.svg"
+      },
+      {
+        "source": "designs/final/assets/fonts/SOURCE.md",
+        "target": "designs/prototype/assets/fonts/SOURCE.md"
+      },
+      {
+        "source": "designs/final/assets/fonts/SeoulAlrim-Bold.ttf",
+        "target": "designs/prototype/assets/fonts/SeoulAlrim-Bold.ttf"
+      },
+      {
+        "source": "designs/final/assets/fonts/SeoulAlrim-Medium.ttf",
+        "target": "designs/prototype/assets/fonts/SeoulAlrim-Medium.ttf"
+      }
+    ]
+  },
+  "productScenes": [
+    "main",
+    "issue",
+    "search",
+    "time",
+    "prepare",
+    "tags",
+    "sound",
+    "tagEdit",
+    "board",
+    "boarding",
+    "focus",
+    "alighting",
+    "arrival",
+    "records",
+    "analytics",
+    "profile",
+    "cardStudio",
+    "settings"
+  ],
+  "internalScenes": [
+    "main",
+    "issue",
+    "intro",
+    "home",
+    "search",
+    "buses",
+    "time",
+    "prepare",
+    "tags",
+    "sound",
+    "tagEdit",
+    "board",
+    "boarding",
+    "focus",
+    "alighting",
+    "arrival",
+    "records",
+    "analytics",
+    "profile",
+    "cardStudio",
+    "settings"
+  ],
+  "states": [
+    {
+      "viewerKey": "main",
+      "scene": "main",
+      "penNode": "CcKpX"
+    },
+    {
+      "viewerKey": "intro",
+      "scene": "intro",
+      "penNode": "nwnTp"
+    },
+    {
+      "viewerKey": "search",
+      "scene": "search",
+      "penNode": "fL7RF"
+    },
+    {
+      "viewerKey": "home",
+      "scene": "time",
+      "penNode": "XM0Rr"
+    },
+    {
+      "viewerKey": "time-empty",
+      "scene": "time",
+      "penNode": "Y58O43"
+    },
+    {
+      "viewerKey": "time",
+      "scene": "time",
+      "penNode": "c72dCj"
+    },
+    {
+      "viewerKey": "prepare",
+      "scene": "prepare",
+      "penNode": "pcsoD"
+    },
+    {
+      "viewerKey": "prepare-filled",
+      "scene": "prepare",
+      "penNode": "kjVd8"
+    },
+    {
+      "viewerKey": "tagEdit",
+      "scene": "tagEdit",
+      "penNode": "WrVs7"
+    },
+    {
+      "viewerKey": "sound",
+      "scene": "sound",
+      "penNode": "a4F0n"
+    },
+    {
+      "viewerKey": "board",
+      "scene": "board",
+      "penNode": "TUNX2"
+    },
+    {
+      "viewerKey": "board-success",
+      "scene": "boarding",
+      "penNode": "JmXmQ"
+    },
+    {
+      "viewerKey": "focus",
+      "scene": "focus",
+      "penNode": "v7CByw"
+    },
+    {
+      "viewerKey": "rail",
+      "scene": "focus",
+      "penNode": "Ej0EV"
+    },
+    {
+      "viewerKey": "paused",
+      "scene": "focus",
+      "penNode": "dqEMj"
+    },
+    {
+      "viewerKey": "quit",
+      "scene": "focus",
+      "penNode": "W7SX7"
+    },
+    {
+      "viewerKey": "arrival",
+      "scene": "arrival",
+      "penNode": "We8JD"
+    },
+    {
+      "viewerKey": "main-saved",
+      "scene": "main",
+      "penNode": "HtxD2"
+    },
+    {
+      "viewerKey": "records",
+      "scene": "records",
+      "penNode": "DDMAd"
+    },
+    {
+      "viewerKey": "settings",
+      "scene": "settings",
+      "penNode": "b0s2M"
+    },
+    {
+      "viewerKey": "map-error",
+      "scene": "prepare",
+      "penNode": "GqnIX"
+    },
+    {
+      "viewerKey": "sound-error",
+      "scene": "focus",
+      "penNode": "dHHOx"
+    },
+    {
+      "viewerKey": "analytics",
+      "scene": "analytics",
+      "penNode": "S1PZb"
+    },
+    {
+      "viewerKey": "analytics-empty",
+      "scene": "analytics",
+      "penNode": "f5h4ZT"
+    },
+    {
+      "viewerKey": "main-memo",
+      "scene": "main",
+      "penNode": "DOIzP"
+    },
+    {
+      "viewerKey": "time-choice",
+      "scene": "time",
+      "penNode": "Zsv0p"
+    },
+    {
+      "viewerKey": "boarding",
+      "scene": "boarding",
+      "penNode": "kxUUR"
+    },
+    {
+      "viewerKey": "alighting",
+      "scene": "alighting",
+      "penNode": "yu5nz"
+    },
+    {
+      "viewerKey": "alight-success",
+      "scene": "alighting",
+      "penNode": "AdtS5"
+    },
+    {
+      "viewerKey": "arrival-memo",
+      "scene": "arrival",
+      "penNode": "CjBjx"
+    },
+    {
+      "viewerKey": "main-resume",
+      "scene": "main",
+      "penNode": "y3tXR"
+    },
+    {
+      "viewerKey": "resume-replace",
+      "scene": "main",
+      "penNode": "a5VYL"
+    },
+    {
+      "viewerKey": "resumed",
+      "scene": "focus",
+      "penNode": "LRPCx"
+    },
+    {
+      "viewerKey": "main-alight-resume",
+      "scene": "main",
+      "penNode": "IHpm7"
+    },
+    {
+      "viewerKey": "issue",
+      "scene": "issue",
+      "penNode": "dGyGQ"
+    },
+    {
+      "viewerKey": "issue-printing",
+      "scene": "issue",
+      "penNode": "vP677"
+    },
+    {
+      "viewerKey": "issue-done",
+      "scene": "issue",
+      "penNode": "KKaGq"
+    },
+    {
+      "viewerKey": "profile",
+      "scene": "profile",
+      "penNode": "EPnQQ"
+    },
+    {
+      "viewerKey": "card-studio",
+      "scene": "cardStudio",
+      "penNode": "z3LCu"
+    },
+    {
+      "viewerKey": "card-studio-photos",
+      "scene": "cardStudio",
+      "penNode": "x3PCFl"
+    },
+    {
+      "viewerKey": "profile-custom",
+      "scene": "profile",
+      "penNode": "rIUhI"
+    },
+    {
+      "viewerKey": "boarding-custom",
+      "scene": "boarding",
+      "penNode": "Vts6F"
+    }
+  ],
+  "reviews": {
+    "browser": {
+      "status": "pending",
+      "reason": "최신 승차 단말기 변경 후 실제 브라우저 렌더·터치·스크롤 검증 대기. VM 및 Pen 증거로 대체하지 않음."
+    },
+    "productScreenCoverage": {
+      "status": "pending",
+      "reason": "tags 중간 선택 화면은 42개 상태에 독립 Pen/브라우저 캡처가 없어 추가 화면 검토가 필요함."
+    }
+  }
+}

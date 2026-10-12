@@ -1,0 +1,11 @@
+ .claude/config.json                  |   5 +-
+ .gitignore                           |   2 +
+ designs/final/animation-preview.html |   5 +-
+ designs/prototype/index.html         |   5 +-
+ docs/DEVELOPMENT-PHASES.md           |   2 +-
+ docs/PHASE-0-BASELINE.md             |  49 ++++
+ docs/design-baseline.json            | 398 +++++++++++++++++++++++++++++++++
+ package.json                         |   5 +-
+ scripts/check-design-baseline.cjs    | 120 ++++++++++
+ scripts/design-baseline.test.cjs     | 420 +++++++++++++++++++++++++++++++++++
+ 10 files changed, 1004 insertions(+), 7 deletions(-)

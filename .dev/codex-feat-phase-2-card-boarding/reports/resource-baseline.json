@@ -1,0 +1,37 @@
+[
+  {
+    "path": "designs/final/city-map.png",
+    "bytes": 541135,
+    "sha256": "45b618a0d1105dbf7231ebd943dd0f08ee0e499210b308fc2d1a44c43ede3dd1"
+  },
+  {
+    "path": "designs/final/transit-card.png",
+    "bytes": 2218914,
+    "sha256": "61da63d71481820078e31f5bd923b189ba9b5a678af083ec940701680fc1f04b"
+  },
+  {
+    "path": "designs/final/transit-card-next-step.png",
+    "bytes": 1847852,
+    "sha256": "9520265bc209dde07ad417115f147c27f3df736e320855e5faa4af104c3a8c2d"
+  },
+  {
+    "path": "designs/final/assets/audio/bus-london-cc0-v1.wav",
+    "bytes": 7680044,
+    "sha256": "cda07ee328928294004cd61504aaac7572a5035bf01f266384bd5b751a4c920f"
+  },
+  {
+    "path": "designs/final/assets/audio/forest-edge-cc0-v1.wav",
+    "bytes": 7680044,
+    "sha256": "b0b381651adf380934ddccb403cd93a08ffbec4b7a6e29f67aeb0bcaa1cdbedc"
+  },
+  {
+    "path": "designs/final/assets/audio/pink-noise-cc0-v1.wav",
+    "bytes": 5292044,
+    "sha256": "35a2fab8914643bc7afbcb6812a38b969701194c6452a6e3fbe87deb4aa19222"
+  },
+  {
+    "path": "designs/final/assets/audio/rain-windshield-cc0-v1.wav",
+    "bytes": 3840044,
+    "sha256": "0cfd5236c55f7ee86a5b55937b7bb79eab9c08eddbc77008215281e518d3c0ad"
+  }
+]

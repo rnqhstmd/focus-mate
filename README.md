@@ -32,6 +32,9 @@ npm test
 
 ## 어디부터 볼까
 
+- [개발 단계](docs/DEVELOPMENT-PHASES.md): Phase 0~6의 구분·범위·현재 상태
+- [도메인 컨텍스트](context/README.md): 현재 웹 반영과 iOS 미반영 요구사항을 구분
+
 - [최종 UI·UX·플로우 검수](reports/full-ui-flow-review-2026-10-12.md): 전체 재검사, 수정 사항과 검증 한계
 - [편집 가능한 Pen 원본](designs/focus-mate.pen): 최신 42개 상태와 이전 36개 시안. `designs/assets/`를 같은 위치에 유지합니다.
 - [게시 프로토타입](https://next-step-app-flow.sqisoft-3053.chatgpt.site/): 최신 검수 반영 버전

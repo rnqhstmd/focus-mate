@@ -1,0 +1,479 @@
+diff --git a/ios/FocusMate/AppSnapshot.swift b/ios/FocusMate/AppSnapshot.swift
+index e4598c4..b3dbc4c 100644
+--- a/ios/FocusMate/AppSnapshot.swift
++++ b/ios/FocusMate/AppSnapshot.swift
+@@ -15,7 +15,39 @@ struct AppSnapshot: Codable, Equatable {
+     let cardIssued: Bool
+     let initialStation: StationSnapshot?
+     let currentStation: StationSnapshot?
+-    static let empty = AppSnapshot(cardIssued: false, initialStation: nil, currentStation: nil)
++    let cards: CardSection
++    let journey: JourneySection
++    let records: RecordSection
++    static let empty = AppSnapshot(cardIssued: false, initialStation: nil, currentStation: nil,
++                                   cards: .empty, journey: .empty, records: .empty)
++
++    /// 전체 생성자는 막아 두고, 바꾸려는 부분만 고르는 `updating…`으로 다른 영역을 실수로 비우지 않게 한다.
++    private init(cardIssued: Bool, initialStation: StationSnapshot?, currentStation: StationSnapshot?,
++                 cards: CardSection, journey: JourneySection, records: RecordSection) {
++        self.cardIssued = cardIssued
++        self.initialStation = initialStation
++        self.currentStation = currentStation
++        self.cards = cards
++        self.journey = journey
++        self.records = records
++    }
++
++    func updatingStage(cardIssued: Bool, initialStation: StationSnapshot?, currentStation: StationSnapshot?) -> AppSnapshot {
++        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
++                    cards: cards, journey: journey, records: records)
++    }
++    func updating(cards: CardSection) -> AppSnapshot {
++        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
++                    cards: cards, journey: journey, records: records)
++    }
++    func updating(journey: JourneySection) -> AppSnapshot {
++        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
++                    cards: cards, journey: journey, records: records)
++    }
++    func updating(records: RecordSection) -> AppSnapshot {
++        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
++                    cards: cards, journey: journey, records: records)
++    }
+ 
+     func validate() throws {
+         let noStations = initialStation == nil && currentStation == nil
+@@ -34,7 +66,7 @@ struct AppSnapshot: Codable, Equatable {
+         return currentStation == nil ? .initialStationEntry : .main
+     }
+ 
+-    private enum CodingKeys: String, CodingKey { case cardIssued, initialStation, currentStation }
++    private enum CodingKeys: String, CodingKey { case cardIssued, initialStation, currentStation, cards, journey, records }
+     func encode(to encoder: Encoder) throws {
+         var c = encoder.container(keyedBy: CodingKeys.self)
+         try c.encode(cardIssued, forKey: .cardIssued)
+@@ -42,5 +74,8 @@ struct AppSnapshot: Codable, Equatable {
+         else { try c.encodeNil(forKey: .initialStation) }
+         if let currentStation { try c.encode(currentStation, forKey: .currentStation) }
+         else { try c.encodeNil(forKey: .currentStation) }
++        try c.encode(cards, forKey: .cards)
++        try c.encode(journey, forKey: .journey)
++        try c.encode(records, forKey: .records)
+     }
+ }
+diff --git a/ios/FocusMate/CardSection.swift b/ios/FocusMate/CardSection.swift
+new file mode 100644
+index 0000000..2d55a27
+--- /dev/null
++++ b/ios/FocusMate/CardSection.swift
+@@ -0,0 +1,26 @@
++import Foundation
++
++/// W00은 카드 원소의 계약을 정하지 않는다. 값이 없으므로 원소가 든 파일은 읽지 않고 보존한다.
++enum CardSnapshot: Codable, Equatable {
++    init(from decoder: Decoder) throws {
++        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "card element is not defined yet"))
++    }
++    func encode(to encoder: Encoder) throws { switch self {} }
++}
++
++struct CardSection: Codable, Equatable {
++    let items: [CardSnapshot]
++    static let empty = CardSection(items: [])
++}
++
++extension CardSection {
++    private enum CodingKeys: String, CodingKey { case items }
++    init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        items = try c.decode([CardSnapshot].self, forKey: .items)
++    }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(items, forKey: .items)
++    }
++}
+diff --git a/ios/FocusMate/JourneySection.swift b/ios/FocusMate/JourneySection.swift
+new file mode 100644
+index 0000000..bf792f3
+--- /dev/null
++++ b/ios/FocusMate/JourneySection.swift
+@@ -0,0 +1,29 @@
++import Foundation
++
++/// W00은 진행 여정의 계약을 정하지 않는다. 값이 없으므로 진행 여정이 든 파일은 읽지 않고 보존한다.
++enum JourneySnapshot: Codable, Equatable {
++    init(from decoder: Decoder) throws {
++        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "journey element is not defined yet"))
++    }
++    func encode(to encoder: Encoder) throws { switch self {} }
++}
++
++struct JourneySection: Codable, Equatable {
++    let active: JourneySnapshot?
++    static let empty = JourneySection(active: nil)
++}
++
++extension JourneySection {
++    private enum CodingKeys: String, CodingKey { case active }
++    init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        guard c.contains(.active) else {
++            throw DecodingError.keyNotFound(CodingKeys.active, .init(codingPath: c.codingPath, debugDescription: "journey.active is required"))
++        }
++        active = try c.decodeNil(forKey: .active) ? nil : c.decode(JourneySnapshot.self, forKey: .active)
++    }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        if let active { try c.encode(active, forKey: .active) } else { try c.encodeNil(forKey: .active) }
++    }
++}
+diff --git a/ios/FocusMate/RecordSection.swift b/ios/FocusMate/RecordSection.swift
+new file mode 100644
+index 0000000..ac90b12
+--- /dev/null
++++ b/ios/FocusMate/RecordSection.swift
+@@ -0,0 +1,26 @@
++import Foundation
++
++/// W00은 완료 기록 원소의 계약을 정하지 않는다. 값이 없으므로 원소가 든 파일은 읽지 않고 보존한다.
++enum RecordSnapshot: Codable, Equatable {
++    init(from decoder: Decoder) throws {
++        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "record element is not defined yet"))
++    }
++    func encode(to encoder: Encoder) throws { switch self {} }
++}
++
++struct RecordSection: Codable, Equatable {
++    let items: [RecordSnapshot]
++    static let empty = RecordSection(items: [])
++}
++
++extension RecordSection {
++    private enum CodingKeys: String, CodingKey { case items }
++    init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        items = try c.decode([RecordSnapshot].self, forKey: .items)
++    }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(items, forKey: .items)
++    }
++}
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index 00b12e9..ad3b7a8 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -29,7 +29,7 @@ struct UITestBootstrap {
+         guard !FileManager.default.fileExists(atPath: fileURL.path) else { throw SetupIssue.existingSeed }
+         switch seed {
+         case "none": break
+-        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot(cardIssued: true, initialStation: nil, currentStation: nil))
++        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: nil, currentStation: nil))
+         case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
+         case "corrupt", "unsupported":
+             let raw = seed == "corrupt" ? "{broken" : #"{"version":999,"state":null}"#
+@@ -47,8 +47,8 @@ struct UITestBootstrap {
+     @MainActor func applySaveScenario(to model: AppModel) throws {
+         guard shouldFailSave else { return }
+         guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
+-        model.save(AppSnapshot(cardIssued: original.cardIssued, initialStation: original.initialStation,
+-                              currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
++        model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
++                                          currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+     }
+ 
+     var persistedBytes: String {
+@@ -57,7 +57,7 @@ struct UITestBootstrap {
+         catch { return "unreadable" }
+     }
+ 
+-    private static let readySnapshot = AppSnapshot(cardIssued: true,
++    private static let readySnapshot = AppSnapshot.empty.updatingStage(cardIssued: true,
+         initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
+         currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+ }
+diff --git a/ios/FocusMateTests/AppFoundationTests.swift b/ios/FocusMateTests/AppFoundationTests.swift
+index 8e00c88..ca8b624 100644
+--- a/ios/FocusMateTests/AppFoundationTests.swift
++++ b/ios/FocusMateTests/AppFoundationTests.swift
+@@ -7,16 +7,16 @@ final class AppFoundationTests: XCTestCase {
+ 
+     private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+     private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+-    private static let readySnapshot = AppSnapshot(
+-        cardIssued: true,
+-        initialStation: initialStation,
+-        currentStation: currentStation
+-    )
+-    private static let cardOnlySnapshot = AppSnapshot(
+-        cardIssued: true,
+-        initialStation: nil,
+-        currentStation: nil
+-    )
++    private static func stage(
++        _ issued: Bool,
++        _ initial: StationSnapshot?,
++        _ current: StationSnapshot?
++    ) -> AppSnapshot {
++        AppSnapshot.empty.updatingStage(cardIssued: issued, initialStation: initial, currentStation: current)
++    }
++
++    private static let readySnapshot = stage(true, initialStation, currentStation)
++    private static let cardOnlySnapshot = stage(true, nil, nil)
+     private static let readyEnvelope = Data(
+         #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
+     )
+@@ -41,15 +41,15 @@ final class AppFoundationTests: XCTestCase {
+         let blankName = StationSnapshot(id: "seongsu", name: "\n ", direction: 1)
+         let zeroDirection = StationSnapshot(id: "seongsu", name: "성수", direction: 0)
+         let cases: [(snapshot: AppSnapshot, issue: SnapshotValidationIssue)] = [
+-            (AppSnapshot(cardIssued: false, initialStation: Self.initialStation, currentStation: Self.currentStation), .inconsistentStage),
+-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: nil), .inconsistentStage),
+-            (AppSnapshot(cardIssued: true, initialStation: nil, currentStation: Self.currentStation), .inconsistentStage),
+-            (AppSnapshot(cardIssued: true, initialStation: blankID, currentStation: Self.currentStation), .emptyStationID),
+-            (AppSnapshot(cardIssued: true, initialStation: blankName, currentStation: Self.currentStation), .emptyStationName),
+-            (AppSnapshot(cardIssued: true, initialStation: zeroDirection, currentStation: Self.currentStation), .invalidDirection(0)),
+-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: blankID), .emptyStationID),
+-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: blankName), .emptyStationName),
+-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: zeroDirection), .invalidDirection(0)),
++            (Self.stage(false, Self.initialStation, Self.currentStation), .inconsistentStage),
++            (Self.stage(true, Self.initialStation, nil), .inconsistentStage),
++            (Self.stage(true, nil, Self.currentStation), .inconsistentStage),
++            (Self.stage(true, blankID, Self.currentStation), .emptyStationID),
++            (Self.stage(true, blankName, Self.currentStation), .emptyStationName),
++            (Self.stage(true, zeroDirection, Self.currentStation), .invalidDirection(0)),
++            (Self.stage(true, Self.initialStation, blankID), .emptyStationID),
++            (Self.stage(true, Self.initialStation, blankName), .emptyStationName),
++            (Self.stage(true, Self.initialStation, zeroDirection), .invalidDirection(0)),
+         ]
+ 
+         for item in cases {
+@@ -142,10 +142,10 @@ final class AppFoundationTests: XCTestCase {
+         var readCalls = 0
+         var directoryCalls = 0
+         var writeCalls = 0
+-        let invalid = AppSnapshot(
+-            cardIssued: true,
+-            initialStation: StationSnapshot(id: " ", name: "성수", direction: 1),
+-            currentStation: Self.currentStation
++        let invalid = Self.stage(
++            true,
++            StationSnapshot(id: " ", name: "성수", direction: 1),
++            Self.currentStation
+         )
+         let store = LocalSnapshotStore(
+             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
+diff --git a/ios/FocusMateTests/AppSnapshotSectionsTests.swift b/ios/FocusMateTests/AppSnapshotSectionsTests.swift
+new file mode 100644
+index 0000000..137a8b6
+--- /dev/null
++++ b/ios/FocusMateTests/AppSnapshotSectionsTests.swift
+@@ -0,0 +1,207 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class AppSnapshotSectionsTests: XCTestCase {
++    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
++    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
++
++    private static func stage(
++        _ issued: Bool,
++        _ initial: StationSnapshot?,
++        _ current: StationSnapshot?
++    ) -> AppSnapshot {
++        AppSnapshot.empty.updatingStage(cardIssued: issued, initialStation: initial, currentStation: current)
++    }
++
++    private static var readySnapshot: AppSnapshot { stage(true, initialStation, currentStation) }
++
++    // MARK: - 구조 보장 (FR-4)
++
++    // 깨짐: empty의 영역 중 하나라도 비어 있지 않게 초기화하면 실패
++    func testEmptySnapshotHasEmptyCardJourneyAndRecordSections() {
++        XCTAssertEqual(AppSnapshot.empty.cards.items.count, 0)
++        XCTAssertNil(AppSnapshot.empty.journey.active)
++        XCTAssertEqual(AppSnapshot.empty.records.items.count, 0)
++    }
++
++    // 깨짐: updatingStage가 단계 필드를 무시하거나 순서를 바꾸면 실패
++    func testUpdatingStageReplacesTheThreeStageFields() {
++        let updated = AppSnapshot.empty.updatingStage(
++            cardIssued: true,
++            initialStation: Self.initialStation,
++            currentStation: Self.currentStation
++        )
++
++        XCTAssertTrue(updated.cardIssued)
++        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
++        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++    }
++
++    // 깨짐: updatingStage가 영역을 .empty로 새로 만들어 원본 영역을 버리면(동등성 비교로는 W00에서 못 잡지만 영역 필드 교체 시) 실패
++    func testUpdatingStageKeepsTheOriginalSections() {
++        let updated = Self.readySnapshot.updatingStage(
++            cardIssued: false,
++            initialStation: nil,
++            currentStation: nil
++        )
++
++        XCTAssertEqual(updated.cards, Self.readySnapshot.cards)
++        XCTAssertEqual(updated.journey, Self.readySnapshot.journey)
++        XCTAssertEqual(updated.records, Self.readySnapshot.records)
++    }
++
++    // 깨짐: updatingStage가 검증을 수행해 불일치 상태에서 throw/거부하거나 값을 보정하면 실패
++    func testUpdatingStageDoesNotValidateInconsistentStage() {
++        let inconsistent = Self.stage(false, Self.initialStation, nil)
++
++        XCTAssertFalse(inconsistent.cardIssued)
++        XCTAssertEqual(inconsistent.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
++        XCTAssertNil(inconsistent.currentStation)
++    }
++
++    // 깨짐: updating(cards:)가 단계 필드를 초기화(empty 기반 재생성)하면 실패
++    func testUpdatingCardsKeepsTheStageFields() {
++        let updated = Self.readySnapshot.updating(cards: CardSection.empty)
++
++        XCTAssertTrue(updated.cardIssued)
++        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
++        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++    }
++
++    // 깨짐: updating(journey:)가 단계 필드를 초기화하면 실패
++    func testUpdatingJourneyKeepsTheStageFields() {
++        let updated = Self.readySnapshot.updating(journey: JourneySection.empty)
++
++        XCTAssertTrue(updated.cardIssued)
++        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
++        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++    }
++
++    // 깨짐: updating(records:)가 단계 필드를 초기화하면 실패
++    func testUpdatingRecordsKeepsTheStageFields() {
++        let updated = Self.readySnapshot.updating(records: RecordSection.empty)
++
++        XCTAssertTrue(updated.cardIssued)
++        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
++        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++    }
++
++    // 깨짐: updating(cards:)가 다른 두 영역을 건드리면 실패
++    func testUpdatingCardsKeepsTheJourneyAndRecordSections() {
++        let updated = Self.readySnapshot.updating(cards: CardSection.empty)
++
++        XCTAssertNil(updated.journey.active)
++        XCTAssertEqual(updated.records.items.count, 0)
++    }
++
++    // MARK: - 인코딩 (AC-2)
++
++    // 깨짐: 영역 키(cards/journey/records) 중 하나라도 인코딩에서 빠지거나, nil 정류장 키가 생략되면 실패
++    func testSnapshotEncodesExactlyTheSixStateKeysEvenWhenStationsAreNil() throws {
++        let data = try JSONEncoder().encode(AppSnapshot.empty)
++        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++
++        XCTAssertEqual(
++            Set(object.keys),
++            ["cardIssued", "cards", "currentStation", "initialStation", "journey", "records"]
++        )
++    }
++
++    // 깨짐: nil 정류장을 키 생략으로 인코딩하면 실패
++    func testNilStationsAreEncodedAsNullValues() throws {
++        let data = try JSONEncoder().encode(AppSnapshot.empty)
++        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++
++        XCTAssertTrue(object["initialStation"] is NSNull)
++        XCTAssertTrue(object["currentStation"] is NSNull)
++    }
++
++    // 깨짐: CardSection 인코딩 형태(키 이름 items·빈 배열)가 바뀌면 실패
++    func testEmptyCardSectionEncodesAsEmptyItemsArray() throws {
++        XCTAssertEqual(try sortedJSON(CardSection.empty), #"{"items":[]}"#)
++    }
++
++    // 깨짐: JourneySection이 active 키를 생략하거나 키 이름을 바꾸면 실패
++    func testEmptyJourneySectionEncodesActiveAsNull() throws {
++        XCTAssertEqual(try sortedJSON(JourneySection.empty), #"{"active":null}"#)
++    }
++
++    // 깨짐: RecordSection 인코딩 형태가 바뀌면 실패
++    func testEmptyRecordSectionEncodesAsEmptyItemsArray() throws {
++        XCTAssertEqual(try sortedJSON(RecordSection.empty), #"{"items":[]}"#)
++    }
++
++    // MARK: - 디코딩 정책
++
++    // 깨짐: items 누락을 빈 배열로 관대하게 처리하면 실패
++    func testCardSectionWithoutItemsKeyFailsToDecode() {
++        XCTAssertThrowsError(try decode(CardSection.self, "{}"))
++    }
++
++    // 깨짐: items가 배열이 아닐 때 무시하면 실패
++    func testCardSectionWithNonArrayItemsFailsToDecode() {
++        XCTAssertThrowsError(try decode(CardSection.self, #"{"items":"x"}"#))
++    }
++
++    // 깨짐: 영역 값이 객체가 아닌 경우(배열)를 통과시키면 실패
++    func testCardSectionAsArrayFailsToDecode() {
++        XCTAssertThrowsError(try decode(CardSection.self, "[]"))
++    }
++
++    // 깨짐: 영역 값이 null일 때 empty로 대체하면 실패
++    func testRecordSectionAsNullFailsToDecode() {
++        XCTAssertThrowsError(try decode(RecordSection.self, "null"))
++    }
++
++    // 깨짐: 원소를 빈 객체로 받아 통과시키면 실패
++    func testCardSectionWithObjectElementFailsToDecode() {
++        XCTAssertThrowsError(try decode(CardSection.self, #"{"items":[{}]}"#))
++    }
++
++    // 깨짐: 원소를 숫자로 받아 통과시키면 실패
++    func testRecordSectionWithScalarElementFailsToDecode() {
++        XCTAssertThrowsError(try decode(RecordSection.self, #"{"items":[1]}"#))
++    }
++
++    // 깨짐: 모르는 키가 있을 때 오류를 던지면(엄격 모드) 실패
++    func testCardSectionIgnoresUnknownKeys() throws {
++        let section = try decode(CardSection.self, #"{"items":[],"extra":1}"#)
++
++        XCTAssertEqual(section.items.count, 0)
++    }
++
++    // 깨짐: active 키 누락을 nil로 관대하게 처리하면 실패
++    func testJourneySectionWithoutActiveKeyFailsToDecode() {
++        XCTAssertThrowsError(try decode(JourneySection.self, "{}"))
++    }
++
++    // 깨짐: active:null을 오류로 처리하면 실패
++    func testJourneySectionWithNullActiveDecodesToNil() throws {
++        let section = try decode(JourneySection.self, #"{"active":null}"#)
++
++        XCTAssertNil(section.active)
++    }
++
++    // 깨짐: active를 빈 객체로 받아 통과시키면 실패
++    func testJourneySectionWithEmptyObjectActiveFailsToDecode() {
++        XCTAssertThrowsError(try decode(JourneySection.self, #"{"active":{}}"#))
++    }
++
++    // 깨짐: active를 문자열로 받아 통과시키면 실패
++    func testJourneySectionWithStringActiveFailsToDecode() {
++        XCTAssertThrowsError(try decode(JourneySection.self, #"{"active":"x"}"#))
++    }
++
++    // MARK: - helpers
++
++    private func sortedJSON<T: Encodable>(_ value: T) throws -> String {
++        let encoder = JSONEncoder()
++        encoder.outputFormatting = [.sortedKeys]
++        return String(decoding: try encoder.encode(value), as: UTF8.self)
++    }
++
++    private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
++        try JSONDecoder().decode(type, from: Data(json.utf8))
++    }
++}

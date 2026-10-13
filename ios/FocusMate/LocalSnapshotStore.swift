@@ -21,24 +21,12 @@ final class LocalSnapshotStore {
         self.writeData = writeData
     }
 
-    private struct VersionHeader: Decodable { let version: Int }
-    private struct Envelope: Codable { let version: Int; let state: AppSnapshot }
-
     func load() throws -> AppSnapshot? {
         let data: Data
         do { data = try readData(fileURL) }
         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
         catch { throw StorageIssue.unreadable }
-        let header: VersionHeader
-        do { header = try JSONDecoder().decode(VersionHeader.self, from: data) }
-        catch { throw StorageIssue.corrupt }
-        guard header.version == 1 else { throw StorageIssue.unsupportedVersion(header.version) }
-        do {
-            let state = try JSONDecoder().decode(Envelope.self, from: data).state
-            try state.validate()
-            return state
-        } catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
-        catch { throw StorageIssue.corrupt }
+        return try SnapshotCodec.decode(data)
     }
 
     func save(_ snapshot: AppSnapshot) throws {
@@ -47,9 +35,7 @@ final class LocalSnapshotStore {
         do { _ = try load() }
         catch let issue as StorageIssue { throw StorageIssue.writeBlocked(issue) }
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(Envelope(version: 1, state: snapshot))
+            let data = try SnapshotCodec.encode(snapshot)
             try createDirectory(fileURL.deletingLastPathComponent())
             try writeData(data, fileURL)
         } catch { throw StorageIssue.writeFailed }

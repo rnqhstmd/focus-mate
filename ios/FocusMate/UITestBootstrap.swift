@@ -29,7 +29,7 @@ struct UITestBootstrap {
         guard !FileManager.default.fileExists(atPath: fileURL.path) else { throw SetupIssue.existingSeed }
         switch seed {
         case "none": break
-        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot(cardIssued: true, initialStation: nil, currentStation: nil))
+        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: nil, currentStation: nil))
         case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
         case "corrupt", "unsupported":
             let raw = seed == "corrupt" ? "{broken" : #"{"version":999,"state":null}"#
@@ -47,8 +47,8 @@ struct UITestBootstrap {
     @MainActor func applySaveScenario(to model: AppModel) throws {
         guard shouldFailSave else { return }
         guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
-        model.save(AppSnapshot(cardIssued: original.cardIssued, initialStation: original.initialStation,
-                              currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+        model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
+                                          currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
     }
 
     var persistedBytes: String {
@@ -57,7 +57,7 @@ struct UITestBootstrap {
         catch { return "unreadable" }
     }
 
-    private static let readySnapshot = AppSnapshot(cardIssued: true,
+    private static let readySnapshot = AppSnapshot.empty.updatingStage(cardIssued: true,
         initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
         currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
 }

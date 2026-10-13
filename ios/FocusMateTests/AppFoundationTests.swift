@@ -7,16 +7,9 @@ final class AppFoundationTests: XCTestCase {
 
     private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
     private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
-    private static let readySnapshot = AppSnapshot(
-        cardIssued: true,
-        initialStation: initialStation,
-        currentStation: currentStation
-    )
-    private static let cardOnlySnapshot = AppSnapshot(
-        cardIssued: true,
-        initialStation: nil,
-        currentStation: nil
-    )
+
+    private static let readySnapshot = stage(true, initialStation, currentStation)
+    private static let cardOnlySnapshot = stage(true, nil, nil)
     private static let readyEnvelope = Data(
         #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
     )
@@ -41,15 +34,15 @@ final class AppFoundationTests: XCTestCase {
         let blankName = StationSnapshot(id: "seongsu", name: "\n ", direction: 1)
         let zeroDirection = StationSnapshot(id: "seongsu", name: "성수", direction: 0)
         let cases: [(snapshot: AppSnapshot, issue: SnapshotValidationIssue)] = [
-            (AppSnapshot(cardIssued: false, initialStation: Self.initialStation, currentStation: Self.currentStation), .inconsistentStage),
-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: nil), .inconsistentStage),
-            (AppSnapshot(cardIssued: true, initialStation: nil, currentStation: Self.currentStation), .inconsistentStage),
-            (AppSnapshot(cardIssued: true, initialStation: blankID, currentStation: Self.currentStation), .emptyStationID),
-            (AppSnapshot(cardIssued: true, initialStation: blankName, currentStation: Self.currentStation), .emptyStationName),
-            (AppSnapshot(cardIssued: true, initialStation: zeroDirection, currentStation: Self.currentStation), .invalidDirection(0)),
-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: blankID), .emptyStationID),
-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: blankName), .emptyStationName),
-            (AppSnapshot(cardIssued: true, initialStation: Self.initialStation, currentStation: zeroDirection), .invalidDirection(0)),
+            (Self.stage(false, Self.initialStation, Self.currentStation), .inconsistentStage),
+            (Self.stage(true, Self.initialStation, nil), .inconsistentStage),
+            (Self.stage(true, nil, Self.currentStation), .inconsistentStage),
+            (Self.stage(true, blankID, Self.currentStation), .emptyStationID),
+            (Self.stage(true, blankName, Self.currentStation), .emptyStationName),
+            (Self.stage(true, zeroDirection, Self.currentStation), .invalidDirection(0)),
+            (Self.stage(true, Self.initialStation, blankID), .emptyStationID),
+            (Self.stage(true, Self.initialStation, blankName), .emptyStationName),
+            (Self.stage(true, Self.initialStation, zeroDirection), .invalidDirection(0)),
         ]
 
         for item in cases {
@@ -142,10 +135,10 @@ final class AppFoundationTests: XCTestCase {
         var readCalls = 0
         var directoryCalls = 0
         var writeCalls = 0
-        let invalid = AppSnapshot(
-            cardIssued: true,
-            initialStation: StationSnapshot(id: " ", name: "성수", direction: 1),
-            currentStation: Self.currentStation
+        let invalid = Self.stage(
+            true,
+            StationSnapshot(id: " ", name: "성수", direction: 1),
+            Self.currentStation
         )
         let store = LocalSnapshotStore(
             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
@@ -355,32 +348,5 @@ final class AppFoundationTests: XCTestCase {
         } catch {
             XCTFail("Expected SnapshotValidationIssue", file: file, line: line)
         }
-    }
-
-    private func assertStorageIssue(
-        _ expected: StorageIssue,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        operation: () throws -> Void
-    ) {
-        do {
-            try operation()
-            XCTFail("Expected StorageIssue", file: file, line: line)
-        } catch let actual as StorageIssue {
-            XCTAssertEqual(actual, expected, file: file, line: line)
-        } catch {
-            XCTFail("Expected StorageIssue", file: file, line: line)
-        }
-    }
-
-    private func withTemporaryFile(_ operation: (URL) throws -> Void) throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("FocusMate-AppFoundationTests-\(UUID().uuidString)", isDirectory: true)
-        let fileURL = root
-            .appendingPathComponent("nested", isDirectory: true)
-            .appendingPathComponent("FocusMate", isDirectory: true)
-            .appendingPathComponent("app-state.json", isDirectory: false)
-        defer { try? FileManager.default.removeItem(at: root) }
-        try operation(fileURL)
     }
 }

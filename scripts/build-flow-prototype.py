@@ -25,7 +25,9 @@ for name in ["index.html", "flow-viewer.js", "city-map.png", "transit-card-next-
 shutil.copytree(source / "assets", output / "assets", dirs_exist_ok=True)
 # Retired sketches remain in archive-36/review, rather than the current app package.
 for destination in [source / "assets/audio", output / "assets/audio"]:
-    for name in ["white-noise.wav", "rain-window.wav", "forest.wav", "bus-ride.wav"]:
+    for name in ["white-noise.wav", "rain-window.wav", "forest.wav", "bus-ride.wav",
+                 "pink-noise-cc0-v1.wav", "bus-london-cc0-v1.wav", "bus-cabin-hum-v1.wav",
+                 "rain-windshield-cc0-v1.wav", "forest-edge-cc0-v1.wav"]:
         retired = destination / name
         if retired.is_file():
             retired.unlink()

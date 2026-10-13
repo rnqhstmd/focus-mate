@@ -14,7 +14,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / '.impeccable/review/audio-sources'
-OUT = ROOT / 'designs/final/assets/audio'
+OUT = ROOT / 'designs/audio-sources'  # inputs for build-travel-ambience.py, not shipped
 OLD = ROOT / '.impeccable/review/audio-before'
 OLD.mkdir(parents=True, exist_ok=True)
 for name in ['white-noise.wav', 'rain-window.wav', 'forest.wav', 'bus-ride.wav', 'audio-stats.json', 'SOURCE.md']:

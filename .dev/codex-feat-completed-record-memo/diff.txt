@@ -1,0 +1,9 @@
+ ios/FocusMate/AppModel.swift                |  42 +++
+ ios/FocusMate/AppSnapshot.swift             |   3 +
+ ios/FocusMate/RecordSection.swift           | 167 ++++++++++--
+ ios/FocusMate/SnapshotCodec.swift           |   2 +-
+ ios/FocusMateTests/RecordSectionTests.swift | 350 ++++++++++++++++++++++++
+ ios/FocusMateTests/RecordStorageTests.swift | 399 ++++++++++++++++++++++++++++
+ 6 files changed, 947 insertions(+), 16 deletions(-)
+
+변경된 파일을 직접 읽어 확인하라.

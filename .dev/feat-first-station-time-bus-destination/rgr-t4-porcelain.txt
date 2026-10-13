@@ -1,0 +1,13 @@
+ M ios/FocusMate/AppModel.swift
+?? .dev/feat-first-station-time-bus-destination/
+?? ios/FocusMate/AppModel+JourneyStart.swift
+?? ios/FocusMate/JourneyPlanDraft.swift
+?? ios/FocusMate/JourneyPlanner.swift
+?? ios/FocusMate/RouteData.swift
+?? ios/FocusMate/StationSearchState.swift
+?? ios/FocusMateTests/JourneyPlanDraftTests.swift
+?? ios/FocusMateTests/JourneyPlannerTests.swift
+?? ios/FocusMateTests/JourneyStartModelTests.swift
+?? ios/FocusMateTests/StationCatalogTests.swift
+?? ios/FocusMateTests/StationSearchStateTests.swift
+?? ios/FocusMateUITests/FirstStationSearchUITests.swift

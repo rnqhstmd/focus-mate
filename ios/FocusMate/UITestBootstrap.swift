@@ -73,8 +73,9 @@ struct UITestBootstrap {
     }
 
     @MainActor func applySaveScenario(to model: AppModel) throws {
-        guard shouldFailSave else { return }
-        guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
+        // 쓰기 실패 저장소는 모든 진입 상태에 주입된다. 시드 실패 저장 1회는 메인에서만 일으킨다.
+        guard shouldFailSave, model.launchState == .ready(.main) else { return }
+        guard let original = model.snapshot else { throw SetupIssue.invalidSaveState }
         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
     }

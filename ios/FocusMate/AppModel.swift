@@ -3,9 +3,10 @@ import Observation
 
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
-    case preparation, records, settings, profile
+    case preparation, records, settings, profile, time
     var title: String {
         switch self {
+        case .time: "시간 선택"
         case .preparation: "여행 준비"
         case .records: "기록"
         case .settings: "설정"
@@ -20,6 +21,7 @@ final class AppModel {
     private(set) var snapshot: AppSnapshot?
     var path: [Destination] = []
     private(set) var saveFailure: StorageIssue?
+    var journeyPlan = JourneyPlanDraft()
     private(set) var recoveryFailure: StorageRecoveryIssue?
     private(set) var isRecovering = false
     private(set) var hasAttemptedCleanup = false

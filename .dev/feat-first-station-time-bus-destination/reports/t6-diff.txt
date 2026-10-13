@@ -1,0 +1,338 @@
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index adbb724..613d2c9 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -12,7 +12,7 @@ struct RootView: View {
+         NavigationStack(path: $model.path) {
+             VStack(alignment: .leading, spacing: 24) {
+                 content
+-                if model.saveFailure != nil {
++                if model.saveFailure != nil && model.launchState != .ready(.initialStationEntry) {
+                     Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
+                         .accessibilityIdentifier("storage.saveFailure").foregroundStyle(.secondary)
+                 }
+@@ -21,16 +21,7 @@ struct RootView: View {
+             .padding(24)
+             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
+-            .navigationDestination(for: Destination.self) { destination in
+-                VStack(alignment: .leading, spacing: 16) {
+-                    Text(destination.title).font(.largeTitle.bold())
+-                        .accessibilityIdentifier("screen.\(destination.rawValue)")
+-                    if destination == .records { Text("아직 여행 기록이 없어요.").foregroundStyle(.secondary) }
+-                    Spacer()
+-                }
+-                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+-                .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
+-            }
++            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model) }
+         }
+         .preferredColorScheme(.dark)
+         #if DEBUG
+@@ -55,8 +46,7 @@ struct RootView: View {
+             Text("집중동행카드").font(.largeTitle.bold()).accessibilityIdentifier("screen.cardEntry")
+             Text("나만의 카드로 함께 떠나요.").foregroundStyle(.secondary)
+         case .ready(.initialStationEntry):
+-            Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
+-            Text("여행을 시작할 정류장을 골라요.").foregroundStyle(.secondary)
++            InitialStationSearchView(model: model)
+         case .ready(.main):
+             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
+             if let station = model.snapshot?.currentStation {
+@@ -64,8 +54,8 @@ struct RootView: View {
+                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
+                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
+             }
+-            ForEach(Destination.allCases, id: \.self) { destination in
+-                Button(destination.title) { model.open(destination) }.buttonStyle(.bordered)
++            ForEach(Destination.mainMenu, id: \.self) { destination in
++                Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
+                     .accessibilityIdentifier("open.\(destination.rawValue)")
+             }
+         case let .failed(issue):
+diff --git a/ios/FocusMate/TimeSelectionView.swift b/ios/FocusMate/TimeSelectionView.swift
+new file mode 100644
+index 0000000..b19662c
+--- /dev/null
++++ b/ios/FocusMate/TimeSelectionView.swift
+@@ -0,0 +1,66 @@
++import SwiftUI
++
++/// 저장된 현재 정류장에서 출발하는 시간·버스·도착지 선택 화면.
++/// 휠에는 접근성 수정자를 붙이지 않는다 — 시스템 기본 조절(한 칸 = 1분)과 PickerWheel 노출을 유지하기 위해서다.
++@MainActor
++struct TimeSelectionView: View {
++    @Bindable var model: AppModel
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 16) {
++            Text(Destination.time.title).font(.largeTitle.bold()).accessibilityIdentifier("screen.time")
++            origin
++            Text("\(model.journeyPlan.minutes)분").font(.title.bold())
++                .accessibilityValue("\(model.journeyPlan.minutes)").accessibilityIdentifier("time.minutesLabel")
++            Picker("여행 시간", selection: minutes) {
++                ForEach(JourneyPlanner.minuteRange, id: \.self) { Text("\($0)분").tag($0) }
++            }
++            .pickerStyle(.wheel).frame(height: 120)
++            ScrollView {
++                VStack(alignment: .leading, spacing: 12) {
++                    ForEach(model.journeyCandidates) { candidateButton($0) }
++                }
++            }
++            Button(model.journeyProceedState.title) { model.proceedToPreparation() }
++                .buttonStyle(.borderedProminent).frame(maxWidth: .infinity)
++                .disabled(!model.journeyProceedState.isEnabled)
++                .accessibilityIdentifier("time.proceed")
++        }
++    }
++
++    @ViewBuilder private var origin: some View {
++        if let station = model.snapshot?.currentStation {
++            VStack(alignment: .leading, spacing: 4) {
++                Text(station.name).font(.title2.bold())
++                    .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
++                if let position = model.journeyOrigin {
++                    Text(RouteStops.boundLabel(from: position)).foregroundStyle(.secondary)
++                }
++            }
++        }
++    }
++
++    private var minutes: Binding<Int> {
++        Binding(get: { model.journeyPlan.minutes }, set: { model.journeyPlan.setMinutes($0) })
++    }
++
++    private func candidateButton(_ candidate: JourneyCandidate) -> some View {
++        let isSelected = model.journeyPlan.selectedBusID == candidate.bus.id
++        return Button {
++            if let origin = model.journeyOrigin { _ = model.journeyPlan.choose(busID: candidate.bus.id, from: origin) }
++        } label: {
++            VStack(alignment: .leading, spacing: 4) {
++                Text("\(candidate.bus.kind) \(candidate.bus.number)").font(.headline)
++                Text(candidate.destination)
++                Text("\(candidate.minutes) min · \(candidate.stops)정류장 · \(candidate.distanceText)")
++                    .foregroundStyle(.secondary)
++            }
++            .frame(maxWidth: .infinity, alignment: .leading)
++        }
++        .buttonStyle(.bordered)
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel(candidate.accessibilityLabel)
++        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
++        .accessibilityIdentifier("time.candidate.\(candidate.bus.id)")
++    }
++}
+diff --git a/ios/FocusMateUITests/Phase1FlowTests.swift b/ios/FocusMateUITests/Phase1FlowTests.swift
+index dd5e9f8..ef3be0e 100644
+--- a/ios/FocusMateUITests/Phase1FlowTests.swift
++++ b/ios/FocusMateUITests/Phase1FlowTests.swift
+@@ -47,7 +47,7 @@ final class Phase1FlowTests: XCTestCase {
+         let initialSnapshot = try diagnosticValue("test.snapshot", in: app)
+         let initialBytes = try diagnosticValue("test.persistedBytes", in: app)
+         let destinations = [
+-            (button: "여행 준비", screen: "screen.preparation"),
++            (button: "여행 준비", screen: "screen.time"),
+             (button: "기록", screen: "screen.records"),
+             (button: "설정", screen: "screen.settings"),
+             (button: "마이페이지", screen: "screen.profile"),
+@@ -163,7 +163,6 @@ final class Phase1FlowTests: XCTestCase {
+         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
+ 
+         let destinations = [
+-            (button: "여행 준비", screen: "screen.preparation"),
+             (button: "기록", screen: "screen.records"),
+             (button: "설정", screen: "screen.settings"),
+             (button: "마이페이지", screen: "screen.profile"),
+diff --git a/ios/FocusMateUITests/TimeSelectionUITests.swift b/ios/FocusMateUITests/TimeSelectionUITests.swift
+new file mode 100644
+index 0000000..9d2e7f6
+--- /dev/null
++++ b/ios/FocusMateUITests/TimeSelectionUITests.swift
+@@ -0,0 +1,187 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class TimeSelectionUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    private let noCandidates = "이 시간의 도착 후보가 없어요"
++    private let needsSelection = "버스와 도착지를 선택하세요"
++    private let ready = "이 여정 준비하기"
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    func testTimeWheelSpike() throws {
++        let app = try openTimeScreen()
++
++        XCTAssertEqual(app.pickerWheels.count, 1)
++        let wheel = app.pickerWheels.firstMatch
++        XCTAssertTrue(wheel.waitForExistence(timeout: 3))
++        XCTAssertEqual(wheel.value as? String, "25분")
++        XCTAssertEqual(try value("time.minutesLabel", in: app), "25")
++
++        for target in ["360", "15"] {
++            let started = Date()
++            wheel.adjust(toPickerWheelValue: "\(target)분")
++            XCTAssertLessThan(Date().timeIntervalSince(started), 20, "\(target)분 이동이 20초를 넘김")
++            XCTAssertEqual(wheel.value as? String, "\(target)분")
++            XCTAssertEqual(try value("time.minutesLabel", in: app), target)
++        }
++
++        try setMinutes(60, in: app)
++        wheel.adjust(toPickerWheelValue: "61분")
++        XCTAssertEqual(wheel.value as? String, "61분")
++        XCTAssertEqual(try value("time.minutesLabel", in: app), "61")
++    }
++
++    func testEntryShowsDefault25MinutesWithSingleUnselectedCandidateAndDisabledProceed() throws {
++        let app = try openTimeScreen()
++
++        XCTAssertEqual(try value("time.minutesLabel", in: app), "25")
++        XCTAssertEqual(try value("time.origin", in: app), "성수역")
++        XCTAssertEqual(candidates(in: app).count, 1)
++        let candidate = element("time.candidate.2014", in: app)
++        XCTAssertTrue(candidate.waitForExistence(timeout: timeout))
++        XCTAssertEqual(candidate.label, "지선 2014번, 서울숲 입구, 25분, 5정류장")
++        XCTAssertFalse(candidate.isSelected)
++        let proceed = element("time.proceed", in: app)
++        XCTAssertEqual(proceed.label, needsSelection)
++        XCTAssertFalse(proceed.isEnabled)
++    }
++
++    func testSixtyToOneTwentyMinutesShowsAllThreeCandidates() throws {
++        let app = try openTimeScreen()
++
++        try setMinutes(120, in: app)
++
++        XCTAssertTrue(element("time.candidate.2014", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(element("time.candidate.302", in: app).exists)
++        XCTAssertTrue(element("time.candidate.421", in: app).exists)
++        XCTAssertEqual(candidates(in: app).count, 3)
++    }
++
++    func testMinutesWithoutCandidatesShowDisabledProceedThatDoesNotNavigate() throws {
++        let app = try openTimeScreen()
++
++        try setMinutes(17, in: app)
++
++        XCTAssertEqual(candidates(in: app).count, 0)
++        let proceed = element("time.proceed", in: app)
++        XCTAssertEqual(proceed.label, noCandidates)
++        XCTAssertFalse(proceed.isEnabled)
++        proceed.tap()
++        XCTAssertTrue(element("screen.time", in: app).exists)
++        XCTAssertFalse(element("screen.preparation", in: app).exists)
++    }
++
++    func testProceedWithoutSelectionAsksForSelectionAndStaysOnTimeScreen() throws {
++        let app = try openTimeScreen()
++
++        try setMinutes(60, in: app)
++
++        let proceed = element("time.proceed", in: app)
++        XCTAssertEqual(proceed.label, needsSelection)
++        proceed.tap()
++        XCTAssertTrue(element("screen.time", in: app).exists)
++        XCTAssertFalse(element("screen.preparation", in: app).exists)
++    }
++
++    func testSelectingCandidateMarksOnlyThatOneAndEnablesProceed() throws {
++        let app = try openTimeScreen()
++        try setMinutes(60, in: app)
++
++        let first = element("time.candidate.2014", in: app)
++        XCTAssertTrue(first.waitForExistence(timeout: timeout))
++        first.tap()
++
++        XCTAssertTrue(first.isSelected)
++        XCTAssertFalse(element("time.candidate.302", in: app).isSelected)
++        let proceed = element("time.proceed", in: app)
++        XCTAssertEqual(proceed.label, ready)
++        XCTAssertTrue(proceed.isEnabled)
++    }
++
++    func testChangingMinutesClearsSelectionImmediately() throws {
++        let app = try openTimeScreen()
++        try setMinutes(60, in: app)
++        let first = element("time.candidate.2014", in: app)
++        XCTAssertTrue(first.waitForExistence(timeout: timeout))
++        first.tap()
++        XCTAssertTrue(first.isSelected)
++
++        app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "61분")
++
++        // 대기 없이 즉시 확인한다.
++        XCTAssertEqual(candidates(in: app).count, 0)
++        XCTAssertEqual(element("time.proceed", in: app).label, noCandidates)
++
++        app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "60분")
++        let again = element("time.candidate.2014", in: app)
++        XCTAssertTrue(again.waitForExistence(timeout: timeout))
++        XCTAssertFalse(again.isSelected)
++        XCTAssertEqual(element("time.proceed", in: app).label, needsSelection)
++    }
++
++    func testCandidateAndProceedExposeReadableAccessibilityLabels() throws {
++        let app = try openTimeScreen()
++        try setMinutes(60, in: app)
++
++        let candidate = element("time.candidate.2014", in: app)
++        XCTAssertTrue(candidate.waitForExistence(timeout: timeout))
++        XCTAssertEqual(candidate.label, "지선 2014번, 성동구민체육센터, 60분, 12정류장")
++        XCTAssertFalse(element("time.proceed", in: app).label.isEmpty)
++    }
++
++    func testWheelBoundariesReportFifteenAndThreeSixtyMinutes() throws {
++        let app = try openTimeScreen()
++        let wheel = app.pickerWheels.firstMatch
++
++        wheel.adjust(toPickerWheelValue: "15분")
++        wheel.adjust(toPickerWheelValue: "15분")
++        XCTAssertEqual(try value("time.minutesLabel", in: app), "15")
++        XCTAssertEqual(wheel.value as? String, "15분")
++
++        wheel.adjust(toPickerWheelValue: "360분")
++        wheel.adjust(toPickerWheelValue: "360분")
++        XCTAssertEqual(try value("time.minutesLabel", in: app), "360")
++        XCTAssertEqual(wheel.value as? String, "360분")
++    }
++
++    // MARK: - Helpers
++
++    private func openTimeScreen() throws -> XCUIApplication {
++        let app = XCUIApplication()
++        app.launchArguments = ["--fm-ui-test-id", UUID().uuidString, "--fm-ui-seed", "cardOnly"]
++        app.launch()
++
++        let origin = element("search.result.seongsu:1", in: app)
++        XCTAssertTrue(origin.waitForExistence(timeout: timeout))
++        origin.tap()
++        element("search.confirm", in: app).tap()
++        XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
++        return app
++    }
++
++    private func setMinutes(_ minutes: Int, in app: XCUIApplication) throws {
++        let wheel = app.pickerWheels.firstMatch
++        XCTAssertTrue(wheel.waitForExistence(timeout: timeout), "분 휠이 없음")
++        wheel.adjust(toPickerWheelValue: "\(minutes)분")
++        XCTAssertEqual(try value("time.minutesLabel", in: app), String(minutes))
++    }
++
++    private func candidates(in app: XCUIApplication) -> XCUIElementQuery {
++        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "time.candidate."))
++    }
++
++    private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
++        app.descendants(matching: .any)[identifier]
++    }
++
++    private func value(_ identifier: String, in app: XCUIApplication) throws -> String {
++        let observed = element(identifier, in: app)
++        XCTAssertTrue(observed.waitForExistence(timeout: timeout), "Missing value element: \(identifier)")
++        return try XCTUnwrap(observed.value as? String, "Element has no string value: \(identifier)")
++    }
++}

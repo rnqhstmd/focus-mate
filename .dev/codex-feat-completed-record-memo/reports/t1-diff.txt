@@ -1,0 +1,992 @@
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index c6d0868..2c49fda 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -58,6 +58,48 @@ final class AppModel {
+         return false
+     }
+ 
++    @discardableResult
++    func recordCompletion(_ input: RecordCompletionInput, outcome: RecordCompletionOutcome,
++                          isExample: Bool = false, timeZone: TimeZone) -> Bool {
++        guard let original = snapshotForRecordChange() else { return false }
++        do {
++            let records = try original.records.recordingCompletion(input, outcome: outcome,
++                isExample: isExample, timeZone: timeZone)
++            guard outcome == .alighted, !isExample else { saveFailure = nil; return false }
++            guard records.items.count != original.records.items.count else { saveFailure = nil; return true }
++            return save(original.updating(records: records))
++        } catch let issue as RecordValidationIssue {
++            saveFailure = .invalidState(.invalidRecords(issue))
++        } catch { saveFailure = .writeFailed }
++        return false
++    }
++
++    @discardableResult
++    func saveRecordMemo(_ memo: String, forJourneyID id: String) -> Bool {
++        guard let original = snapshotForRecordChange() else { return false }
++        do {
++            let records = try original.records.updatingMemo(memo, forJourneyID: id)
++            // Swift String의 정규화 동등성 대신 저장 원문의 코드 단위를 비교한다.
++            let unchanged = zip(original.records.items, records.items).allSatisfy {
++                $0.memo.utf16.elementsEqual($1.memo.utf16)
++            }
++            guard !unchanged else { saveFailure = nil; return true }
++            return save(original.updating(records: records))
++        } catch let issue as RecordValidationIssue {
++            saveFailure = .invalidState(.invalidRecords(issue))
++        } catch { saveFailure = .writeFailed }
++        return false
++    }
++
++    private func snapshotForRecordChange() -> AppSnapshot? {
++        guard case .ready = launchState, let snapshot else {
++            if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
++            else { saveFailure = .notReady }
++            return nil
++        }
++        return snapshot
++    }
++
+     func open(_ destination: Destination) {
+         guard launchState == .ready(.main) else { return }
+         path.append(destination)
+diff --git a/ios/FocusMate/AppSnapshot.swift b/ios/FocusMate/AppSnapshot.swift
+index b3dbc4c..260801d 100644
+--- a/ios/FocusMate/AppSnapshot.swift
++++ b/ios/FocusMate/AppSnapshot.swift
+@@ -9,6 +9,7 @@ struct StationSnapshot: Codable, Equatable {
+ enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
+ enum SnapshotValidationIssue: Error, Equatable {
+     case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
++    case invalidRecords(RecordValidationIssue)
+ }
+ 
+ struct AppSnapshot: Codable, Equatable {
+@@ -58,6 +59,8 @@ struct AppSnapshot: Codable, Equatable {
+             guard !station.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationName }
+             guard station.direction == 1 || station.direction == -1 else { throw SnapshotValidationIssue.invalidDirection(station.direction) }
+         }
++        do { try records.validate() }
++        catch let issue as RecordValidationIssue { throw SnapshotValidationIssue.invalidRecords(issue) }
+     }
+ 
+     func launchRoute() throws -> LaunchRoute {
+diff --git a/ios/FocusMate/RecordSection.swift b/ios/FocusMate/RecordSection.swift
+index ac90b12..44b8564 100644
+--- a/ios/FocusMate/RecordSection.swift
++++ b/ios/FocusMate/RecordSection.swift
+@@ -1,26 +1,163 @@
+ import Foundation
+ 
+-/// W00은 완료 기록 원소의 계약을 정하지 않는다. 값이 없으므로 원소가 든 파일은 읽지 않고 보존한다.
+-enum RecordSnapshot: Codable, Equatable {
+-    init(from decoder: Decoder) throws {
+-        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "record element is not defined yet"))
+-    }
+-    func encode(to encoder: Encoder) throws { switch self {} }
++struct RecordSnapshot: Codable, Equatable {
++    let id: String
++    let completedAt: String
++    let date: String
++    let bus: String
++    let tag: String
++    let tagColor: String
++    let task: String
++    let minutes: Int
++    let sound: String
++    let from: String
++    let to: String
++    let memo: String
++}
++
++struct RecordCompletionInput: Equatable {
++    let id: String
++    let completedAt: String
++    let bus: String
++    let tag: String
++    let tagColor: String
++    let task: String
++    let minutes: Int
++    let sound: String
++    let from: String
++    let to: String
++}
++
++enum RecordCompletionOutcome: Equatable { case alighted, active, abandoned }
++struct RecordDaySummary: Equatable { let count: Int; let minutes: Int }
++enum RecordValidationIssue: Error, Equatable {
++    case invalidID, invalidText(String), invalidTagColor, invalidCompletedAt, invalidDate
++    case invalidMinutes(Int), memoTooLong, duplicateJourneyID(String), recordNotFound(String)
+ }
+ 
+ struct RecordSection: Codable, Equatable {
+     let items: [RecordSnapshot]
+     static let empty = RecordSection(items: [])
++    func validate() throws {
++        var identifiers = Set<[UInt16]>()
++        for record in items {
++            try record.validate()
++            guard identifiers.insert(Array(record.id.utf16)).inserted else {
++                throw RecordValidationIssue.duplicateJourneyID(record.id)
++            }
++        }
++    }
++    func recordingCompletion(_ input: RecordCompletionInput, outcome: RecordCompletionOutcome,
++                             isExample: Bool = false, timeZone: TimeZone) throws -> RecordSection {
++        try validate()
++        guard outcome == .alighted, !isExample else { return self }
++        try RecordSnapshot.validateID(input.id)
++        if items.contains(where: { $0.id.utf16.elementsEqual(input.id.utf16) }) { return self }
++        guard let instant = RecordDates.instant(input.completedAt) else { throw RecordValidationIssue.invalidCompletedAt }
++        let date = try RecordDates.localKey(instant, timeZone: timeZone)
++        let record = RecordSnapshot(id: input.id, completedAt: input.completedAt, date: date,
++            bus: input.bus, tag: input.tag, tagColor: input.tagColor, task: input.task,
++            minutes: input.minutes, sound: input.sound, from: input.from, to: input.to, memo: "")
++        try record.validate()
++        return RecordSection(items: items + [record]).sortedNewestFirst()
++    }
++    func updatingMemo(_ memo: String, forJourneyID id: String) throws -> RecordSection {
++        try validate()
++        try RecordSnapshot.validateID(id)
++        guard let index = items.firstIndex(where: { $0.id.utf16.elementsEqual(id.utf16) }) else {
++            throw RecordValidationIssue.recordNotFound(id)
++        }
++        let trimmed = memo.trimmingCharacters(in: .whitespacesAndNewlines)
++        var limited = ""
++        var length = 0
++        for scalar in trimmed.unicodeScalars {
++            let width = scalar.value <= 0xffff ? 1 : 2
++            guard length + width <= 200 else { break }
++            limited.unicodeScalars.append(scalar)
++            length += width
++        }
++        let original = items[index]
++        var changed = items
++        changed[index] = RecordSnapshot(id: original.id, completedAt: original.completedAt, date: original.date,
++            bus: original.bus, tag: original.tag, tagColor: original.tagColor, task: original.task,
++            minutes: original.minutes, sound: original.sound, from: original.from, to: original.to, memo: limited)
++        return RecordSection(items: changed)
++    }
++    func dailySummary(on date: String) throws -> RecordDaySummary {
++        try validate()
++        guard RecordDates.day(date) != nil else { throw RecordValidationIssue.invalidDate }
++        let matches = items.filter { $0.date == date }
++        return RecordDaySummary(count: matches.count, minutes: matches.reduce(0) { $0 + $1.minutes })
++    }
++    func sortedNewestFirst() -> RecordSection {
++        let sorted = items.enumerated().sorted { left, right in
++            let a = RecordDates.instant(left.element.completedAt)!
++            let b = RecordDates.instant(right.element.completedAt)!
++            return a == b ? left.offset < right.offset : a > b
++        }
++        return RecordSection(items: sorted.map(\.element))
++    }
++}
++
++/// 저장 시각은 Gregorian/UTC로 읽고, 완료 시간대는 새 날짜 생성에만 사용한다.
++private enum RecordDates {
++    private static var utc: Calendar {
++        var calendar = Calendar(identifier: .gregorian)
++        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
++        return calendar
++    }
++    static func day(_ key: String) -> Date? {
++        guard key.utf8.count == 10,
++              key.range(of: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", options: .regularExpression) != nil else { return nil }
++        let parts = key.split(separator: "-").compactMap { Int($0) }
++        guard parts.count == 3, (1...9999).contains(parts[0]) else { return nil }
++        let components = DateComponents(year: parts[0], month: parts[1], day: parts[2])
++        guard let date = utc.date(from: components) else { return nil }
++        let actual = utc.dateComponents([.era, .year, .month, .day], from: date)
++        guard actual.era == 1, actual.year == parts[0], actual.month == parts[1], actual.day == parts[2] else { return nil }
++        return date
++    }
++    static func instant(_ value: String) -> Date? {
++        guard [20, 24].contains(value.utf8.count),
++              value.range(of: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{3})?Z$", options: .regularExpression) != nil,
++              let day = day(String(value.prefix(10))) else { return nil }
++        let characters = Array(value.utf8)
++        func number(_ range: Range<Int>) -> Int { Int(String(decoding: characters[range], as: UTF8.self))! }
++        let hour = number(11..<13), minute = number(14..<16), second = number(17..<19)
++        guard hour < 24, minute < 60, second < 60 else { return nil }
++        let milliseconds = characters.count == 24 ? number(20..<23) : 0
++        return day.addingTimeInterval(Double(hour * 3600 + minute * 60 + second) + Double(milliseconds) / 1000)
++    }
++    static func localKey(_ instant: Date, timeZone: TimeZone) throws -> String {
++        var calendar = utc
++        calendar.timeZone = timeZone
++        let parts = calendar.dateComponents([.era, .year, .month, .day], from: instant)
++        guard parts.era == 1, let year = parts.year, (1...9999).contains(year),
++              let month = parts.month, let day = parts.day else { throw RecordValidationIssue.invalidDate }
++        return String(format: "%04d-%02d-%02d", year, month, day)
++    }
+ }
+ 
+-extension RecordSection {
+-    private enum CodingKeys: String, CodingKey { case items }
+-    init(from decoder: Decoder) throws {
+-        let c = try decoder.container(keyedBy: CodingKeys.self)
+-        items = try c.decode([RecordSnapshot].self, forKey: .items)
+-    }
+-    func encode(to encoder: Encoder) throws {
+-        var c = encoder.container(keyedBy: CodingKeys.self)
+-        try c.encode(items, forKey: .items)
++private extension RecordSnapshot {
++    static func validateID(_ value: String) throws {
++        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, value.utf16.count <= 100 else {
++            throw RecordValidationIssue.invalidID
++        }
++    }
++    func validate() throws {
++        try Self.validateID(id)
++        for (name, text) in [("bus", bus), ("tag", tag), ("task", task), ("sound", sound), ("from", from), ("to", to)] {
++            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf16.count <= 500 else {
++                throw RecordValidationIssue.invalidText(name)
++            }
++        }
++        guard tagColor.utf8.count == 7,
++              tagColor.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil else {
++            throw RecordValidationIssue.invalidTagColor
++        }
++        guard RecordDates.instant(completedAt) != nil else { throw RecordValidationIssue.invalidCompletedAt }
++        guard RecordDates.day(date) != nil else { throw RecordValidationIssue.invalidDate }
++        guard (1...360).contains(minutes) else { throw RecordValidationIssue.invalidMinutes(minutes) }
++        guard memo.utf16.count <= 200 else { throw RecordValidationIssue.memoTooLong }
+     }
+ }
+diff --git a/ios/FocusMate/SnapshotCodec.swift b/ios/FocusMate/SnapshotCodec.swift
+index 23a43dd..c53a2f1 100644
+--- a/ios/FocusMate/SnapshotCodec.swift
++++ b/ios/FocusMate/SnapshotCodec.swift
+@@ -30,7 +30,7 @@ enum SnapshotCodec {
+         catch { throw StorageIssue.corrupt }
+         do { try state.validate() }
+         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
+-        return state
++        return state.updating(records: state.records.sortedNewestFirst())
+     }
+ 
+     static func encode(_ snapshot: AppSnapshot) throws -> Data {
+diff --git a/ios/FocusMateTests/RecordSectionTests.swift b/ios/FocusMateTests/RecordSectionTests.swift
+new file mode 100644
+index 0000000..1f867bb
+--- /dev/null
++++ b/ios/FocusMateTests/RecordSectionTests.swift
+@@ -0,0 +1,350 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class RecordSectionTests: XCTestCase {
++    private static let seoul = TimeZone(identifier: "Asia/Seoul")!
++    private static let losAngeles = TimeZone(identifier: "America/Los_Angeles")!
++
++    // 깨짐 명명: 정상 완료를 누락하거나 입력 필드·완료 당시 로컬 날짜를 바꾸면 실패.
++    func testAC1_하차성공은_모든필드와_서울완료날짜를_기록한다() throws {
++        let section = try RecordSection.empty.recordingCompletion(
++            Self.input(), outcome: .alighted, timeZone: Self.seoul
++        )
++
++        let record = try XCTUnwrap(section.items.first)
++        XCTAssertEqual(section.items.count, 1)
++        assertUTF16(record.id, "journey-001")
++        assertUTF16(record.completedAt, "2026-10-13T01:00:00Z")
++        assertUTF16(record.date, "2026-10-13")
++        assertUTF16(record.bus, "버스2014")
++        assertUTF16(record.tag, "독서")
++        assertUTF16(record.tagColor, "#12ABef")
++        assertUTF16(record.task, "책 한 챕터 읽기")
++        XCTAssertEqual(record.minutes, 25)
++        assertUTF16(record.sound, "빗소리")
++        assertUTF16(record.from, "성수역")
++        assertUTF16(record.to, "서울숲 입구")
++        assertUTF16(record.memo, "")
++    }
++
++    // 깨짐 명명: 진행·포기·예시 입력 중 하나라도 완료 기록이나 집계에 포함하면 실패.
++    func testAC2_진행_포기_예시는_기록과_집계에서_제외된다() throws {
++        var section = RecordSection.empty
++        section = try section.recordingCompletion(Self.input(id: "active"), outcome: .active, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "abandoned"), outcome: .abandoned, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "example"), outcome: .alighted, isExample: true, timeZone: Self.seoul)
++
++        XCTAssertEqual(section.items.count, 0)
++        XCTAssertEqual(try section.dailySummary(on: "2026-10-13"), RecordDaySummary(count: 0, minutes: 0))
++    }
++
++    // 깨짐 명명: 같은 원문 ID 재요청이 새 기록을 만들거나 기존 시각·분·메모를 덮으면 실패.
++    func testAC3_같은ID_완료재요청은_기존기록과_메모를_유지한다() throws {
++        var section = try RecordSection.empty.recordingCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul)
++        section = try section.updatingMemo("첫 메모", forJourneyID: "journey-001")
++        section = try section.recordingCompletion(
++            Self.input(completedAt: "2026-10-13T03:00:00Z", minutes: 99),
++            outcome: .alighted,
++            timeZone: Self.seoul
++        )
++
++        let record = try XCTUnwrap(section.items.first)
++        XCTAssertEqual(section.items.count, 1)
++        assertUTF16(record.completedAt, "2026-10-13T01:00:00Z")
++        XCTAssertEqual(record.minutes, 25)
++        assertUTF16(record.memo, "첫 메모")
++        XCTAssertEqual(try section.dailySummary(on: "2026-10-13"), RecordDaySummary(count: 1, minutes: 25))
++    }
++
++    // 깨짐 명명: trim 뒤 200 UTF-16 단위 제한 대신 Character 수를 쓰거나 다른 필드를 바꾸면 실패.
++    func testAC4_메모는_trim후_200UTF16단위까지만_저장하고_다른필드를_보존한다() throws {
++        let original = try RecordSection.empty.recordingCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul)
++        let changed = try original.updatingMemo("  \(String(repeating: "가", count: 201))  ", forJourneyID: "journey-001")
++        let before = try XCTUnwrap(original.items.first)
++        let after = try XCTUnwrap(changed.items.first)
++
++        XCTAssertEqual(after.memo.utf16.count, 200)
++        assertUTF16(after.memo, String(repeating: "가", count: 200))
++        XCTAssertEqual(changed.items.count, 1)
++        assertSameCompletionFields(before, after)
++    }
++
++    // 깨짐 명명: UTF-16 경계에서 surrogate 절반을 저장하거나 200단위를 넘기면 실패.
++    func testAC4_메모절단은_UnicodeScalar경계를_보존한다() throws {
++        let section = try RecordSection.empty.recordingCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul)
++        let cases = [
++            (String(repeating: "가", count: 199) + "😀", String(repeating: "가", count: 199)),
++            (String(repeating: "😀", count: 101), String(repeating: "😀", count: 100)),
++        ]
++
++        for item in cases {
++            let memo = try XCTUnwrap(try section.updatingMemo(item.0, forJourneyID: "journey-001").items.first).memo
++            XCTAssertLessThanOrEqual(memo.utf16.count, 200)
++            assertUTF16(memo, item.1)
++        }
++    }
++
++    // 깨짐 명명: 수정 시 공백을 보존하거나 공백만 입력을 삭제로 처리하지 않으면 실패.
++    func testAC5_메모수정은_trim하고_공백만입력은_빈문자열로_삭제한다() throws {
++        let original = try RecordSection.empty.recordingCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul)
++        let edited = try original.updatingMemo("  수정 메모  \n", forJourneyID: "journey-001")
++        let deleted = try edited.updatingMemo(" \n\t ", forJourneyID: "journey-001")
++
++        XCTAssertEqual(edited.items.count, 1)
++        assertUTF16(try XCTUnwrap(edited.items.first).memo, "수정 메모")
++        XCTAssertEqual(deleted.items.count, 1)
++        assertUTF16(try XCTUnwrap(deleted.items.first).memo, "")
++    }
++
++    // 깨짐 명명: 없는 ID 메모 요청이 기록을 만들거나 잘못된 오류를 반환하면 실패.
++    func testAC5_연결없는ID_메모는_recordNotFound이고_기록을_만들지않는다() throws {
++        let section = try RecordSection.empty.recordingCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul)
++
++        assertRecordIssue(.recordNotFound("journey-404")) {
++            _ = try section.updatingMemo("메모", forJourneyID: "journey-404")
++        }
++        XCTAssertEqual(section.items.count, 1)
++    }
++
++    // 깨짐 명명: 공백 ID 메모 요청을 recordNotFound로 분류하면 실패.
++    func testAC5_공백ID_메모는_invalidID다() throws {
++        assertRecordIssue(.invalidID) {
++            _ = try RecordSection.empty.updatingMemo("메모", forJourneyID: " \n")
++        }
++    }
++
++    // 깨짐 명명: 1분 또는 360분 경계를 거부하면 실패.
++    func testAC6_완료시간_1분과_360분은_유효하다() throws {
++        var section = RecordSection.empty
++        section = try section.recordingCompletion(Self.input(id: "one", minutes: 1), outcome: .alighted, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "max", completedAt: "2026-10-13T02:00:00Z", minutes: 360), outcome: .alighted, timeZone: Self.seoul)
++
++        XCTAssertEqual(section.items.map(\.minutes), [360, 1])
++        XCTAssertEqual(try section.dailySummary(on: "2026-10-13"), RecordDaySummary(count: 2, minutes: 361))
++    }
++
++    // 깨짐 명명: 0분 또는 361분을 기록에 추가하거나 다른 오류로 분류하면 실패.
++    func testAC6_완료시간_0분과_361분은_거부된다() {
++        for minutes in [0, 361] {
++            assertRecordIssue(.invalidMinutes(minutes), "minutes=\(minutes)") {
++                _ = try RecordSection.empty.recordingCompletion(
++                    Self.input(id: "minutes-\(minutes)", minutes: minutes),
++                    outcome: .alighted,
++                    timeZone: Self.seoul
++                )
++            }
++        }
++    }
++
++    // 깨짐 명명: 완료 UTC 시각을 로컬 날짜로 바꾸는 자정 경계가 한쪽으로 치우치면 실패.
++    func testAC7_서울자정_직전과_직후는_서로다른날짜로_집계된다() throws {
++        var section = RecordSection.empty
++        section = try section.recordingCompletion(Self.input(id: "before", completedAt: "2026-10-13T14:59:59Z", minutes: 25), outcome: .alighted, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "after", completedAt: "2026-10-13T15:00:00Z", minutes: 35), outcome: .alighted, timeZone: Self.seoul)
++
++        XCTAssertEqual(section.items.map(\.date), ["2026-10-14", "2026-10-13"])
++        XCTAssertEqual(try section.dailySummary(on: "2026-10-13"), RecordDaySummary(count: 1, minutes: 25))
++        XCTAssertEqual(try section.dailySummary(on: "2026-10-14"), RecordDaySummary(count: 1, minutes: 35))
++    }
++
++    // 깨짐 명명: 완료 두 건 외 진행·포기·중복까지 합계에 넣으면 실패.
++    func testAC8_같은날은_완료두건만_60분으로_합산한다() throws {
++        var section = RecordSection.empty
++        section = try section.recordingCompletion(Self.input(id: "first", minutes: 25), outcome: .alighted, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "second", completedAt: "2026-10-13T03:00:00Z", minutes: 35), outcome: .alighted, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "active", minutes: 40), outcome: .active, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "abandoned", minutes: 50), outcome: .abandoned, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: "first", minutes: 100), outcome: .alighted, timeZone: Self.seoul)
++
++        XCTAssertEqual(try section.dailySummary(on: "2026-10-13"), RecordDaySummary(count: 2, minutes: 60))
++    }
++
++    // 깨짐 명명: 저장 date를 현재 시간대 기준으로 다시 계산하면 LA 집계가 달라져 실패.
++    func testAC9_저장된날짜는_다른시간대에서도_재계산하지않는다() throws {
++        let stored = RecordSection(items: [Self.record(date: "2026-10-13")])
++
++        let newRecord = try stored.recordingCompletion(
++            Self.input(id: "la", completedAt: "2026-10-13T01:00:00Z", minutes: 10),
++            outcome: .alighted,
++            timeZone: Self.losAngeles
++        )
++
++        assertUTF16(try XCTUnwrap(newRecord.items.first(where: { $0.id == "journey-001" })).date, "2026-10-13")
++        XCTAssertEqual(try newRecord.dailySummary(on: "2026-10-13"), RecordDaySummary(count: 1, minutes: 25))
++        XCTAssertEqual(try newRecord.dailySummary(on: "2026-10-12"), RecordDaySummary(count: 1, minutes: 10))
++    }
++
++    // 깨짐 명명: 기록 없는 유효 날짜를 오류나 nil로 반환하면 실패.
++    func testAC9_기록없는날짜의_합계는_0회0분이다() throws {
++        XCTAssertEqual(
++            try RecordSection(items: [Self.record()]).dailySummary(on: "2026-10-14"),
++            RecordDaySummary(count: 0, minutes: 0)
++        )
++    }
++
++    // 깨짐 명명: 시간대 변환으로 Gregorian 연도 10000이 되는데도 날짜를 저장하면 실패.
++    func test완료날짜가_시간대변환후_연도10000이면_invalidDate다() {
++        let plusFourteen = TimeZone(secondsFromGMT: 14 * 60 * 60)!
++
++        assertRecordIssue(.invalidDate) {
++            _ = try RecordSection.empty.recordingCompletion(
++                Self.input(id: "year-overflow", completedAt: "9999-12-31T23:59:59Z"),
++                outcome: .alighted,
++                timeZone: plusFourteen
++            )
++        }
++    }
++
++    // 깨짐 명명: 정렬을 ISO 문자열 자체로 하거나 오름차순으로 하면 실패.
++    func testAC15_완료시각은_파싱한시각_최신순이다() throws {
++        let section = RecordSection(items: [
++            Self.record(id: "one", completedAt: "2026-10-13T01:00:00Z"),
++            Self.record(id: "three", completedAt: "2026-10-13T03:00:00.000Z"),
++            Self.record(id: "two", completedAt: "2026-10-13T02:00:00Z"),
++        ])
++
++        XCTAssertEqual(section.sortedNewestFirst().items.map(\.id), ["three", "two", "one"])
++    }
++
++    // 깨짐 명명: 같은 완료시각 tie를 ID나 임의 순서로 바꾸거나 신규 동시각을 앞에 두면 실패.
++    func testAC15_같은완료시각은_입력순서를_안정적으로_유지한다() throws {
++        let section = RecordSection(items: [
++            Self.record(id: "first"),
++            Self.record(id: "second"),
++        ])
++        let sorted = section.sortedNewestFirst()
++        let appended = try sorted.recordingCompletion(Self.input(id: "third"), outcome: .alighted, timeZone: Self.seoul)
++
++        XCTAssertEqual(sorted.items.map(\.id), ["first", "second"])
++        XCTAssertEqual(appended.items.map(\.id), ["first", "second", "third"])
++    }
++
++    // 깨짐 명명: Swift 정규화 동등성을 원문 ID 중복 판정에 쓰면 두 번째 기록이 사라져 실패.
++    func testID중복은_canonicalEquality가아닌_UTF16원문으로_판정한다() throws {
++        let composed = "é"
++        let decomposed = "e\u{301}"
++        var section = RecordSection.empty
++        section = try section.recordingCompletion(Self.input(id: composed), outcome: .alighted, timeZone: Self.seoul)
++        section = try section.recordingCompletion(Self.input(id: decomposed, completedAt: "2026-10-13T02:00:00Z"), outcome: .alighted, timeZone: Self.seoul)
++
++        XCTAssertEqual(section.items.count, 2)
++        XCTAssertFalse(section.items[0].id.utf16.elementsEqual(section.items[1].id.utf16))
++    }
++
++    // 깨짐 명명: 파일 복원 검증이 정확히 같은 원문 ID 두 건을 허용하면 실패.
++    func test검증은_정확히같은_UTF16_ID중복을_거부한다() {
++        let id = "journey-001"
++        assertRecordIssue(.duplicateJourneyID(id)) {
++            try RecordSection(items: [Self.record(id: id), Self.record(id: id)]).validate()
++        }
++    }
++
++    // 깨짐 명명: 저장 메모 201 UTF-16 단위를 읽을 때 자동 절단하거나 허용하면 실패.
++    func test검증은_저장메모_201UTF16단위를_거부한다() {
++        let record = Self.record(memo: String(repeating: "가", count: 201))
++        assertRecordIssue(.memoTooLong) {
++            try RecordSection(items: [record]).validate()
++        }
++    }
++
++    // 깨짐 명명: 이월 날짜·비실제 완료시각·잘못된 색상을 정상화해 허용하면 실패.
++    func test검증은_날짜_시각_색상을_엄격하게_거부한다() {
++        let cases: [(RecordSnapshot, RecordValidationIssue)] = [
++            (Self.record(date: "2026-02-30"), .invalidDate),
++            (Self.record(completedAt: "2026-02-30T01:00:00Z"), .invalidCompletedAt),
++            (Self.record(tagColor: "#12GG00"), .invalidTagColor),
++        ]
++
++        for item in cases {
++            assertRecordIssue(item.1) { try RecordSection(items: [item.0]).validate() }
++        }
++    }
++
++    private static func input(
++        id: String = "journey-001",
++        completedAt: String = "2026-10-13T01:00:00Z",
++        minutes: Int = 25
++    ) -> RecordCompletionInput {
++        RecordCompletionInput(
++            id: id,
++            completedAt: completedAt,
++            bus: "버스2014",
++            tag: "독서",
++            tagColor: "#12ABef",
++            task: "책 한 챕터 읽기",
++            minutes: minutes,
++            sound: "빗소리",
++            from: "성수역",
++            to: "서울숲 입구"
++        )
++    }
++
++    private static func record(
++        id: String = "journey-001",
++        completedAt: String = "2026-10-13T01:00:00Z",
++        date: String = "2026-10-13",
++        tagColor: String = "#12ABef",
++        memo: String = ""
++    ) -> RecordSnapshot {
++        RecordSnapshot(
++            id: id,
++            completedAt: completedAt,
++            date: date,
++            bus: "버스2014",
++            tag: "독서",
++            tagColor: tagColor,
++            task: "책 한 챕터 읽기",
++            minutes: 25,
++            sound: "빗소리",
++            from: "성수역",
++            to: "서울숲 입구",
++            memo: memo
++        )
++    }
++
++    private func assertSameCompletionFields(
++        _ expected: RecordSnapshot,
++        _ actual: RecordSnapshot,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) {
++        XCTAssertTrue(actual.id.utf16.elementsEqual(expected.id.utf16), file: file, line: line)
++        XCTAssertTrue(actual.completedAt.utf16.elementsEqual(expected.completedAt.utf16), file: file, line: line)
++        XCTAssertTrue(actual.date.utf16.elementsEqual(expected.date.utf16), file: file, line: line)
++        XCTAssertTrue(actual.bus.utf16.elementsEqual(expected.bus.utf16), file: file, line: line)
++        XCTAssertTrue(actual.tag.utf16.elementsEqual(expected.tag.utf16), file: file, line: line)
++        XCTAssertTrue(actual.tagColor.utf16.elementsEqual(expected.tagColor.utf16), file: file, line: line)
++        XCTAssertTrue(actual.task.utf16.elementsEqual(expected.task.utf16), file: file, line: line)
++        XCTAssertEqual(actual.minutes, expected.minutes, file: file, line: line)
++        XCTAssertTrue(actual.sound.utf16.elementsEqual(expected.sound.utf16), file: file, line: line)
++        XCTAssertTrue(actual.from.utf16.elementsEqual(expected.from.utf16), file: file, line: line)
++        XCTAssertTrue(actual.to.utf16.elementsEqual(expected.to.utf16), file: file, line: line)
++    }
++
++    private func assertUTF16(
++        _ actual: String,
++        _ expected: String,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) {
++        XCTAssertTrue(actual.utf16.elementsEqual(expected.utf16), "actual=\(actual) expected=\(expected)", file: file, line: line)
++    }
++
++    private func assertRecordIssue(
++        _ expected: RecordValidationIssue,
++        _ message: String = "",
++        file: StaticString = #filePath,
++        line: UInt = #line,
++        operation: () throws -> Void
++    ) {
++        do {
++            try operation()
++            XCTFail("Expected RecordValidationIssue \(expected) \(message)", file: file, line: line)
++        } catch let actual as RecordValidationIssue {
++            XCTAssertEqual(actual, expected, message, file: file, line: line)
++        } catch {
++            XCTFail("Expected RecordValidationIssue \(expected), got \(error) \(message)", file: file, line: line)
++        }
++    }
++}
+diff --git a/ios/FocusMateTests/RecordStorageTests.swift b/ios/FocusMateTests/RecordStorageTests.swift
+new file mode 100644
+index 0000000..58ed0b7
+--- /dev/null
++++ b/ios/FocusMateTests/RecordStorageTests.swift
+@@ -0,0 +1,360 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class RecordStorageTests: XCTestCase {
++    private enum ProbeError: Error { case expected }
++
++    private static let seoul = TimeZone(identifier: "Asia/Seoul")!
++    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
++    private static let seoulForest = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
++
++    // 깨짐 명명: 실제 저장 뒤 새 store/AppModel이 메모 또는 완료 필드 하나라도 잃으면 실패.
++    @MainActor
++    func testAC10_실제파일은_새Store와_새AppModel에서_모든필드를_복원한다() throws {
++        try withTemporaryFile { fileURL in
++            try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
++            let firstModel = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
++            firstModel.loadIfNeeded()
++
++            XCTAssertTrue(firstModel.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
++            XCTAssertTrue(firstModel.saveRecordMemo("오늘 계획을 마쳤다", forJourneyID: "journey-001"))
++
++            let restoredModel = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
++            restoredModel.loadIfNeeded()
++            let restored = try XCTUnwrap(restoredModel.snapshot?.records.items.first)
++            XCTAssertEqual(restoredModel.snapshot?.records.items.count, 1)
++            assertRecord(restored, id: "journey-001", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", minutes: 25, memo: "오늘 계획을 마쳤다")
++            XCTAssertEqual(restoredModel.launchState, .ready(.main))
++
++            let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
++            let state = try XCTUnwrap(object["state"] as? [String: Any])
++            let records = try XCTUnwrap(state["records"] as? [String: Any])
++            let items = try XCTUnwrap(records["items"] as? [[String: Any]])
++            XCTAssertEqual(items.count, 1)
++            XCTAssertEqual(items[0]["memo"] as? String, "오늘 계획을 마쳤다")
++            XCTAssertEqual(items[0]["minutes"] as? Int, 25)
++        }
++    }
++
++    // 깨짐 명명: 201자 저장 메모를 부분 복원·절단하거나 저장으로 덮어쓰면 실패.
++    func testAC11_메모201자_파일은_전체읽기실패하고_저장거부와_원본보존이다() throws {
++        let bytes = Self.envelope(records: [Self.rawRecord(memo: String(repeating: "가", count: 201))])
++        try assertProtected(
++            bytes,
++            loadIssue: .invalidState(.invalidRecords(.memoTooLong)),
++            saveIssue: .writeBlocked(.invalidState(.invalidRecords(.memoTooLong)))
++        )
++    }
++
++    // 깨짐 명명: 필수 ID가 없는 raw JSON을 기본값으로 복구하거나 덮어쓰면 실패.
++    func testAC11_ID누락_파일은_corrupt이고_원본바이트를_보존한다() throws {
++        let missingID = ##"{"completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","bus":"버스2014","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","minutes":25,"sound":"빗소리","from":"성수역","to":"서울숲 입구","memo":""}"##
++        let bytes = Self.envelope(records: [missingID])
++
++        try assertProtected(bytes, loadIssue: .corrupt, saveIssue: .writeBlocked(.corrupt))
++    }
++
++    // 깨짐 명명: 동일 ID 두 건을 자동 병합·제거하거나 일부만 복원하면 실패.
++    func testAC11_중복ID_파일은_전체읽기실패하고_원본바이트를_보존한다() throws {
++        let bytes = Self.envelope(records: [
++            Self.rawRecord(),
++            Self.rawRecord(completedAt: "2026-10-13T02:00:00Z"),
++        ])
++        let issue = StorageIssue.invalidState(.invalidRecords(.duplicateJourneyID("journey-001")))
++
++        try assertProtected(bytes, loadIssue: issue, saveIssue: .writeBlocked(issue))
++    }
++
++    // 깨짐 명명: 미지원 v3에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
++    @MainActor
++    func testAC12_미지원버전_AppModel은_완료와_메모저장을_차단하고_원본을_보존한다() throws {
++        let bytes = Data(#"{"version":3,"state":null}"#.utf8)
++        try withTemporaryFile { fileURL in
++            try seed(fileURL, bytes)
++            let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
++            model.loadIfNeeded()
++            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(3)))
++
++            XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
++            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(3)))
++            XCTAssertFalse(model.saveRecordMemo("메모", forJourneyID: "journey-001"))
++            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(3)))
++            XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
++        }
++    }
++
++    // 깨짐 명명: records 갱신이 카드·여정·정류장 또는 version 값을 바꾸면 실패.
++    @MainActor
++    func testAC13_완료저장은_v2의_다른영역을_보존한다() throws {
++        try withTemporaryFile { fileURL in
++            try seed(fileURL, Self.emptyV2)
++            let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
++            model.loadIfNeeded()
++            XCTAssertTrue(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
++
++            let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
++            XCTAssertEqual(root["version"] as? Int, 2)
++            let state = try XCTUnwrap(root["state"] as? [String: Any])
++            XCTAssertEqual(state["cardIssued"] as? Bool, true)
++            XCTAssertEqual(((state["cards"] as? [String: Any])?["items"] as? [Any])?.count, 0)
++            XCTAssertTrue((state["journey"] as? [String: Any])?["active"] is NSNull)
++            assertStationJSON(state["initialStation"], id: "seongsu", name: "성수", direction: 1)
++            assertStationJSON(state["currentStation"], id: "seoulForest", name: "서울숲", direction: -1)
++            let records = try XCTUnwrap(state["records"] as? [String: Any])
++            XCTAssertEqual((records["items"] as? [Any])?.count, 1)
++        }
++    }
++
++    // 회귀: W00에서 이미 통과할 수 있으며 신규 API의 RED 근거와 구분한다.
++    func testAC14_기존_v1과_빈records_v2는_빈기록과_정류장을_복원한다() throws {
++        let fixtures = [Self.v1, Self.emptyV2]
++
++        for bytes in fixtures {
++            let store = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unused/app-state.json"), readData: { _ in bytes })
++            let loaded = try XCTUnwrap(try store.load())
++            XCTAssertEqual(loaded.records.items.count, 0)
++            XCTAssertEqual(loaded.cardIssued, true)
++            XCTAssertTrue(try XCTUnwrap(loaded.initialStation).id.utf16.elementsEqual("seongsu".utf16))
++            XCTAssertTrue(try XCTUnwrap(loaded.currentStation).id.utf16.elementsEqual("seoulForest".utf16))
++        }
++    }
++
++    // 깨짐 명명: 복원 정렬이 오름차순이거나 파일을 정렬 결과로 재작성하면 실패.
++    func testAC15_파일복원은_최신순이며_읽기중_원본을_재작성하지않는다() throws {
++        let bytes = Self.envelope(records: [
++            Self.rawRecord(id: "one", completedAt: "2026-10-13T01:00:00Z"),
++            Self.rawRecord(id: "three", completedAt: "2026-10-13T03:00:00Z"),
++            Self.rawRecord(id: "two", completedAt: "2026-10-13T02:00:00Z"),
++        ])
++        try withTemporaryFile { fileURL in
++            try seed(fileURL, bytes)
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertEqual(loaded.records.items.map(\.id), ["three", "two", "one"])
++            XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
++        }
++    }
++
++    // 회귀+신규 경계: 제외 outcome은 메모리·파일 쓰기를 만들지 않아야 한다.
++    @MainActor
++    func testAC2_AppModel의_진행_포기_예시는_false이고_쓰기없음이다() {
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in Self.emptyV2 },
++            createDirectory: { _ in },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++
++        XCTAssertFalse(model.recordCompletion(Self.input(id: "active"), outcome: .active, timeZone: Self.seoul))
++        XCTAssertFalse(model.recordCompletion(Self.input(id: "abandoned"), outcome: .abandoned, timeZone: Self.seoul))
++        XCTAssertFalse(model.recordCompletion(Self.input(id: "example"), outcome: .alighted, isExample: true, timeZone: Self.seoul))
++        XCTAssertEqual(writeCalls, 0)
++        XCTAssertNil(model.saveFailure)
++        XCTAssertEqual(model.snapshot?.records.items.count, 0)
++    }
++
++    // 깨짐 명명: 동일 ID 완료 재요청 또는 동일 메모가 불필요한 파일 쓰기를 하면 실패.
++    @MainActor
++    func testAC3_AppModel의_동일완료와_동일메모는_쓰기없는_성공이다() {
++        let existing = Self.envelope(records: [Self.rawRecord(memo: "첫 메모")])
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in existing },
++            createDirectory: { _ in },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++
++        XCTAssertTrue(model.recordCompletion(Self.input(minutes: 99), outcome: .alighted, timeZone: Self.seoul))
++        XCTAssertTrue(model.saveRecordMemo("첫 메모", forJourneyID: "journey-001"))
++        XCTAssertEqual(writeCalls, 0)
++        XCTAssertNil(model.saveFailure)
++        let record = model.snapshot?.records.items.first
++        XCTAssertEqual(record?.minutes, 25)
++        XCTAssertTrue(record?.memo.utf16.elementsEqual("첫 메모".utf16) == true)
++    }
++
++    // 깨짐 명명: canonical equality만 보고 NFC/NFD 메모를 같은 원문으로 오인하면 쓰기와 원문 교체가 누락되어 실패.
++    @MainActor
++    func test메모_noOp판정은_NFC_NFD가아닌_UTF16원문을_사용한다() throws {
++        let composed = "é"
++        let decomposed = "e\u{301}"
++        let existing = Self.envelope(records: [Self.rawRecord(memo: composed)])
++        var writeCalls = 0
++        var writtenData: Data?
++        let loadedStore = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in existing },
++            createDirectory: { _ in },
++            writeData: { data, _ in
++                writeCalls += 1
++                writtenData = data
++            }
++        )
++        let model = AppModel(store: loadedStore)
++        model.loadIfNeeded()
++
++        XCTAssertTrue(model.saveRecordMemo(decomposed, forJourneyID: "journey-001"))
++
++        XCTAssertEqual(writeCalls, 1)
++        XCTAssertTrue(model.snapshot?.records.items.first?.memo.utf16.elementsEqual(decomposed.utf16) == true)
++        let data = try XCTUnwrap(writtenData)
++        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
++        let state = root["state"] as? [String: Any]
++        let records = state?["records"] as? [String: Any]
++        let items = records?["items"] as? [[String: Any]]
++        let persistedMemo = try XCTUnwrap(items?.first?["memo"] as? String)
++        XCTAssertTrue(persistedMemo.utf16.elementsEqual(decomposed.utf16))
++    }
++
++    // 깨짐 명명: 도메인 오류가 파일 접근을 하거나 StorageIssue 매핑을 잃으면 실패.
++    @MainActor
++    func testAC6_AppModel의_잘못된분은_도메인오류이고_쓰기없음이다() {
++        var writeCalls = 0
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in Self.emptyV2 },
++            createDirectory: { _ in },
++            writeData: { _, _ in writeCalls += 1 }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++
++        XCTAssertFalse(model.recordCompletion(Self.input(minutes: 0), outcome: .alighted, timeZone: Self.seoul))
++
++        XCTAssertEqual(model.saveFailure, .invalidState(.invalidRecords(.invalidMinutes(0))))
++        XCTAssertEqual(writeCalls, 0)
++        XCTAssertEqual(model.snapshot?.records.items.count, 0)
++    }
++
++    // 깨짐 명명: 기록 저장 실패가 메모리 snapshot·route·path를 먼저 바꾸면 실패.
++    @MainActor
++    func test기록쓰기실패는_기존상태와경로를_보존한다() {
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in Self.emptyV2 },
++            createDirectory: { _ in },
++            writeData: { _, _ in throw ProbeError.expected }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++        model.open(.records)
++
++        XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
++
++        XCTAssertEqual(model.saveFailure, .writeFailed)
++        XCTAssertEqual(model.snapshot?.records.items.count, 0)
++        XCTAssertEqual(model.launchState, .ready(.main))
++        XCTAssertEqual(model.path, [.records])
++    }
++
++    private static let readySnapshot = stage(true, seongsu, seoulForest)
++    private static let v1 = Data(
++        #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
++    )
++    private static let emptyV2 = Data(
++        #"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
++    )
++
++    private static func input(
++        id: String = "journey-001",
++        minutes: Int = 25
++    ) -> RecordCompletionInput {
++        RecordCompletionInput(
++            id: id,
++            completedAt: "2026-10-13T01:00:00Z",
++            bus: "버스2014",
++            tag: "독서",
++            tagColor: "#12ABef",
++            task: "책 한 챕터 읽기",
++            minutes: minutes,
++            sound: "빗소리",
++            from: "성수역",
++            to: "서울숲 입구"
++        )
++    }
++
++    /// 프로덕션 encoder를 거치지 않는 손수 작성 raw JSON fixture.
++    private static func rawRecord(
++        id: String = "journey-001",
++        completedAt: String = "2026-10-13T01:00:00Z",
++        date: String = "2026-10-13",
++        memo: String = ""
++    ) -> String {
++        ##"{"id":"\##(id)","completedAt":"\##(completedAt)","date":"\##(date)","bus":"버스2014","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","minutes":25,"sound":"빗소리","from":"성수역","to":"서울숲 입구","memo":"\##(memo)"}"##
++    }
++
++    /// 프로덕션 encoder를 거치지 않는 손수 작성 v2 envelope.
++    private static func envelope(records: [String]) -> Data {
++        Data(
++            #"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[\#(records.joined(separator: ","))]}}}"#.utf8
++        )
++    }
++
++    private func assertRecord(
++        _ actual: RecordSnapshot,
++        id: String,
++        completedAt: String,
++        date: String,
++        minutes: Int,
++        memo: String,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) {
++        XCTAssertTrue(actual.id.utf16.elementsEqual(id.utf16), file: file, line: line)
++        XCTAssertTrue(actual.completedAt.utf16.elementsEqual(completedAt.utf16), file: file, line: line)
++        XCTAssertTrue(actual.date.utf16.elementsEqual(date.utf16), file: file, line: line)
++        XCTAssertTrue(actual.bus.utf16.elementsEqual("버스2014".utf16), file: file, line: line)
++        XCTAssertTrue(actual.tag.utf16.elementsEqual("독서".utf16), file: file, line: line)
++        XCTAssertTrue(actual.tagColor.utf16.elementsEqual("#12ABef".utf16), file: file, line: line)
++        XCTAssertTrue(actual.task.utf16.elementsEqual("책 한 챕터 읽기".utf16), file: file, line: line)
++        XCTAssertEqual(actual.minutes, minutes, file: file, line: line)
++        XCTAssertTrue(actual.sound.utf16.elementsEqual("빗소리".utf16), file: file, line: line)
++        XCTAssertTrue(actual.from.utf16.elementsEqual("성수역".utf16), file: file, line: line)
++        XCTAssertTrue(actual.to.utf16.elementsEqual("서울숲 입구".utf16), file: file, line: line)
++        XCTAssertTrue(actual.memo.utf16.elementsEqual(memo.utf16), file: file, line: line)
++    }
++
++    private func assertProtected(
++        _ bytes: Data,
++        loadIssue: StorageIssue,
++        saveIssue: StorageIssue,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) throws {
++        try withTemporaryFile { fileURL in
++            try seed(fileURL, bytes)
++            let store = LocalSnapshotStore(fileURL: fileURL)
++            assertStorageIssue(loadIssue, file: file, line: line) { _ = try store.load() }
++            assertStorageIssue(saveIssue, file: file, line: line) { try store.save(Self.readySnapshot) }
++            XCTAssertEqual(try Data(contentsOf: fileURL), bytes, file: file, line: line)
++        }
++    }
++
++    private func assertStationJSON(
++        _ value: Any?,
++        id: String,
++        name: String,
++        direction: Int,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) {
++        guard let station = value as? [String: Any] else {
++            return XCTFail("Expected station JSON", file: file, line: line)
++        }
++        XCTAssertEqual(station["id"] as? String, id, file: file, line: line)
++        XCTAssertEqual(station["name"] as? String, name, file: file, line: line)
++        XCTAssertEqual(station["direction"] as? Int, direction, file: file, line: line)
++    }
++
++    private func seed(_ fileURL: URL, _ bytes: Data) throws {
++        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
++        try bytes.write(to: fileURL)
++    }
++}

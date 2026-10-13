@@ -58,6 +58,48 @@ final class AppModel {
         return false
     }
 
+    @discardableResult
+    func recordCompletion(_ input: RecordCompletionInput, outcome: RecordCompletionOutcome,
+                          isExample: Bool = false, timeZone: TimeZone) -> Bool {
+        guard let original = snapshotForRecordChange() else { return false }
+        do {
+            let records = try original.records.recordingCompletion(input, outcome: outcome,
+                isExample: isExample, timeZone: timeZone)
+            guard outcome == .alighted, !isExample else { saveFailure = nil; return false }
+            guard records.items.count != original.records.items.count else { saveFailure = nil; return true }
+            return save(original.updating(records: records))
+        } catch let issue as RecordValidationIssue {
+            saveFailure = .invalidState(.invalidRecords(issue))
+        } catch { saveFailure = .writeFailed }
+        return false
+    }
+
+    @discardableResult
+    func saveRecordMemo(_ memo: String, forJourneyID id: String) -> Bool {
+        guard let original = snapshotForRecordChange() else { return false }
+        do {
+            let records = try original.records.updatingMemo(memo, forJourneyID: id)
+            // Swift String의 정규화 동등성 대신 저장 원문의 코드 단위를 비교한다.
+            let unchanged = zip(original.records.items, records.items).allSatisfy {
+                $0.memo.utf16.elementsEqual($1.memo.utf16)
+            }
+            guard !unchanged else { saveFailure = nil; return true }
+            return save(original.updating(records: records))
+        } catch let issue as RecordValidationIssue {
+            saveFailure = .invalidState(.invalidRecords(issue))
+        } catch { saveFailure = .writeFailed }
+        return false
+    }
+
+    private func snapshotForRecordChange() -> AppSnapshot? {
+        guard case .ready = launchState, let snapshot else {
+            if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
+            else { saveFailure = .notReady }
+            return nil
+        }
+        return snapshot
+    }
+
     func open(_ destination: Destination) {
         guard launchState == .ready(.main) else { return }
         path.append(destination)

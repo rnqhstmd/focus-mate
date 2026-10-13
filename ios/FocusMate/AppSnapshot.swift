@@ -9,6 +9,7 @@ struct StationSnapshot: Codable, Equatable {
 enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
 enum SnapshotValidationIssue: Error, Equatable {
     case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
+    case invalidRecords(RecordValidationIssue)
 }
 
 struct AppSnapshot: Codable, Equatable {
@@ -58,6 +59,8 @@ struct AppSnapshot: Codable, Equatable {
             guard !station.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationName }
             guard station.direction == 1 || station.direction == -1 else { throw SnapshotValidationIssue.invalidDirection(station.direction) }
         }
+        do { try records.validate() }
+        catch let issue as RecordValidationIssue { throw SnapshotValidationIssue.invalidRecords(issue) }
     }
 
     func launchRoute() throws -> LaunchRoute {

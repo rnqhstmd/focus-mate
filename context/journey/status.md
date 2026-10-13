@@ -1,10 +1,10 @@
 # 여정 구현 추적
 
-수정일: 2026-10-13. 도메인 구성은 사용자 확인으로 확정했고 담당자·사용자 규모는 ❓입니다. ID와 AC 번호는 이 도메인 안에서만 유일합니다. `[웹]`과 `[iOS]`는 별도 구현 범위입니다. `[iOS·P2]`의 P 번호는 [개발 단계](../../docs/DEVELOPMENT-PHASES.md)의 담당 Phase입니다.
+수정일: 2026-10-13(W02 반영). 도메인 구성은 사용자 확인으로 확정했고 담당자·사용자 규모는 ❓입니다. ID와 AC 번호는 이 도메인 안에서만 유일합니다. `[웹]`과 `[iOS]`는 별도 구현 범위입니다. `[iOS·P2]`의 P 번호는 [개발 단계](../../docs/DEVELOPMENT-PHASES.md)의 담당 Phase입니다.
 
 ## 범례
 
-- ✅ 반영됨 — 현재 웹 코드에 구현됨. VM 검사 표시는 모형 검증이며 실제 브라우저·iPhone 완료를 의미하지 않음
+- ✅ 반영됨 — `[웹]`은 현재 웹 코드, `[iOS]`는 네이티브 코드와 Simulator 자동 테스트로 구현됨. VM·Simulator 검사는 실기기 완료를 의미하지 않음
 - ⬜ 미반영 — 네이티브 구현 또는 실기기 검증 전
 - 🚫 폐기 — 사용자 확인 후 범위에서 제거한 항목
 
@@ -20,8 +20,8 @@
 | FR-5 | [iOS·P3] 실제 분 타이머 | AC-6: 선택한 실제 분을 진행하며 pause/resume 및 로컬 체크포인트를 구현한다. | ⬜ | - |
 | FR-6 | [iOS·P3] MapKit 가상 코스 | AC-7: 기본 지도와 승인된 앱 내 가상 코스를 표시한다. 실제 GPS·버스 API는 범위 밖이다. | ⬜ | - |
 | NFR-2 | [iOS·P3/P6] 생명주기 안전 | AC-8: 잠금·종료·복귀에서 저장 손실·중복·앱 밖 진도 증가가 없는지 실기기로 검증한다. P3는 Simulator 구현·검사, P6는 실기기 검증이다. | ⬜ | - |
-| FR-7 | [iOS·P2] 첫 출발 정류장 | AC-9: 최초 설정에서만 가상 정류장을 검색해 이름·방면을 선택하고 현재 정류장으로 저장한다. 결과 없음은 선택 불가이며 이후 앱 안 재검색·초기화는 없다. | ⬜ | - |
-| FR-8 | [iOS·P2] 시간·버스·도착지 선택 | AC-10: 15~360 min을 1분 단위로 고르고 정확히 맞는 버스·도착지를 선택해야 준비로 진행한다. 시간 변경 시 후보 선택을 해제한다. | ⬜ | - |
+| FR-7 | [iOS·P2] 첫 출발 정류장 | AC-9: 최초 설정에서만 가상 정류장을 검색해 이름·방면을 선택하고 현재 정류장으로 저장한다. 결과 없음은 선택 불가이며 이후 앱 안 재검색·초기화는 없다. | ✅ | [#11](https://github.com/rnqhstmd/focus-mate/pull/11) |
+| FR-8 | [iOS·P2] 시간·버스·도착지 선택 | AC-10: 15~360 min을 1분 단위로 고르고 정확히 맞는 버스·도착지를 선택해야 준비로 진행한다. 시간 변경 시 후보 선택을 해제한다. | ✅ | [#11](https://github.com/rnqhstmd/focus-mate/pull/11) |
 | FR-9 | [iOS·P2] 준비 허브·태그 | AC-11: 태그 미선택으로 시작하고 공백 할 일을 차단한다. 새 태그의 빈 이름·중복을 검사하고 편집 왕복에서 초안을 유지한다. | ⬜ | - |
 | FR-10 | [iOS·P2] 소리 선택·재생 | AC-12: 소리 없음과 라이선스 확인한 샘플 4종의 미리듣기·반복·시작/중지 페이드를 제공한다. 취소는 확정값을 유지하고 재생 실패 시 무음으로 계속한다. | ⬜ | - |
 | FR-11 | [iOS·P2] 승차권·승차 태그 | AC-13: 미완성 준비는 승차권 진입을 차단한다. 카드가 태그 영역과 30% 이상 겹치면 놓기 전에 인식(진동)하고, 인식 접촉 성공 시 진행 여정을 1회 저장하고 1400ms 유지·450ms 전환 후 여행 화면의 출발 안내로 간다. 확인 전에는 진행·남은 시간이 멈춘다. 이탈·숨김은 전환만 취소하고 저장은 유지한다. | ⬜ | - |
@@ -38,7 +38,9 @@
 - FR-5 / AC-6: 네이티브 구현 전.
 - FR-6 / AC-7: 네이티브 구현 전.
 - NFR-2 / AC-8: 실기기 검사 전.
-- FR-7~FR-13 / AC-9~AC-15: 네이티브 구현 전. 웹 대응은 search·time·prepare·tagEdit·sound·board·boarding·alighting·paused 장면이다. Phase 1은 최초/현재 정류장의 ID·이름·방향 저장 구조만 만들었다.
+- FR-7 / AC-9: W02(PR #11). `InitialStationSearchView`·`StationSearchState`·`StationCatalog`(가상 정류장 3건, 이름·별칭·방면 검색), `AppModel+JourneyStart.confirmInitialStation`이 최초 정류장 화면에서만 1회 저장. 단위 `StationCatalogTests`·`StationSearchStateTests`·`JourneyStartModelTests`, UI `FirstStationSearchUITests`·`StationSaveFailureUITests`·`PreparationFlowUITests`(재실행 후 재검색 진입점 없음).
+- FR-8 / AC-10: W02(PR #11). `TimeSelectionView`(15~360분 휠)·`JourneyPlanDraft`·`JourneyPlanner`(정류장 간격으로 나누어떨어지는 버스만 후보, 9개 순환 정류장 위 도착지). 시간 변경 시 선택 해제, 선택값은 실행 중 메모리만. 단위 `JourneyPlannerTests`·`JourneyPlanDraftTests`, UI `TimeSelectionUITests`·`PreparationFlowUITests`·`LargeTextUITests`. VoiceOver 1분 조절·동작 줄이기는 실기기 미검증(W14).
+- FR-9~FR-13 / AC-11~AC-15: 네이티브 구현 전. 웹 대응은 prepare·tagEdit·sound·board·boarding·alighting·paused 장면이다. 메인 "여행 준비"는 시간 선택을 거쳐 준비 진입점(`screen.preparation`, 아직 자리표시)으로 가며 `AppModel.preparedJourney`로 여정 선택을 넘긴다.
 
 [현재 동작](../../docs/CURRENT-STATE.md) · [화면 계약](../../docs/FLOWS.md) · [개발 단계](../../docs/DEVELOPMENT-PHASES.md). 현재 요구사항 원장은 코드와 마지막 직접 VM 검사로 작성했으며 자동 git 동기화는 아직 실행하지 않았습니다.
 

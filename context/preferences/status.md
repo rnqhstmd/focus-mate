@@ -26,9 +26,9 @@
 - NFR-1 / AC-3: 도메인별 storage 플래그 / issueHaptic.
 - FR-3 / AC-4: 네이티브 구현 전.
 - NFR-2 / AC-5: 실기기 검사 전.
-- FR-4 / AC-6: W13 재시도·확인/취소·원본 검증 백업 뒤 정리·실패 안내 구현. iOS 26.5 Unit141/UI21 및 웹31+edge, Debug/Release 빌드 통과([완료 검증](../../.dev/codex-feat-storage-error-recovery/reports/verify.md)). 실기기·VoiceOver 실제 포커스는 W14에서 확인한다.
+- FR-4 / AC-6: W13 재시도·확인/취소·동일 바이트 내부 백업 검증 뒤 정리·보존/정리 실패 안내 구현 및 인수 완료. 버전 1·2 읽기와 버전 2 저장을 유지하고 외부 내보내기·공유는 제공하지 않는다. iOS 26.5 Unit141/UI21 및 웹31+edge, Debug/Release 빌드 통과([완료 검증](../../.dev/codex-feat-storage-error-recovery/reports/verify.md), [인수 결과](../../.dev/codex-feat-storage-error-recovery/reports/acceptance.md)). 실기기·VoiceOver 실제 포커스는 W14에서 확인한다.
 
-[현재 동작](../../docs/CURRENT-STATE.md) · [화면 계약](../../docs/FLOWS.md) · [개발 단계](../../docs/DEVELOPMENT-PHASES.md). 현재 요구사항 원장은 코드와 마지막 직접 VM 검사로 작성했으며 자동 git 동기화는 아직 실행하지 않았습니다.
+[현재 동작](../../docs/CURRENT-STATE.md) · [화면 계약](../../docs/FLOWS.md) · [개발 단계](../../docs/DEVELOPMENT-PHASES.md). 현재 요구사항 원장은 코드와 W13 완료 검증, 웹·iOS 자동 검사 근거를 반영했습니다. 실기기·VoiceOver 직접 확인은 W14에서 수행하고.
 
 <!-- gx-sync
 git-head: -

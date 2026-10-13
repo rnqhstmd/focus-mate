@@ -4,7 +4,7 @@
 
 ## 현재 시스템 구조
 
-제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 현재 별도 API 서버·도메인 서비스 레이어·Swift 소스는 확인되지 않았다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
+제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. Swift는 Phase 1 앱 기반(`ios/FocusMate`: 진입 분기·기본 화면 왕복·`app-state.json` 버전 1 저장)만 있고 이 도메인의 네이티브 기능은 아직 없다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
 
 주요 현재 함수/경계: currentPass/loadTransitPass/syncTransitPass, renderPassIssuance, syncCardAppearance, cardStudio 편집·저장/취소 함수.
 
@@ -27,4 +27,4 @@ SwiftUI 공통 카드 뷰·사진 가져오기·로컬 카드 저장은 iOS MVP 
 
 ## 개발 단계 연결
 
-[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 현재 구조는 위의 단일 HTML이며 Swift 소스는 아직 존재하지 않습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.
+[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 Phase 1 앱 기반만 있으며 이 도메인의 네이티브 기능은 아직 없습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.

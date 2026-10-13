@@ -24,4 +24,4 @@ SwiftUI 접근성/동작 설정과 플랫폼 지원·오류 안내는 iOS MVP �
 
 ## 개발 단계 연결
 
-[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 현재 구조는 위의 단일 HTML이며 Swift 소스는 아직 존재하지 않습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.
+[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 Phase 1 앱 기반만 있으며 이 도메인의 네이티브 기능은 아직 없습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.

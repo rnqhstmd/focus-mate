@@ -29,6 +29,6 @@
 
 ## 현재 상태
 
-탐색 중 / 검토 전. `matchMedia`와 체크박스 상태는 존재하지만 **reduce의 독립 localStorage 키는 없으며 영속 설정이라고 주장하지 않습니다.** 향후 네이티브 환경/접근성·복구 설정은 iOS MVP 검토 대상입니다.
+탐색 중 / 검토 전. `matchMedia`와 체크박스 상태는 존재하지만 **reduce의 독립 localStorage 키는 없으며 영속 설정이라고 주장하지 않습니다.** iOS는 Phase 1의 빈 설정 화면과 저장 오류 감지·원본 보존만 있습니다. 접근성은 Phase 2~5 각 화면, 설정·저장 복구는 Phase 5, 실기기 검증은 Phase 6 대상입니다.
 
 [프로젝트](PROJECTS.md) · [용어](glossary.md) · [구조](architecture.md) · [요구사항·진행 추적](status.md) · [현재 상태](../../docs/CURRENT-STATE.md)

@@ -8,6 +8,7 @@ struct UITestBootstrap {
     let shouldFailSave: Bool
     let issueHold: IssueHold
     enum IssueHold { case standard, manual }
+    private let recoveryScenario: String?
     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
 
     init?(arguments: [String], applicationSupport: URL) throws {
@@ -26,6 +27,8 @@ struct UITestBootstrap {
         let hold = try argument("--fm-ui-issue-hold")
         guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
         issueHold = hold == "manual" ? .manual : .standard
+        recoveryScenario = try argument("--fm-ui-recovery")
+        guard recoveryScenario == nil || ["readOnce", "readAlways", "backupFail", "backupMismatch", "cleanupFail"].contains(recoveryScenario!) else { throw SetupIssue.invalidArguments }
         fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
             .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
     }
@@ -48,8 +51,29 @@ struct UITestBootstrap {
     }
 
     var modelStore: LocalSnapshotStore {
-        if shouldFailSave { return LocalSnapshotStore(fileURL: fileURL, writeData: { _, _ in throw StorageIssue.writeFailed }) }
-        return LocalSnapshotStore(fileURL: fileURL)
+        let activeURL = fileURL
+        let scenario = recoveryScenario
+        let failSave = shouldFailSave
+        var activeReads = 0
+        return LocalSnapshotStore(fileURL: activeURL, readData: { url in
+            if url == activeURL {
+                activeReads += 1
+                if scenario == "readAlways" || (scenario == "readOnce" && activeReads == 1) {
+                    throw CocoaError(.fileReadNoPermission)
+                }
+            }
+            return try Data(contentsOf: url)
+        }, writeData: { data, url in
+            if failSave { throw StorageIssue.writeFailed }
+            try data.write(to: url, options: .atomic)
+        }, writeBackup: { data, url in
+            if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
+            let bytes = scenario == "backupMismatch" ? data + Data([0]) : data
+            try bytes.write(to: url, options: .withoutOverwriting)
+        }, removeData: { url in
+            if scenario == "cleanupFail" { throw StorageRecoveryIssue.cleanupFailed }
+            try FileManager.default.removeItem(at: url)
+        })
     }
 
     /// `fail`은 모든 쓰기를 실패시킨다. 메인에서는 정류장 저장 시나리오를 적용하고, 발급 화면에서는 발급이 실패 저장소를 타게 둔다.
@@ -71,6 +95,20 @@ struct UITestBootstrap {
     }
 
     private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
+
+    var backupBytes: String {
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: fileURL.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+            var values: [String: String] = [:]
+            for url in files where url.lastPathComponent.hasPrefix("app-state.recovery-") && url.pathExtension == "backup" {
+                values[url.lastPathComponent] = try Data(contentsOf: url).base64EncodedString()
+            }
+            let data = try JSONSerialization.data(withJSONObject: values, options: .sortedKeys)
+            return String(decoding: data, as: UTF8.self)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile { return "{}" }
+        catch { return "unreadable" }
+    }
+
     private static let readySnapshot = AppSnapshot.empty.updatingStage(cardIssued: true,
         initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
         currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
@@ -84,6 +122,7 @@ struct UITestBootstrap {
     static let rawSeeds: [String: String] = [
         "corrupt": "{broken",
         "unsupported": #"{"version":999,"state":null}"#,
+        "invalidState": #"{"version":1,"state":{"cardIssued":false,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":null}}"#,
         "invalidCardShortId": state(cards: #"{"id":"FM-1234","issuedAt":"2026-10-13T09:00:00Z"}"#),
         "invalidCardPrefix": state(cards: #"{"id":"NS-12345678","issuedAt":"2026-10-13T09:00:00Z"}"#),
         "invalidCardIssuedAt": state(cards: #"{"id":"FM-20261013","issuedAt":"어제"}"#),

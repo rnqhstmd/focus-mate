@@ -24,6 +24,11 @@ final class AppModel {
     private(set) var supplementFailure: StorageIssue?
     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
     private var isHoldingIssuedCard = false
+    private(set) var recoveryFailure: StorageRecoveryIssue?
+    private(set) var isRecovering = false
+    private(set) var hasAttemptedCleanup = false
+    private var cleanupSource: RecoverySource?
+    var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
     private let store: LocalSnapshotStore
     private let cardFactory: CardSnapshotFactory
     @ObservationIgnored private var hasLoaded = false
@@ -67,14 +72,60 @@ final class AppModel {
 
     func finishCardIssuance() { isHoldingIssuedCard = false }
 
+    func retryLoad() {
+        guard case .failed = launchState, cleanupSource == nil, !isRecovering else { return }
+        recoveryFailure = nil
+        isRecovering = true
+        defer { isRecovering = false }
+        loadSnapshot()
+    }
+
+    func requestCleanup() {
+        guard case .failed = launchState, cleanupSource == nil, !isRecovering else { return }
+        recoveryFailure = nil
+        isRecovering = true
+        defer { isRecovering = false }
+        cleanupSource = store.recoverySource()
+    }
+
+    func cancelCleanup() {
+        guard !isRecovering else { return }
+        cleanupSource = nil
+    }
+
+    @discardableResult func confirmCleanup() -> Bool {
+        guard case .failed = launchState, let source = cleanupSource, !isRecovering else { return false }
+        cleanupSource = nil
+        hasAttemptedCleanup = true
+        isRecovering = true
+        defer { isRecovering = false }
+        do {
+            _ = try store.backupAndClear(expectedSource: source)
+            snapshot = .empty
+            launchState = .ready(.cardEntry)
+            path = []
+            saveFailure = nil
+            recoveryFailure = nil
+            return true
+        } catch let issue as StorageRecoveryIssue { recoveryFailure = issue }
+        catch { recoveryFailure = .backupFailed }
+        return false
+    }
+
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
+        loadSnapshot()
+    }
+
+    private func loadSnapshot() {
         do {
             let restored = try store.load() ?? .empty
             let route = try restored.launchRoute()
             snapshot = restored
             launchState = .ready(route)
+            path = []
+            saveFailure = nil
         } catch let issue as StorageIssue {
             snapshot = nil; path = []; launchState = .failed(issue)
         } catch {
@@ -84,6 +135,7 @@ final class AppModel {
 
     @discardableResult
     func save(_ candidate: AppSnapshot) -> Bool {
+        guard !isRecovering else { return false }
         saveFailure = persist(candidate)
         return saveFailure == nil
     }
@@ -103,6 +155,48 @@ final class AppModel {
         } catch let issue as SnapshotValidationIssue { return .invalidState(issue) }
         catch let issue as StorageIssue { return issue }
         catch { return .writeFailed }
+    }
+
+    @discardableResult
+    func recordCompletion(_ input: RecordCompletionInput, outcome: RecordCompletionOutcome,
+                          isExample: Bool = false, timeZone: TimeZone) -> Bool {
+        guard let original = snapshotForRecordChange() else { return false }
+        do {
+            let records = try original.records.recordingCompletion(input, outcome: outcome,
+                isExample: isExample, timeZone: timeZone)
+            guard outcome == .alighted, !isExample else { saveFailure = nil; return false }
+            guard records.items.count != original.records.items.count else { saveFailure = nil; return true }
+            return save(original.updating(records: records))
+        } catch let issue as RecordValidationIssue {
+            saveFailure = .invalidState(.invalidRecords(issue))
+        } catch { saveFailure = .writeFailed }
+        return false
+    }
+
+    @discardableResult
+    func saveRecordMemo(_ memo: String, forJourneyID id: String) -> Bool {
+        guard let original = snapshotForRecordChange() else { return false }
+        do {
+            let records = try original.records.updatingMemo(memo, forJourneyID: id)
+            // Swift String의 정규화 동등성 대신 저장 원문의 코드 단위를 비교한다.
+            let unchanged = zip(original.records.items, records.items).allSatisfy {
+                $0.memo.utf16.elementsEqual($1.memo.utf16)
+            }
+            guard !unchanged else { saveFailure = nil; return true }
+            return save(original.updating(records: records))
+        } catch let issue as RecordValidationIssue {
+            saveFailure = .invalidState(.invalidRecords(issue))
+        } catch { saveFailure = .writeFailed }
+        return false
+    }
+
+    private func snapshotForRecordChange() -> AppSnapshot? {
+        guard case .ready = launchState, let snapshot else {
+            if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
+            else { saveFailure = .notReady }
+            return nil
+        }
+        return snapshot
     }
 
     func open(_ destination: Destination) {

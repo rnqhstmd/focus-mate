@@ -10,6 +10,7 @@ enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
 enum SnapshotValidationIssue: Error, Equatable {
     case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
     case multipleCards(Int), cardWithoutIssuance, invalidCardID
+    case invalidRecords(RecordValidationIssue)
 }
 
 struct AppSnapshot: Codable, Equatable {
@@ -70,6 +71,8 @@ struct AppSnapshot: Codable, Equatable {
         guard cards.items.count <= 1 else { throw SnapshotValidationIssue.multipleCards(cards.items.count) }
         guard cards.items.isEmpty || cardIssued else { throw SnapshotValidationIssue.cardWithoutIssuance }
         guard cards.items.allSatisfy({ CardSnapshot.isValidID($0.id) }) else { throw SnapshotValidationIssue.invalidCardID }
+        do { try records.validate() }
+        catch let issue as RecordValidationIssue { throw SnapshotValidationIssue.invalidRecords(issue) }
     }
 
     func launchRoute() throws -> LaunchRoute {

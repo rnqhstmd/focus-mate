@@ -4,7 +4,7 @@
 
 ## 현재 시스템 구조
 
-제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. Swift는 Phase 1 앱 기반(`ios/FocusMate`: 진입 분기·기본 화면 왕복·`app-state.json` 버전 1 저장)만 있고 이 도메인의 네이티브 기능은 아직 없다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
+제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. Swift(`ios/FocusMate`)는 `app-state.json` 버전 2의 `cards.items[]`에 카드(`CardSnapshot`)를 저장한다(W01). 발급은 `CardIssuanceController`(상태 머신)·`CardIssuanceView`가, 저장·기존 사용자 보충·화면 분기(`presentedRoute`)는 `AppModel`이 맡는다. 카드 표현은 `PassFace`, 이름·번호 출처는 `PassIdentity`다. 정합성(카드 1장, 미발급 카드 금지, ID 형식)은 `AppSnapshot.validate`가 판정한다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
 
 주요 현재 함수/경계: currentPass/loadTransitPass/syncTransitPass, renderPassIssuance, syncCardAppearance, cardStudio 편집·저장/취소 함수.
 
@@ -14,7 +14,7 @@
 
 ## 향후 네이티브와 후순위
 
-SwiftUI 공통 카드 뷰·사진 가져오기·로컬 카드 저장은 iOS MVP 예정. 공유·여러 카드·실제 교통카드 연동은 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
+SwiftUI 공통 카드 뷰와 로컬 카드 저장은 W01에서 구현했다. 사진 가져오기·꾸민 외형(W10)과 승하차 배치(W04)는 예정. 저장 형식에 항목을 추가하는 작업은 버전을 올리고 변환 코드를 둔다(버전 2 디코더는 모르는 키를 버린다). 공유·여러 카드·실제 교통카드 연동은 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
 
 ## 주제 문서
 
@@ -27,4 +27,4 @@ SwiftUI 공통 카드 뷰·사진 가져오기·로컬 카드 저장은 iOS MVP 
 
 ## 개발 단계 연결
 
-[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 Phase 1 앱 기반만 있으며 이 도메인의 네이티브 기능은 아직 없습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.
+[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 W01에서 카드 발급·공통 카드 뷰를 구현했고, 승하차 표시(W04)·꾸미기(W10)·마이페이지(W11)는 예정입니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.

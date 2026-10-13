@@ -4,12 +4,14 @@ import SwiftUI
 struct RootView: View {
     @Bindable var model: AppModel
     let issuance: CardIssuanceController
+    private enum RecoveryFocus: Hashable { case error, confirmation, failure }
+    @AccessibilityFocusState private var recoveryFocus: RecoveryFocus?
     #if DEBUG
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var testBootstrap: UITestBootstrap?
     var testRecorder: UITestFeedbackRecorder?
     var testGate: UITestIssuanceGate?
     var testSetupError: String?
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
 
     var body: some View {
@@ -37,13 +39,22 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: model.isCleanupConfirmationPresented) { _, presented in
+            if case .failed = model.launchState { recoveryFocus = presented ? .confirmation : .error }
+            else { recoveryFocus = nil }
+        }
+        .onChange(of: model.recoveryFailure) { _, issue in
+            if issue != nil { recoveryFocus = .failure }
+            else if case .failed = model.launchState { recoveryFocus = .error }
+        }
         #if DEBUG
         .overlay(alignment: .bottomLeading) {
             VStack(spacing: 0) {
                 if let testBootstrap {
                     Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
                     Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
-                    Text("글자 크기 진단").accessibilityValue(String(describing: dynamicTypeSize)).accessibilityIdentifier("test.dynamicTypeSize")
+                    Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
+                    Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
                 }
                 if let testRecorder {
                     Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
@@ -76,9 +87,38 @@ struct RootView: View {
         case .ready:
             route
         case let .failed(issue):
-            Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
-            Text(message(for: issue)).accessibilityValue(message(for: issue)).accessibilityIdentifier("storage.error")
-            Text("기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
+                        .accessibilityAddTraits(.isHeader).accessibilityFocused($recoveryFocus, equals: .error)
+                    Text(message(for: issue)).accessibilityValue(message(for: issue)).accessibilityIdentifier("storage.error")
+                    if model.isCleanupConfirmationPresented {
+                        Text("저장 데이터 정리").font(.headline).accessibilityIdentifier("storage.cleanupConfirmation")
+                            .accessibilityAddTraits(.isHeader).accessibilityFocused($recoveryFocus, equals: .confirmation)
+                        Text("카드, 여행, 기록 데이터가 초기화돼요.")
+                        Text("같은 원본을 앱 내부에 보존한 뒤 정리해요.")
+                        Button("원본 보존 후 정리", role: .destructive) { model.confirmCleanup() }
+                            .buttonStyle(.bordered).frame(minHeight: 44).accessibilityIdentifier("storage.confirmCleanup")
+                        Button("취소") { model.cancelCleanup() }
+                            .buttonStyle(.bordered).frame(minHeight: 44).accessibilityIdentifier("storage.cancelCleanup")
+                    } else {
+                        if let failure = model.recoveryFailure {
+                            Text(recoveryMessage(for: failure)).accessibilityIdentifier("storage.recoveryFailure")
+                                .accessibilityFocused($recoveryFocus, equals: .failure)
+                        } else {
+                            Text(model.hasAttemptedCleanup
+                                 ? "다시 시도하거나 저장 데이터 정리를 선택해주세요."
+                                 : "기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
+                        }
+                        Button("다시 시도") {
+                            model.retryLoad()
+                            if case .failed = model.launchState { recoveryFocus = .error }
+                        }.buttonStyle(.bordered).frame(minHeight: 44).accessibilityIdentifier("storage.retry")
+                        Button("저장 데이터 정리") { model.requestCleanup() }
+                            .buttonStyle(.bordered).frame(minHeight: 44).accessibilityIdentifier("storage.cleanup")
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading).disabled(model.isRecovering)
+            }
         }
     }
 
@@ -109,8 +149,19 @@ struct RootView: View {
         switch issue {
         case .corrupt: "저장된 데이터 형식을 읽을 수 없어요."
         case .unsupportedVersion: "이 버전의 앱에서 열 수 없는 데이터예요."
+        case .invalidState(.inconsistentStage): "저장된 데이터 내용이 현재 단계와 맞지 않아요."
         case .invalidState: "저장된 이용 상태를 확인할 수 없어요."
-        default: "저장된 데이터를 읽지 못했어요."
+        default: "저장된 데이터를 읽을 수 없어요."
+        }
+    }
+
+    private func recoveryMessage(for issue: StorageRecoveryIssue) -> String {
+        switch issue {
+        case .backupFailed: "원본을 보존하지 못해 저장 데이터 정리를 완료하지 못했어요."
+        case .cleanupFailed: "원본을 내부에 보존했지만 저장 데이터 정리 완료를 확인하지 못했어요."
+        case .sourceChanged: "확인하는 동안 데이터가 변경되어 정리하지 않았어요. 다시 시도해 최신 상태를 확인해주세요."
+        case .sourceMissing: "저장된 파일이 없어 정리하지 않았어요. 다시 시도해 최신 상태를 확인해주세요."
+        case .notRequired: "데이터를 읽을 수 있어 정리하지 않았어요. 다시 시도해 저장된 상태를 불러오세요."
         }
     }
 

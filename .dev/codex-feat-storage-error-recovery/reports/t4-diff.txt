@@ -1,0 +1,35 @@
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index d46d4c6..f39936a 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -22,6 +22,7 @@ final class AppModel {
+     private(set) var saveFailure: StorageIssue?
+     private(set) var recoveryFailure: StorageRecoveryIssue?
+     private(set) var isRecovering = false
++    private(set) var hasAttemptedCleanup = false
+     private var cleanupSource: RecoverySource?
+     var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
+     private let store: LocalSnapshotStore
+@@ -52,6 +53,7 @@ final class AppModel {
+     @discardableResult func confirmCleanup() -> Bool {
+         guard case .failed = launchState, let source = cleanupSource, !isRecovering else { return false }
+         cleanupSource = nil
++        hasAttemptedCleanup = true
+         isRecovering = true
+         defer { isRecovering = false }
+         do {
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index e95ac44..6e02ec0 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -101,7 +101,9 @@ struct RootView: View {
+                             Text(recoveryMessage(for: failure)).accessibilityIdentifier("storage.recoveryFailure")
+                                 .accessibilityFocused($recoveryFocus, equals: .failure)
+                         } else {
+-                            Text("기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
++                            Text(model.hasAttemptedCleanup
++                                 ? "다시 시도하거나 저장 데이터 정리를 선택해주세요."
++                                 : "기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
+                         }
+                         Button("다시 시도") {
+                             model.retryLoad()

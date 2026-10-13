@@ -1,0 +1,1 @@
+- 수정 diff: 후보 문구 1줄 ("\(candidate.minutes) min" → "\(candidate.minutes)분")

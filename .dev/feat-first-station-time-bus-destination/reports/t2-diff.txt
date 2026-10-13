@@ -1,0 +1,306 @@
+diff --git a/ios/FocusMate/JourneyPlanDraft.swift b/ios/FocusMate/JourneyPlanDraft.swift
+new file mode 100644
+index 0000000..a4b57e8
+--- /dev/null
++++ b/ios/FocusMate/JourneyPlanDraft.swift
+@@ -0,0 +1,66 @@
++import Foundation
++
++/// 준비 진입점에 넘기는 여정 선택(용어 사전의 "여정 선택"). 저장하지 않는다.
++struct JourneySelection: Equatable {
++    let origin: StopPosition
++    let minutes: Int
++    let busID: String
++    let busNumber: String
++    let destination: String
++    let stops: Int
++}
++
++enum ProceedState: Equatable {
++    case originUnavailable, noCandidates, needsSelection, ready(JourneySelection)
++
++    var title: String {
++        switch self {
++        case .originUnavailable: "출발 정류장을 확인할 수 없어요"
++        case .noCandidates: "이 시간의 도착 후보가 없어요"
++        case .needsSelection: "버스와 도착지를 선택하세요"
++        case .ready: "이 여정 준비하기"
++        }
++    }
++
++    var isEnabled: Bool {
++        if case .ready = self { return true }
++        return false
++    }
++}
++
++/// 시간 선택 화면의 상태. 앱 실행 중 메모리에만 둔다.
++struct JourneyPlanDraft: Equatable {
++    private(set) var minutes: Int = JourneyPlanner.initialMinutes
++    private(set) var selectedBusID: String?
++
++    /// 범위 안으로 맞춘 값이 실제로 바뀌면 같은 버스가 새 시간에도 후보여도 선택을 해제한다.
++    mutating func setMinutes(_ value: Int) {
++        let clamped = JourneyPlanner.clamp(value)
++        guard clamped != minutes else { return }
++        minutes = clamped
++        selectedBusID = nil
++    }
++
++    mutating func choose(busID: String, from origin: StopPosition) -> Bool {
++        guard candidates(from: origin).contains(where: { $0.bus.id == busID }) else { return false }
++        selectedBusID = busID
++        return true
++    }
++
++    func candidates(from origin: StopPosition) -> [JourneyCandidate] {
++        JourneyPlanner.candidates(minutes: minutes, from: origin)
++    }
++
++    func selectedCandidate(from origin: StopPosition) -> JourneyCandidate? {
++        candidates(from: origin).first { $0.bus.id == selectedBusID }
++    }
++
++    func proceedState(from origin: StopPosition) -> ProceedState {
++        if let candidate = selectedCandidate(from: origin) {
++            return .ready(JourneySelection(origin: origin, minutes: minutes, busID: candidate.bus.id,
++                                           busNumber: candidate.bus.number, destination: candidate.destination,
++                                           stops: candidate.stops))
++        }
++        return candidates(from: origin).isEmpty ? .noCandidates : .needsSelection
++    }
++}
+diff --git a/ios/FocusMate/StationSearchState.swift b/ios/FocusMate/StationSearchState.swift
+new file mode 100644
+index 0000000..a42a1ee
+--- /dev/null
++++ b/ios/FocusMate/StationSearchState.swift
+@@ -0,0 +1,18 @@
++import Foundation
++
++/// 첫 출발지 검색 화면의 상태. 선택은 현재 검색 결과 안에 있을 때만 유효하다.
++struct StationSearchState: Equatable {
++    var query: String = ""
++    private(set) var selectedID: String?
++
++    var results: [StationOption] { StationCatalog.search(query) }
++    var selectedOption: StationOption? { results.first { $0.id == selectedID } }
++    var confirmationText: String? { selectedOption.map { "\($0.name) · \($0.boundLabel)에서 출발" } }
++    var canConfirm: Bool { selectedOption != nil }
++
++    mutating func select(_ optionID: String) -> Bool {
++        guard results.contains(where: { $0.id == optionID }) else { return false }
++        selectedID = optionID
++        return true
++    }
++}
+diff --git a/ios/FocusMateTests/JourneyPlanDraftTests.swift b/ios/FocusMateTests/JourneyPlanDraftTests.swift
+new file mode 100644
+index 0000000..03060be
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyPlanDraftTests.swift
+@@ -0,0 +1,137 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class JourneyPlanDraftTests: XCTestCase {
++    private let origin = StopPosition(index: 0, direction: 1)
++
++    private func draft(minutes: Int) -> JourneyPlanDraft {
++        var draft = JourneyPlanDraft()
++        draft.setMinutes(minutes)
++        return draft
++    }
++
++    func test_setMinutes는_14를_15로_361을_360으로_맞춘다() {
++        var low = JourneyPlanDraft()
++        low.setMinutes(14)
++        XCTAssertEqual(low.minutes, 15)
++        var high = JourneyPlanDraft()
++        high.setMinutes(361)
++        XCTAssertEqual(high.minutes, 360)
++    }
++
++    func test_setMinutes는_경계값_15와_360을_허용한다() {
++        XCTAssertEqual(draft(minutes: 15).minutes, 15)
++        XCTAssertEqual(draft(minutes: 360).minutes, 360)
++    }
++
++    func test_clamp로_값이_그대로면_선택이_유지된다() {
++        var d = draft(minutes: 15)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        d.setMinutes(14)
++        XCTAssertEqual(d.minutes, 15)
++        XCTAssertEqual(d.selectedBusID, "2014")
++    }
++
++    func test_기본_draft는_25분이고_선택이_없다() {
++        let d = JourneyPlanDraft()
++        XCTAssertEqual(d.minutes, 25)
++        XCTAssertNil(d.selectedBusID)
++    }
++
++    func test_기본_draft의_후보는_2014_서울숲_입구_5정류장_1건이다() {
++        let result = JourneyPlanDraft().candidates(from: origin)
++        XCTAssertEqual(result.map(\.bus.id), ["2014"])
++        XCTAssertEqual(result.map(\.destination), ["서울숲 입구"])
++        XCTAssertEqual(result.map(\.stops), [5])
++    }
++
++    func test_후보가_있고_선택이_없으면_needsSelection이며_진행할_수_없다() {
++        let state = JourneyPlanDraft().proceedState(from: origin)
++        XCTAssertEqual(state, .needsSelection)
++        XCTAssertEqual(state.title, "버스와 도착지를 선택하세요")
++        XCTAssertFalse(state.isEnabled)
++    }
++
++    func test_17분은_후보가_없어_noCandidates이며_진행할_수_없다() {
++        let d = draft(minutes: 17)
++        XCTAssertEqual(d.candidates(from: origin), [])
++        let state = d.proceedState(from: origin)
++        XCTAssertEqual(state, .noCandidates)
++        XCTAssertEqual(state.title, "이 시간의 도착 후보가 없어요")
++        XCTAssertFalse(state.isEnabled)
++    }
++
++    func test_60분_선택_없음은_needsSelection이며_진행할_수_없다() {
++        let state = draft(minutes: 60).proceedState(from: origin)
++        XCTAssertEqual(state, .needsSelection)
++        XCTAssertFalse(state.isEnabled)
++    }
++
++    func test_60분에서_2014를_선택하면_성공하고_선택_후보가_2014다() {
++        var d = draft(minutes: 60)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        XCTAssertEqual(d.selectedCandidate(from: origin)?.bus.id, "2014")
++    }
++
++    func test_다른_버스를_선택하면_선택이_302로_교체된다() {
++        var d = draft(minutes: 60)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        XCTAssertTrue(d.choose(busID: "302", from: origin))
++        XCTAssertEqual(d.selectedBusID, "302")
++        XCTAssertEqual(d.selectedCandidate(from: origin)?.bus.id, "302")
++    }
++
++    func test_선택된_상태의_proceedState는_ready이며_JourneySelection을_담는다() {
++        var d = draft(minutes: 60)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        let state = d.proceedState(from: origin)
++        XCTAssertEqual(state, .ready(JourneySelection(
++            origin: StopPosition(index: 0, direction: 1),
++            minutes: 60,
++            busID: "2014",
++            busNumber: "2014",
++            destination: "성동구민체육센터",
++            stops: 12
++        )))
++        XCTAssertEqual(state.title, "이 여정 준비하기")
++        XCTAssertTrue(state.isEnabled)
++    }
++
++    func test_60분에서_421_선택은_거부되고_선택이_바뀌지_않는다() {
++        var d = draft(minutes: 60)
++        XCTAssertFalse(d.choose(busID: "421", from: origin))
++        XCTAssertNil(d.selectedBusID)
++        XCTAssertNil(d.selectedCandidate(from: origin))
++    }
++
++    func test_실패한_선택은_기존_선택을_유지한다() {
++        var d = draft(minutes: 60)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        XCTAssertFalse(d.choose(busID: "421", from: origin))
++        XCTAssertEqual(d.selectedBusID, "2014")
++    }
++
++    func test_시간이_바뀌면_선택이_해제되고_같은_값으로_되돌려도_복원되지_않는다() {
++        var d = draft(minutes: 60)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        d.setMinutes(61)
++        XCTAssertNil(d.selectedBusID)
++        XCTAssertEqual(d.proceedState(from: origin), .noCandidates)
++        d.setMinutes(60)
++        XCTAssertNil(d.selectedBusID)
++        XCTAssertEqual(d.proceedState(from: origin), .needsSelection)
++    }
++
++    func test_같은_버스가_새_시간에도_후보여도_시간이_바뀌면_선택이_해제된다() {
++        var d = draft(minutes: 60)
++        XCTAssertTrue(d.choose(busID: "2014", from: origin))
++        d.setMinutes(120)
++        XCTAssertNil(d.selectedBusID)
++    }
++
++    func test_originUnavailable은_안내_문구를_가지며_진행할_수_없다() {
++        XCTAssertEqual(ProceedState.originUnavailable.title, "출발 정류장을 확인할 수 없어요")
++        XCTAssertFalse(ProceedState.originUnavailable.isEnabled)
++    }
++}
+diff --git a/ios/FocusMateTests/StationSearchStateTests.swift b/ios/FocusMateTests/StationSearchStateTests.swift
+new file mode 100644
+index 0000000..cbd2fa8
+--- /dev/null
++++ b/ios/FocusMateTests/StationSearchStateTests.swift
+@@ -0,0 +1,61 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class StationSearchStateTests: XCTestCase {
++    private func reverseOptionID(_ state: StationSearchState) throws -> String {
++        try XCTUnwrap(state.results.first { $0.position == StopPosition(index: 0, direction: -1) }).id
++    }
++
++    func test_초기_상태는_3건_결과이고_선택_확정이_없다() {
++        let state = StationSearchState()
++        XCTAssertEqual(state.results.count, 3)
++        XCTAssertNil(state.selectedOption)
++        XCTAssertFalse(state.canConfirm)
++        XCTAssertNil(state.confirmationText)
++    }
++
++    func test_없는역_검색은_결과_0건이다() {
++        var state = StationSearchState()
++        state.query = "없는역"
++        XCTAssertEqual(state.results.count, 0)
++        XCTAssertFalse(state.canConfirm)
++    }
++
++    func test_결과가_없을_때_카탈로그_id_선택은_거부되고_확정할_수_없다() {
++        var state = StationSearchState()
++        state.query = "없는역"
++        for option in StationCatalog.all {
++            XCTAssertFalse(state.select(option.id))
++        }
++        XCTAssertNil(state.selectedOption)
++        XCTAssertFalse(state.canConfirm)
++    }
++
++    func test_성수역_역방향_선택은_성공하고_확인_문구를_만든다() throws {
++        var state = StationSearchState()
++        let id = try reverseOptionID(state)
++        XCTAssertTrue(state.select(id))
++        XCTAssertEqual(state.confirmationText, "성수역 · 성수사거리 방면에서 출발")
++        XCTAssertTrue(state.canConfirm)
++        XCTAssertEqual(state.selectedOption?.position, StopPosition(index: 0, direction: -1))
++    }
++
++    func test_선택한_옵션이_검색_결과에서_빠지면_선택이_사라진다() throws {
++        var state = StationSearchState()
++        XCTAssertTrue(state.select(try reverseOptionID(state)))
++        state.query = "서울숲"
++        XCTAssertNil(state.selectedOption)
++        XCTAssertFalse(state.canConfirm)
++    }
++
++    func test_현재_결과에_없는_옵션_선택은_거부되고_기존_선택을_유지한다() throws {
++        var state = StationSearchState()
++        state.query = "서울숲"
++        let forestID = try XCTUnwrap(state.results.first { $0.position == StopPosition(index: 4, direction: 1) }).id
++        XCTAssertTrue(state.select(forestID))
++        let reverseID = try XCTUnwrap(StationCatalog.all.first { $0.position == StopPosition(index: 0, direction: -1) }).id
++        XCTAssertFalse(state.select(reverseID))
++        XCTAssertEqual(state.selectedOption?.position, StopPosition(index: 4, direction: 1))
++    }
++}

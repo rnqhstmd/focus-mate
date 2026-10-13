@@ -78,9 +78,9 @@ struct UITestBootstrap {
 
     /// `fail`은 모든 쓰기를 실패시킨다. 메인에서는 정류장 저장 시나리오를 적용하고, 발급 화면에서는 발급이 실패 저장소를 타게 둔다.
     @MainActor func applySaveScenario(to model: AppModel) throws {
-        guard shouldFailSave else { return }
-        if model.launchState == .ready(.cardEntry) { return }
-        guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
+        // 쓰기 실패 저장소는 모든 진입 상태에 주입된다. 시드 실패 저장 1회는 메인에서만 일으킨다(발급 화면은 발급이 실패 저장소를 탄다).
+        guard shouldFailSave, model.launchState == .ready(.main) else { return }
+        guard let original = model.snapshot else { throw SetupIssue.invalidSaveState }
         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
     }

@@ -1,0 +1,339 @@
+diff --git a/ios/FocusMate/JourneyPlanner.swift b/ios/FocusMate/JourneyPlanner.swift
+new file mode 100644
+index 0000000..48fd2d5
+--- /dev/null
++++ b/ios/FocusMate/JourneyPlanner.swift
+@@ -0,0 +1,41 @@
++import Foundation
++
++/// 고른 시간에 정확히 맞는 버스 한 대와 그 도착지.
++struct JourneyCandidate: Identifiable, Equatable {
++    let bus: BusLine
++    let minutes: Int
++    let stops: Int
++    let destination: String
++
++    var id: String { bus.id }
++    var distanceText: String { JourneyPlanner.distanceText(stops: stops) }
++    var accessibilityLabel: String { "\(bus.kind) \(bus.number)번, \(destination), \(minutes)분, \(stops)정류장" }
++}
++
++enum JourneyPlanner {
++    static let minuteRange: ClosedRange<Int> = 15...360
++    static let initialMinutes = 25
++    /// 정류장 하나의 거리(0.55km)를 0.01km 단위 정수로 둔다. 부동소수점 표기 오차를 피하기 위해서다.
++    private static let hundredthsKmPerStop = 55
++
++    static func clamp(_ minutes: Int) -> Int {
++        min(max(minutes, minuteRange.lowerBound), minuteRange.upperBound)
++    }
++
++    static func candidates(minutes: Int, from origin: StopPosition) -> [JourneyCandidate] {
++        guard minuteRange.contains(minutes) else { return [] }
++        return BusLine.all.filter { minutes % $0.minutesPerStop == 0 }.map { bus in
++            let stops = minutes / bus.minutesPerStop
++            return JourneyCandidate(bus: bus, minutes: minutes, stops: stops,
++                                    destination: RouteStops.name(at: origin.index + origin.direction * stops))
++        }
++    }
++
++    static func distanceText(stops: Int) -> String {
++        let hundredths = stops * hundredthsKmPerStop
++        let whole = hundredths / 100, fraction = hundredths % 100
++        if fraction == 0 { return "\(whole)km" }
++        if fraction % 10 == 0 { return "\(whole).\(fraction / 10)km" }
++        return "\(whole).\(String(format: "%02d", fraction))km"
++    }
++}
+diff --git a/ios/FocusMate/RouteData.swift b/ios/FocusMate/RouteData.swift
+new file mode 100644
+index 0000000..c48d37b
+--- /dev/null
++++ b/ios/FocusMate/RouteData.swift
+@@ -0,0 +1,88 @@
++import Foundation
++
++/// 순환 노선 위의 위치. `index`는 `RouteStops.all`의 순서, `direction`은 1(정방향) 또는 -1(역방향)이다.
++struct StopPosition: Equatable, Hashable {
++    let index: Int
++    let direction: Int
++}
++
++/// 웹 프로토타입과 같은 9개 가상 순환 정류장. 저장되는 `StationSnapshot.id`는 이 id다.
++enum RouteStops {
++    static let all: [(id: String, name: String)] = [
++        ("seongsu", "성수역"),
++        ("seongsuDong", "성수동"),
++        ("ttukseom", "뚝섬역"),
++        ("seongdongSportsCenter", "성동구민체육센터"),
++        ("seoulForest", "서울숲역"),
++        ("seoulForestGate", "서울숲 입구"),
++        ("seongsuBridgeNorth", "성수대교 북단"),
++        ("ttukseomHangangPark", "뚝섬한강공원"),
++        ("seongsuIntersection", "성수사거리"),
++    ]
++
++    static func wrap(_ offset: Int) -> Int {
++        ((offset % all.count) + all.count) % all.count
++    }
++
++    static func name(at index: Int) -> String { all[wrap(index)].name }
++
++    static func boundLabel(from position: StopPosition) -> String {
++        name(at: position.index + position.direction) + " 방면"
++    }
++
++    static func position(of station: StationSnapshot) -> StopPosition? {
++        guard let index = all.firstIndex(where: { $0.id == station.id }) else { return nil }
++        return StopPosition(index: index, direction: station.direction)
++    }
++}
++
++/// 첫 출발지 검색에 나오는 정류장·방면 한 건.
++struct StationOption: Identifiable, Equatable {
++    let id: String
++    let stopID: String
++    let position: StopPosition
++    let name: String
++    let aliases: [String]
++
++    var boundLabel: String { RouteStops.boundLabel(from: position) }
++    var snapshot: StationSnapshot { StationSnapshot(id: stopID, name: name, direction: position.direction) }
++
++    init(index: Int, direction: Int, aliases: [String]) {
++        let stop = RouteStops.all[index]
++        id = "\(stop.id):\(direction)"
++        stopID = stop.id
++        position = StopPosition(index: index, direction: direction)
++        name = stop.name
++        self.aliases = aliases
++    }
++}
++
++enum StationCatalog {
++    static let all: [StationOption] = [
++        StationOption(index: 0, direction: 1, aliases: ["성수", "서울숲"]),
++        StationOption(index: 0, direction: -1, aliases: ["성수", "건대"]),
++        StationOption(index: 4, direction: 1, aliases: ["서울숲", "성수"]),
++    ]
++
++    /// 앞뒤 공백을 지우고 대소문자를 무시해 이름·별칭·방면 문구 중 하나라도 부분 일치하면 결과에 넣는다.
++    static func search(_ query: String) -> [StationOption] {
++        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
++        guard !term.isEmpty else { return all }
++        return all.filter { option in
++            ([option.name, option.boundLabel] + option.aliases).contains { $0.lowercased().contains(term) }
++        }
++    }
++}
++
++struct BusLine: Identifiable, Equatable {
++    let id: String
++    let number: String
++    let kind: String
++    let minutesPerStop: Int
++
++    static let all: [BusLine] = [
++        BusLine(id: "2014", number: "2014", kind: "지선", minutesPerStop: 5),
++        BusLine(id: "302", number: "강남02", kind: "마을", minutesPerStop: 6),
++        BusLine(id: "421", number: "343", kind: "간선", minutesPerStop: 8),
++    ]
++}
+diff --git a/ios/FocusMateTests/JourneyPlannerTests.swift b/ios/FocusMateTests/JourneyPlannerTests.swift
+new file mode 100644
+index 0000000..108a726
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyPlannerTests.swift
+@@ -0,0 +1,107 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class JourneyPlannerTests: XCTestCase {
++    private let seongsuForward = StopPosition(index: 0, direction: 1)
++    private let seongsuReverse = StopPosition(index: 0, direction: -1)
++    private let seoulForest = StopPosition(index: 4, direction: 1)
++
++    private struct Row: Equatable {
++        let number: String
++        let destination: String
++        let stops: Int
++        let distance: String
++    }
++
++    private func rows(_ minutes: Int, _ origin: StopPosition) -> [Row] {
++        JourneyPlanner.candidates(minutes: minutes, from: origin).map {
++            Row(number: $0.bus.number, destination: $0.destination, stops: $0.stops, distance: $0.distanceText)
++        }
++    }
++
++    func test_120분은_버스_3건을_순서대로_반환한다() {
++        XCTAssertEqual(rows(120, seongsuForward), [
++            Row(number: "2014", destination: "성수대교 북단", stops: 24, distance: "13.2km"),
++            Row(number: "강남02", destination: "뚝섬역", stops: 20, distance: "11km"),
++            Row(number: "343", destination: "성수대교 북단", stops: 15, distance: "8.25km"),
++        ])
++    }
++
++    func test_24분은_2014를_제외하고_302와_421만_반환한다() {
++        XCTAssertEqual(rows(24, seongsuForward), [
++            Row(number: "강남02", destination: "서울숲역", stops: 4, distance: "2.2km"),
++            Row(number: "343", destination: "성동구민체육센터", stops: 3, distance: "1.65km"),
++        ])
++    }
++
++    func test_최소_15분은_2014_1건만_반환한다() {
++        XCTAssertEqual(rows(15, seongsuForward), [
++            Row(number: "2014", destination: "성동구민체육센터", stops: 3, distance: "1.65km"),
++        ])
++    }
++
++    func test_최대_360분은_순환을_돌아_3건을_반환한다() {
++        XCTAssertEqual(rows(360, seongsuForward), [
++            Row(number: "2014", destination: "성수역", stops: 72, distance: "39.6km"),
++            Row(number: "강남02", destination: "성수대교 북단", stops: 60, distance: "33km"),
++            Row(number: "343", destination: "성수역", stops: 45, distance: "24.75km"),
++        ])
++    }
++
++    func test_성수역_역방향_60분은_421을_제외한_2건을_반환한다() {
++        XCTAssertEqual(rows(60, seongsuReverse), [
++            Row(number: "2014", destination: "성수대교 북단", stops: 12, distance: "6.6km"),
++            Row(number: "강남02", destination: "성수사거리", stops: 10, distance: "5.5km"),
++        ])
++    }
++
++    func test_서울숲역_정방향_60분의_도착지는_뚝섬한강공원과_서울숲_입구다() {
++        let result = JourneyPlanner.candidates(minutes: 60, from: seoulForest)
++        XCTAssertEqual(result.map(\.bus.number), ["2014", "강남02"])
++        XCTAssertEqual(result.map(\.destination), ["뚝섬한강공원", "서울숲 입구"])
++    }
++
++    func test_성수역_정방향_25분은_2014_1건_서울숲_입구_5정류장이다() {
++        XCTAssertEqual(rows(25, seongsuForward), [
++            Row(number: "2014", destination: "서울숲 입구", stops: 5, distance: "2.75km"),
++        ])
++    }
++
++    func test_17분은_후보가_없다() {
++        XCTAssertEqual(JourneyPlanner.candidates(minutes: 17, from: seongsuForward), [])
++    }
++
++    func test_범위_밖_14분과_361분은_후보가_없다() {
++        XCTAssertEqual(JourneyPlanner.candidates(minutes: 14, from: seongsuForward), [])
++        XCTAssertEqual(JourneyPlanner.candidates(minutes: 361, from: seongsuForward), [])
++    }
++
++    func test_clamp는_범위_밖_값을_경계로_맞추고_범위_안_값은_유지한다() {
++        XCTAssertEqual(JourneyPlanner.clamp(14), 15)
++        XCTAssertEqual(JourneyPlanner.clamp(361), 360)
++        XCTAssertEqual(JourneyPlanner.clamp(60), 60)
++    }
++
++    func test_분_범위와_초기값은_15에서_360이고_초기값은_25다() {
++        XCTAssertEqual(JourneyPlanner.minuteRange, 15...360)
++        XCTAssertEqual(JourneyPlanner.initialMinutes, 25)
++    }
++
++    func test_distanceText는_끝_0을_제거하고_소수_둘째_자리까지_표기한다() {
++        XCTAssertEqual(JourneyPlanner.distanceText(stops: 5), "2.75km")
++        XCTAssertEqual(JourneyPlanner.distanceText(stops: 10), "5.5km")
++        XCTAssertEqual(JourneyPlanner.distanceText(stops: 20), "11km")
++    }
++
++    func test_접근성_레이블은_종류_번호_도착지_분_정류장_순서다() {
++        let first = JourneyPlanner.candidates(minutes: 60, from: seongsuForward).first
++        XCTAssertEqual(first?.accessibilityLabel, "지선 2014번, 성동구민체육센터, 60분, 12정류장")
++    }
++
++    func test_버스_노선_정의는_번호_종류_정류장당_분을_가진다() {
++        XCTAssertEqual(BusLine.all.map(\.number), ["2014", "강남02", "343"])
++        XCTAssertEqual(BusLine.all.map(\.kind), ["지선", "마을", "간선"])
++        XCTAssertEqual(BusLine.all.map(\.minutesPerStop), [5, 6, 8])
++    }
++}
+diff --git a/ios/FocusMateTests/StationCatalogTests.swift b/ios/FocusMateTests/StationCatalogTests.swift
+new file mode 100644
+index 0000000..f679998
+--- /dev/null
++++ b/ios/FocusMateTests/StationCatalogTests.swift
+@@ -0,0 +1,79 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class StationCatalogTests: XCTestCase {
++    private let seongsuForward = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
++    private let seongsuReverse = StationSnapshot(id: "seongsu", name: "성수역", direction: -1)
++    private let seoulForest = StationSnapshot(id: "seoulForest", name: "서울숲역", direction: 1)
++
++    private func snapshots(_ query: String) -> [StationSnapshot] {
++        StationCatalog.search(query).map(\.snapshot)
++    }
++
++    func test_서울숲_검색은_성수역_정방향과_서울숲역_2건을_반환한다() {
++        let result = snapshots("서울숲")
++        XCTAssertEqual(result.count, 2)
++        XCTAssertTrue(result.contains(seongsuForward))
++        XCTAssertTrue(result.contains(seoulForest))
++    }
++
++    func test_건대_검색은_성수역_역방향_1건을_반환한다() {
++        XCTAssertEqual(snapshots("건대"), [seongsuReverse])
++    }
++
++    func test_성수_검색은_3건_전부를_반환한다() {
++        let result = snapshots("성수")
++        XCTAssertEqual(result.count, 3)
++        XCTAssertTrue(result.contains(seongsuForward))
++        XCTAssertTrue(result.contains(seongsuReverse))
++        XCTAssertTrue(result.contains(seoulForest))
++    }
++
++    func test_앞뒤_공백이_있는_방면_문구_검색은_trim되어_역방향_1건을_반환한다() {
++        XCTAssertEqual(snapshots("  성수사거리  "), [seongsuReverse])
++        XCTAssertEqual(snapshots("  성수사거리  "), snapshots("성수사거리"))
++    }
++
++    func test_공백만_있는_검색어는_전체_3건을_반환한다() {
++        XCTAssertEqual(StationCatalog.search("   ").count, 3)
++    }
++
++    func test_빈_검색어는_전체_3건을_반환한다() {
++        XCTAssertEqual(StationCatalog.search("").count, 3)
++    }
++
++    func test_카탈로그는_3건이며_순서가_성수역_정방향_성수역_역방향_서울숲역이다() {
++        XCTAssertEqual(StationCatalog.all.map(\.snapshot), [seongsuForward, seongsuReverse, seoulForest])
++    }
++
++    func test_성수역_역방향_옵션의_snapshot은_id_seongsu_이름_성수역_방향_음수1이다() {
++        let option = StationCatalog.all.first { $0.position == StopPosition(index: 0, direction: -1) }
++        XCTAssertEqual(option?.snapshot, StationSnapshot(id: "seongsu", name: "성수역", direction: -1))
++    }
++
++    func test_옵션의_방면_문구는_다음_정류장_이름을_사용한다() {
++        let labels = StationCatalog.all.map(\.boundLabel)
++        XCTAssertEqual(labels, ["성수동 방면", "성수사거리 방면", "서울숲 입구 방면"])
++    }
++
++    func test_position_of는_id로_찾고_direction은_저장값을_유지한다() {
++        let snapshot = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
++        XCTAssertEqual(RouteStops.position(of: snapshot), StopPosition(index: 4, direction: -1))
++    }
++
++    func test_position_of는_알_수_없는_id면_nil을_반환한다() {
++        let snapshot = StationSnapshot(id: "unknown", name: "없음", direction: 1)
++        XCTAssertNil(RouteStops.position(of: snapshot))
++    }
++
++    func test_wrap은_음수와_9이상_오프셋을_순환시킨다() {
++        XCTAssertEqual(RouteStops.wrap(-1), 8)
++        XCTAssertEqual(RouteStops.wrap(9), 0)
++        XCTAssertEqual(RouteStops.wrap(72), 0)
++    }
++
++    func test_역방향_성수역의_boundLabel은_성수사거리_방면이다() {
++        XCTAssertEqual(RouteStops.boundLabel(from: StopPosition(index: 0, direction: -1)), "성수사거리 방면")
++    }
++}

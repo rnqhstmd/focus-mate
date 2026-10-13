@@ -24,3 +24,4 @@ security-auditor R2: CRITICAL 0 · HIGH 0 · MEDIUM 3 잔존 (신규 0). 1회차
 - [MEDIUM 잔존→유예] #4 HarnessUITests 운영 저장소 사용 — `--fm-ui-test-id` 추가는 후속 정리(테스트 하네스, Phase1 헬퍼 통합과 함께)
 - [MEDIUM 잔존→이관] #5 issuedAt 오프셋·소수초·극단값 — PRD 가정 A11, W13 이관
 reviewer R2: SPEC PASS (AC 21/21) · QUALITY PASS · 1회차 Important 2건 ADDRESSED · 신규 Minor 2
+- [기존 실패 — W01 무관] LargeTextUITests.testTimeScreenAtLargestTextSizeKeepsProceedReachableAndCompletesSixtyMinuteFlow (W02 시간 선택 화면, XXXL에서 후보 탭 후 진행 버튼이 "버스와 도착지를 선택하세요"로 남음). origin/main(2c40748) 단독 실행에서도 동일하게 실패 확인 — W01 병합과 무관. 사용자 "다 진행" 지시로 진행, W02 후속 수정 필요 (complete/병합 후 검증, 2026-10-14)

@@ -3,9 +3,10 @@ import Observation
 
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
-    case preparation, records, settings, profile
+    case preparation, records, settings, profile, time
     var title: String {
         switch self {
+        case .time: "시간 선택"
         case .preparation: "여행 준비"
         case .records: "기록"
         case .settings: "설정"
@@ -24,6 +25,7 @@ final class AppModel {
     private(set) var supplementFailure: StorageIssue?
     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
     private var isHoldingIssuedCard = false
+    var journeyPlan = JourneyPlanDraft()
     private(set) var recoveryFailure: StorageRecoveryIssue?
     private(set) var isRecovering = false
     private(set) var hasAttemptedCleanup = false

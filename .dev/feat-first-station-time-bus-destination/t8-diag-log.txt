@@ -1,0 +1,39 @@
+getpwuid_r did not find a match for uid 501
+Filtering the log data using "composedMessage CONTAINS "FMDIAG""
+Timestamp               Ty Process[PID:TID]
+2026-10-13 23:25:48.176 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=26 clamped=26 prev=25 sel=nil
+2026-10-13 23:25:48.350 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=27 clamped=27 prev=26 sel=nil
+2026-10-13 23:25:48.445 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=28 clamped=28 prev=27 sel=nil
+2026-10-13 23:25:48.532 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=29 clamped=29 prev=28 sel=nil
+2026-10-13 23:25:48.614 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=30 clamped=30 prev=29 sel=nil
+2026-10-13 23:25:48.712 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=31 clamped=31 prev=30 sel=nil
+2026-10-13 23:25:48.816 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=32 clamped=32 prev=31 sel=nil
+2026-10-13 23:25:48.860 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=33 clamped=33 prev=32 sel=nil
+2026-10-13 23:25:48.950 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=34 clamped=34 prev=33 sel=nil
+2026-10-13 23:25:49.043 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=35 clamped=35 prev=34 sel=nil
+2026-10-13 23:25:49.121 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=36 clamped=36 prev=35 sel=nil
+2026-10-13 23:25:49.224 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=37 clamped=37 prev=36 sel=nil
+2026-10-13 23:25:49.267 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=38 clamped=38 prev=37 sel=nil
+2026-10-13 23:25:49.357 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=39 clamped=39 prev=38 sel=nil
+2026-10-13 23:25:49.404 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=40 clamped=40 prev=39 sel=nil
+2026-10-13 23:25:49.523 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=41 clamped=41 prev=40 sel=nil
+2026-10-13 23:25:49.579 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=42 clamped=42 prev=41 sel=nil
+2026-10-13 23:25:49.693 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=43 clamped=43 prev=42 sel=nil
+2026-10-13 23:25:49.801 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=44 clamped=44 prev=43 sel=nil
+2026-10-13 23:25:49.890 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=45 clamped=45 prev=44 sel=nil
+2026-10-13 23:25:49.920 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=46 clamped=46 prev=45 sel=nil
+2026-10-13 23:25:50.021 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=47 clamped=47 prev=46 sel=nil
+2026-10-13 23:25:50.108 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=48 clamped=48 prev=47 sel=nil
+2026-10-13 23:25:50.149 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=49 clamped=49 prev=48 sel=nil
+2026-10-13 23:25:50.248 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=50 clamped=50 prev=49 sel=nil
+2026-10-13 23:25:50.344 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=51 clamped=51 prev=50 sel=nil
+2026-10-13 23:25:50.444 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=52 clamped=52 prev=51 sel=nil
+2026-10-13 23:25:50.525 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=53 clamped=53 prev=52 sel=nil
+2026-10-13 23:25:50.553 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=54 clamped=54 prev=53 sel=nil
+2026-10-13 23:25:50.693 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=55 clamped=55 prev=54 sel=nil
+2026-10-13 23:25:50.798 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=56 clamped=56 prev=55 sel=nil
+2026-10-13 23:25:50.834 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=57 clamped=57 prev=56 sel=nil
+2026-10-13 23:25:50.942 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=58 clamped=58 prev=57 sel=nil
+2026-10-13 23:25:51.019 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=59 clamped=59 prev=58 sel=nil
+2026-10-13 23:25:51.120 Df FocusMate[38337:f5acdd] (Foundation) FMDIAG setMinutes in=60 clamped=60 prev=59 sel=nil
+Child process terminated with signal 15: Terminated

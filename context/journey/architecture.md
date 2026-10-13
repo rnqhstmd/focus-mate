@@ -4,7 +4,7 @@
 
 ## 현재 시스템 구조
 
-제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. Swift는 Phase 1 앱 기반(`ios/FocusMate`: 진입 분기·기본 화면 왕복·`app-state.json` 버전 1 저장)만 있고 이 도메인의 네이티브 기능은 아직 없다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
+제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. Swift는 Phase 1 앱 기반(`ios/FocusMate`: 진입 분기·기본 화면 왕복)과 `app-state.json` 버전 2 저장(W00) 위에 이 도메인의 첫 네이티브 기능(W02)이 있다: 순수 규칙 `RouteData`(9개 순환 정류장·카탈로그 3건·버스 3종)·`JourneyPlanner`(후보·도착지·거리), 화면 상태 값 `StationSearchState`·`JourneyPlanDraft`, 저장·이동 `AppModel+JourneyStart`(최신 스냅샷 → `updatingStage` → `AppModel.save`), 화면 `InitialStationSearchView`·`TimeSelectionView`·`DestinationScreen`. 여정 선택(`JourneySelection`)은 실행 중 메모리에만 둔다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
 
 주요 현재 함수/경계: selectTime/currentTimeJourney, saveTag/renderPreparationTags, chooseSound/applySound 및 재생 수명, syncPreparation, completeFareTag, beginActiveJourney/checkpointJourney, show/tick, updateCamera.
 
@@ -27,4 +27,4 @@ SwiftUI 화면 상태와 실제 선택 분 타이머·앱 생명주기, MapKit �
 
 ## 개발 단계 연결
 
-[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 Phase 1 앱 기반만 있으며 이 도메인의 네이티브 기능은 아직 없습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.
+[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 Phase 1 앱 기반·저장 버전 2와 W02(첫 출발지·시간 선택)까지 있습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.

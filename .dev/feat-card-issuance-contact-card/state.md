@@ -1,8 +1,8 @@
 phase: complete
 status: in_progress
 pipeline: gx-tdd
-verify-status: passed
-verify-fingerprint: "f5b3c4e:f3893894ec2e"
+verify-status: pending
+verify-fingerprint: ""
 model-profile: standard
 mode: all
 intent-source: user-selection
@@ -30,6 +30,7 @@ steps:
     - "RGR T4 (AC-5/17/18/19 로직)": { red: completed, test-file: ios/FocusMateTests/CardIssuanceControllerTests.swift, test-file-hash: 311f6e0b91e4b62f19d7b4264e09d9c4db9c09a2, aux-test-files: [ios/FocusMateTests/IssuanceHapticPatternTests.swift 8ea7e33cf3e3aa24927816c3ab66044e318d224d, ios/FocusMateTests/CardIssuanceTestDoubles.swift 7b84a42bb517eeb81c1eada9357c74bcaa99cb2b], test-count: 50, report: reports/t4-impl.md, impl: completed, review: completed, review-report: reports/t4-review.md, deferred-minors: 6 }
     - "RGR T5 (AC-1~7, AC-10, AC-14 UI, AC-16, AC-19, AC-20)": { red: completed, test-file: ios/FocusMateUITests/CardIssuanceFlowTests.swift, test-file-hash: 5e412fe29d112363bf6406081c7bfe5e2dfccea8, aux-test-files: [ios/FocusMateUITests/CardStorageFlowTests.swift b0388fe5c5fd87fd8fdbf3ccf9af79c4a13502a7, ios/FocusMateUITests/UITestLaunchSupport.swift bb5ff4925c620fd3bafe037d508f2629da5f2e73], test-count: 142, report: reports/t5-impl.md, impl: completed, fix-round: 2/5, review: completed, review-report: reports/t5-review.md, deferred-minors: 6 }
 execution-log:
+  - { phase: complete, agent: inline, result: "origin/main(W13·W02) 2회 병합, 충돌 해결(AppModel·AppSnapshot·RootView·UITestBootstrap·plan.md), W13 단위 테스트 1건 ready 시드 기대값 갱신. 전체 unit 254 pass, UI 66 중 1 실패(LargeTextUITests — main에서도 실패, W01 무관)" }
   - { phase: complete, agent: gx-commit, result: "f8025d5 feat: 카드 발급과 공통 카드 뷰 추가 (62 files)" }
   - { phase: complete, agent: product-owner, result: "인수 검증 ACCEPT — [Must] 15/15, AC 21/21, AC-19M·진동 체감 출시 전 수동 확인. FR-3은 부분 완료(W04 잔여)" }
   - { phase: complete, gate: verify, result: "gx-verify 통과 — node 31/31, iOS unit 113 + UI 29 실패 0, 빌드 2종 성공, 경고 0 (기준선 3), 2026-10-13T23:51:30" }

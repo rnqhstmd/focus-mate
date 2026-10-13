@@ -1,0 +1,25 @@
+ ios/FocusMate/AppModel+JourneyStart.swift          |  47 ++++
+ ios/FocusMate/AppModel.swift                       |   4 +-
+ ios/FocusMate/DestinationScreen.swift              |  46 ++++
+ ios/FocusMate/InitialStationSearchView.swift       |  58 +++++
+ ios/FocusMate/JourneyPlanDraft.swift               |  66 ++++++
+ ios/FocusMate/JourneyPlanner.swift                 |  41 ++++
+ ios/FocusMate/RootView.swift                       |  20 +-
+ ios/FocusMate/RouteData.swift                      |  88 ++++++++
+ ios/FocusMate/StationSearchState.swift             |  18 ++
+ ios/FocusMate/TimeSelectionView.swift              |  80 +++++++
+ ios/FocusMate/UITestBootstrap.swift                |   5 +-
+ ios/FocusMateTests/JourneyPlanDraftTests.swift     | 137 ++++++++++++
+ ios/FocusMateTests/JourneyPlannerTests.swift       | 107 +++++++++
+ ios/FocusMateTests/JourneyStartModelTests.swift    | 242 +++++++++++++++++++++
+ ios/FocusMateTests/StationCatalogTests.swift       |  79 +++++++
+ ios/FocusMateTests/StationSearchStateTests.swift   |  61 ++++++
+ .../FirstStationSearchUITests.swift                | 175 +++++++++++++++
+ ios/FocusMateUITests/LargeTextUITests.swift        | 121 +++++++++++
+ ios/FocusMateUITests/Phase1FlowTests.swift         |   3 +-
+ ios/FocusMateUITests/PreparationFlowUITests.swift  | 218 +++++++++++++++++++
+ .../StationSaveFailureUITests.swift                |  98 +++++++++
+ ios/FocusMateUITests/TimeSelectionUITests.swift    | 187 ++++++++++++++++
+ 22 files changed, 1881 insertions(+), 20 deletions(-)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라.

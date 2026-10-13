@@ -25,3 +25,5 @@ security-auditor R2: CRITICAL 0 · HIGH 0 · MEDIUM 3 잔존 (신규 0). 1회차
 - [MEDIUM 잔존→이관] #5 issuedAt 오프셋·소수초·극단값 — PRD 가정 A11, W13 이관
 reviewer R2: SPEC PASS (AC 21/21) · QUALITY PASS · 1회차 Important 2건 ADDRESSED · 신규 Minor 2
 - [기존 실패 — W01 무관] LargeTextUITests.testTimeScreenAtLargestTextSizeKeepsProceedReachableAndCompletesSixtyMinuteFlow (W02 시간 선택 화면, XXXL에서 후보 탭 후 진행 버튼이 "버스와 도착지를 선택하세요"로 남음). origin/main(2c40748) 단독 실행에서도 동일하게 실패 확인 — W01 병합과 무관. 사용자 "다 진행" 지시로 진행, W02 후속 수정 필요 (complete/병합 후 검증, 2026-10-14)
+- [기존 경고 — W01 무관] JourneyStartModelTests.swift:128 `choose(busID:from:)` 결과 미사용 경고(W02, origin/main 2c40748 유입). warnings-baseline(3)은 W02 병합 전 측정이라 비교에서 제외하고 진행 (complete/병합 후 검증, 2026-10-14)
+- [verify 증거 구성] 병합 후 iOS 전체 테스트(unit 254 · UI 66, 실패 1건은 위 기존 실패)는 d697ab1과 동일 코드 트리에서 실행, 이후 변경은 CardStorageFlowTests 경고 수정 1건(해당 파일 7/7 재실행 통과) + node test/build·iOS build 신선 실행

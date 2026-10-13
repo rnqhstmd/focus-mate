@@ -1,8 +1,8 @@
 phase: complete
 status: in_progress
 pipeline: gx-tdd
-verify-status: pending
-verify-fingerprint: ""
+verify-status: passed
+verify-fingerprint: "b819ee7:a74a28c48b42"
 model-profile: standard
 mode: all
 intent-source: user-selection
@@ -19,7 +19,7 @@ last-known-head: f5b3c4e
 auto-stashed: false
 warnings-baseline: 3
 config-setup-attempts: 0
-current-step: "complete: Step 2 PR"
+current-step: "complete: Step 3.5 plan·PR"
 phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: in_progress }
 steps:
   implement:
@@ -30,6 +30,7 @@ steps:
     - "RGR T4 (AC-5/17/18/19 로직)": { red: completed, test-file: ios/FocusMateTests/CardIssuanceControllerTests.swift, test-file-hash: 311f6e0b91e4b62f19d7b4264e09d9c4db9c09a2, aux-test-files: [ios/FocusMateTests/IssuanceHapticPatternTests.swift 8ea7e33cf3e3aa24927816c3ab66044e318d224d, ios/FocusMateTests/CardIssuanceTestDoubles.swift 7b84a42bb517eeb81c1eada9357c74bcaa99cb2b], test-count: 50, report: reports/t4-impl.md, impl: completed, review: completed, review-report: reports/t4-review.md, deferred-minors: 6 }
     - "RGR T5 (AC-1~7, AC-10, AC-14 UI, AC-16, AC-19, AC-20)": { red: completed, test-file: ios/FocusMateUITests/CardIssuanceFlowTests.swift, test-file-hash: 5e412fe29d112363bf6406081c7bfe5e2dfccea8, aux-test-files: [ios/FocusMateUITests/CardStorageFlowTests.swift b0388fe5c5fd87fd8fdbf3ccf9af79c4a13502a7, ios/FocusMateUITests/UITestLaunchSupport.swift bb5ff4925c620fd3bafe037d508f2629da5f2e73], test-count: 142, report: reports/t5-impl.md, impl: completed, fix-round: 2/5, review: completed, review-report: reports/t5-review.md, deferred-minors: 6 }
 execution-log:
+  - { phase: complete, gate: verify (병합 후), result: "node 31/31·build ✓, iOS build ✓, iOS unit 254 · UI 65/66(LargeTextUITests 1건 main 기존 실패 — 위험 수용), W01 신규 경고 0(수정), W02 기존 경고 1 — 위험 수용" }
   - { phase: complete, agent: inline, result: "origin/main(W13·W02) 2회 병합, 충돌 해결(AppModel·AppSnapshot·RootView·UITestBootstrap·plan.md), W13 단위 테스트 1건 ready 시드 기대값 갱신. 전체 unit 254 pass, UI 66 중 1 실패(LargeTextUITests — main에서도 실패, W01 무관)" }
   - { phase: complete, agent: gx-commit, result: "f8025d5 feat: 카드 발급과 공통 카드 뷰 추가 (62 files)" }
   - { phase: complete, agent: product-owner, result: "인수 검증 ACCEPT — [Must] 15/15, AC 21/21, AC-19M·진동 체감 출시 전 수동 확인. FR-3은 부분 완료(W04 잔여)" }

@@ -6,10 +6,10 @@
 |---|---|---|---|
 | 빗소리 | rain-windshield-cc0-v1.wav | [Rain on car windshield · 1295](https://bigsoundbank.com/rain-on-car-windshield-s1295.html) | 48 kHz, mono, 24-bit · 차량 안에서 유리에 떨어지는 비 |
 | 숲 소리 | forest-edge-cc0-v1.wav | [Forest: On the Edge · 0905](https://bigsoundbank.com/forest-on-the-edge-s0905.html) | 48 kHz, stereo, 16-bit · 숲 가장자리의 새·바람 |
-| 버스 주행 | bus-london-cc0-v1.wav | [London bus · 0644](https://bigsoundbank.com/london-bus-s0644.html) | 48 kHz, stereo, 16-bit · 런던 2층 버스 차내 |
+| 버스 엔진 | bus-cabin-hum-v1.wav | 자체 합성 (`scripts/generate-bus-cabin-hum.py`) | 48 kHz, stereo, 16-bit · 엔진 배음·도로 럼블·약한 바람소리 |
 | 핑크 노이즈 | pink-noise-cc0-v1.wav | [Pink Noise · 0432](https://bigsoundbank.com/pink-noise-s0432.html) | 44.1 kHz, stereo, 16-bit · 스튜디오 노이즈 샘플 |
 
-빗소리·숲·버스는 실제 녹음이며, 핑크 노이즈는 의도적인 잡음 샘플이다. 서울 노선 현장 녹음으로 표현하지 않는다. 기존 ‘화이트 노이즈’ 선택은 ‘핑크 노이즈’로 바꿨다.
+빗소리·숲은 실제 녹음, 버스 엔진은 합성음이며, 핑크 노이즈는 의도적인 잡음 샘플이다. 서울 노선 현장 녹음으로 표현하지 않는다. 기존 ‘화이트 노이즈’ 선택은 ‘핑크 노이즈’로 바꿨다.
 
 ## 앱용 편집
 
@@ -20,3 +20,7 @@
 현재 앱 파일의 클리핑 표본은 0이다. 실제 재생 함수를 Web Audio로 두 바퀴 렌더링했고, 반복 경계의 변화량이 일반 인접 표본 변화의 99백분위 범위 안에 있는지 확인했다. 시작 120 ms·중지 60 ms의 음량 페이드도 검사했다. 자세한 값은 `audio-stats.json`과 `.impeccable/review/recorded-audio/verification.json`에 있다. 이것은 디코딩·렌더링·수치 검사이며 스피커·이어폰으로 직접 청취한 검증은 아니다.
 
 재현: `node scripts/download-ambient-sources.cjs` → `python scripts/prepare-recorded-ambience.py`. Chrome·Playwright, FFmpeg, NumPy를 사용한다. 이전 `generate-travel-audio.py`는 과거 합성 시안 생성기이며 현재 앱에서 사용하지 않는다.
+
+## 버스 소리 교체 — 2026-10-13
+
+이전 ‘버스 주행’(London bus · 0644) 녹음에는 승객 목소리와 돌발음이 섞여 백색소음으로 쓰기 어려웠다. 300–3400 Hz 대역의 음절 리듬(2–8 Hz 변조) 지표가 0.417로 다른 소리(0.23–0.33)보다 높았고, 50 ms 구간의 7%가 중앙값의 2.2배를 넘는 돌발 구간이었다. 앱 파일에서 제거하고 목소리가 들어갈 수 없는 합성 객실 엔진음으로 바꿨다. 새 파일은 같은 지표가 0.249, 돌발 구간 0%, 음성 대역 에너지 0.1%이며 RMS -26 dBFS·피크 0.204·40초 반복이다. 원본 녹음 기록은 sources.json에 보존한다. 수치 검사이며 스피커 청취 검증은 아니다.

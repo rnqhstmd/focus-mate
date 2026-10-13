@@ -21,7 +21,7 @@ const out=path.resolve(__dirname,'../.impeccable/review/main-welcome');fs.mkdirS
  results.push('first-use and four time periods; all nine saved stations');
  // The actual alighting action must update the greeting from its reached station.
  await page.evaluate(()=>{startOffset=0;onboarded=true;hasTaskSelection=true;selectedTag=pendingTag='read';draftTask=taskText='한 챕터 읽기';$('taskInput').value=draftTask;selectTime(25);show('alighting')});
- const landing=await page.evaluate(()=>stopIndex(totalStops));await page.locator('#alightCard').click();await page.waitForTimeout(1100);await page.locator('#arrivalHome').click();
+ const landing=await page.evaluate(()=>stopIndex(totalStops));await page.locator('#alightCard').press('Enter');await page.waitForTimeout(1100);await page.locator('#arrivalHome').click();
  assert.equal(await page.evaluate(()=>scene),'main');assert.equal(await page.evaluate(()=>startOffset),landing);
  assert((await page.locator('#mainWelcomeTitle').innerText()).startsWith(await page.evaluate(()=>stationWelcomes[startOffset].place+'에서,')));
  await page.reload();assert.equal(await page.evaluate(()=>startOffset),landing);assert((await page.locator('#mainWelcomeTitle').innerText()).includes('에서,'));

@@ -11,7 +11,7 @@ import wave
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'designs/final/assets/audio/bus-cabin-hum-v1.wav'
+OUT = ROOT / 'designs/audio-sources/bus-cabin-hum-v1.wav'
 RATE, SECONDS, FADE = 48000, 40, 2
 TARGET_RMS_DB = -26.0
 rng = np.random.default_rng(20261013)

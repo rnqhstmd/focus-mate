@@ -14,10 +14,10 @@
       "designs/final/bus-guide.html",
       "designs/final/assets/audio/SOURCE.md",
       "designs/final/assets/audio/audio-stats.json",
-      "designs/final/assets/audio/bus-cabin-hum-v1.wav",
-      "designs/final/assets/audio/forest-edge-cc0-v1.wav",
-      "designs/final/assets/audio/pink-noise-cc0-v1.wav",
-      "designs/final/assets/audio/rain-windshield-cc0-v1.wav",
+      "designs/final/assets/audio/travel-bus-v2.wav",
+      "designs/final/assets/audio/travel-forest-v2.wav",
+      "designs/final/assets/audio/travel-subway-v2.wav",
+      "designs/final/assets/audio/travel-bus-rain-v2.wav",
       "designs/final/assets/audio/sources.json",
       "designs/final/assets/bus/LUCIDE-LICENSE.txt",
       "designs/final/assets/bus/SOURCE.md",
@@ -61,20 +61,20 @@
         "target": "designs/prototype/assets/audio/audio-stats.json"
       },
       {
-        "source": "designs/final/assets/audio/bus-cabin-hum-v1.wav",
-        "target": "designs/prototype/assets/audio/bus-cabin-hum-v1.wav"
+        "source": "designs/final/assets/audio/travel-bus-v2.wav",
+        "target": "designs/prototype/assets/audio/travel-bus-v2.wav"
       },
       {
-        "source": "designs/final/assets/audio/forest-edge-cc0-v1.wav",
-        "target": "designs/prototype/assets/audio/forest-edge-cc0-v1.wav"
+        "source": "designs/final/assets/audio/travel-forest-v2.wav",
+        "target": "designs/prototype/assets/audio/travel-forest-v2.wav"
       },
       {
-        "source": "designs/final/assets/audio/pink-noise-cc0-v1.wav",
-        "target": "designs/prototype/assets/audio/pink-noise-cc0-v1.wav"
+        "source": "designs/final/assets/audio/travel-subway-v2.wav",
+        "target": "designs/prototype/assets/audio/travel-subway-v2.wav"
       },
       {
-        "source": "designs/final/assets/audio/rain-windshield-cc0-v1.wav",
-        "target": "designs/prototype/assets/audio/rain-windshield-cc0-v1.wav"
+        "source": "designs/final/assets/audio/travel-bus-rain-v2.wav",
+        "target": "designs/prototype/assets/audio/travel-bus-rain-v2.wav"
       },
       {
         "source": "designs/final/assets/audio/sources.json",

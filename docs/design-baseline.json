@@ -14,7 +14,7 @@
       "designs/final/bus-guide.html",
       "designs/final/assets/audio/SOURCE.md",
       "designs/final/assets/audio/audio-stats.json",
-      "designs/final/assets/audio/bus-london-cc0-v1.wav",
+      "designs/final/assets/audio/bus-cabin-hum-v1.wav",
       "designs/final/assets/audio/forest-edge-cc0-v1.wav",
       "designs/final/assets/audio/pink-noise-cc0-v1.wav",
       "designs/final/assets/audio/rain-windshield-cc0-v1.wav",
@@ -61,8 +61,8 @@
         "target": "designs/prototype/assets/audio/audio-stats.json"
       },
       {
-        "source": "designs/final/assets/audio/bus-london-cc0-v1.wav",
-        "target": "designs/prototype/assets/audio/bus-london-cc0-v1.wav"
+        "source": "designs/final/assets/audio/bus-cabin-hum-v1.wav",
+        "target": "designs/prototype/assets/audio/bus-cabin-hum-v1.wav"
       },
       {
         "source": "designs/final/assets/audio/forest-edge-cc0-v1.wav",

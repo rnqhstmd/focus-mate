@@ -5,10 +5,12 @@
 | 자료 | 용도 |
 |---|---|
 | [CURRENT-STATE](CURRENT-STATE.md) | 최신 구현과 검증 시점·한계 |
-| [DEVELOPMENT-PHASES](DEVELOPMENT-PHASES.md) | Phase 0~6의 선행 조건·진입/완료 기준·미착수 상태 |
+| [DEVELOPMENT-PHASES](DEVELOPMENT-PHASES.md) | Phase 0~6의 범위·원장 ID·진입/완료 기준·현재 상태 |
+| [작업 계획](../.dev/plan.md) | Phase 2~6을 나눈 W 작업·의존·착수 조건 |
 | [도메인 컨텍스트](../context/README.md) | 여정·카드·기록·환경설정, 요구사항 원장 |
 | [MVP](MVP.md) | 핵심 가치·웹 완료·iOS 개발·후순위 범위 |
 | [FLOWS](FLOWS.md) | 화면별 성공·취소·오류·저장 계약 |
+| [BUS-TYPES](BUS-TYPES.md) | 버스 유형별 앱 색상표(공식 색 아님)·실제 노선 코드 매핑 미확정 항목 |
 | [저장소 README](../README.md) | 실행·이어서 작업하기 |
 | [디자인 안내](../designs/README.md) | 최신 HTML/Pen과 이전 스냅샷 구분 |
 | [보고서 목록](../reports/README.md) | 조사·변경 결정·당시 검증 증거 |

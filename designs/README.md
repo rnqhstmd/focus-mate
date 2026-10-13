@@ -50,3 +50,7 @@
 최신 후속 변경: [승차 단말기 정리](../reports/boarding-reader-refinement-2026-10-12.md). 브라우저 검증 이전/이후 범위는 현재 상태 문서를 확인합니다.
 
 현재 편집 보드 내보내기: [42개 상태 PDF](revised/pen-updates/focus-mate-current-42.pdf) · [전체 흐름 PNG](revised/pen-updates/focus-mate-current-flow.png).
+
+## Pen 파일 관리 — 2026-10-13
+
+Pen 원본은 저장소의 [focus-mate.pen](focus-mate.pen) 하나로 관리한다. Pencil에서는 이 파일을 직접 열어 편집하고(파일 → 열기), 편집 후 저장하면 그대로 git 변경으로 잡힌다. 이미지 참조는 `.pen` 기준 상대 경로이므로 `assets/next-stop/`(기존 시안·승차권 질감)와 `images/`(생성 이미지)를 같은 위치에 둔다. `.gitattributes`가 `*.pen`을 바이너리로 다루므로 줄 단위 비교는 되지 않는다. 변경 내용은 `revised/README.md`와 `revised/pen-updates/` 렌더로 기록한다. Pencil 앱 내부 문서 폴더(`~/.pencil/documents/…`)의 사본은 원본이 아니다.

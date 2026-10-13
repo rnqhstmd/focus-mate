@@ -4,10 +4,10 @@ const out=path.resolve(__dirname,'../.impeccable/review/recorded-audio');fs.mkdi
 (async()=>{
  const browser=await chromium.launch(browserOptions());
  const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[],requests=[];
- page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/cc0-v1\.wav/.test(r.url()))requests.push(r.url())});
+ page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/(cc0-v1|bus-cabin-hum-v1)\.wav/.test(r.url()))requests.push(r.url())});
  await page.goto('http://127.0.0.1:8796/animation-preview.html?scene=sound');
  const results=[];
- for(const [id,label,channels,duration] of [['white','핑크 노이즈',2,30],['rain','빗소리',1,40],['forest','숲 소리',2,40],['bus','버스 주행',2,40]]){
+ for(const [id,label,channels,duration] of [['white','핑크 노이즈',2,30],['rain','빗소리',1,40],['forest','숲 소리',2,40],['bus','버스 엔진',2,40]]){
   await page.getByRole('button',{name:'◖ '+label,exact:true}).click();await page.locator('#soundPreview').click();
   await page.waitForFunction(()=>previewNodes.length===2&&Math.abs(previewNodes[1].gain.value-.65)<1e-6);
   const decoded=await page.evaluate(()=>({state:audioContext.state,loop:previewNodes[0].loop,channels:previewNodes[0].buffer.numberOfChannels,duration:previewNodes[0].buffer.duration,gain:previewNodes[1].gain.value}));

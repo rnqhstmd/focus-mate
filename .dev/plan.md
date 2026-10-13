@@ -15,7 +15,7 @@
 | W10 | [P5] 카드 꾸미기 | card | card FR-4, NFR-2 | W01 | - | 대기 |
 | W11 | [P5] 마이페이지 | card | card FR-5 | W01, W08 | - | 대기 |
 | W12 | [P5] 접근성·동작 설정 | preferences | preferences FR-3 | - | - | 폐기 |
-| W13 | [P5] 저장 오류 복구 | preferences | preferences FR-4 | W00 | - | 대기 |
+| W13 | [P5] 저장 오류 복구 | preferences | preferences FR-4 | W00 | codex/feat-storage-error-recovery | 완료 |
 | W14 | [P6] 실기기 QA·출시 준비 | 통합 | journey NFR-2(실기기), preferences NFR-2 | W04, W06, W07, W09, W10, W11, W13 | - | 대기 |
 
 요구사항 ID는 `context/{도메인}/status.md`의 원장을 따른다. `[P2]`는 [개발 단계](../docs/DEVELOPMENT-PHASES.md)의 Phase다.

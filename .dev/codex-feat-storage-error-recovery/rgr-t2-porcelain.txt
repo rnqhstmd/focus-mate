@@ -1,0 +1,5 @@
+ M ios/FocusMate/AppModel.swift
+ M ios/FocusMate/LocalSnapshotStore.swift
+?? .dev/codex-feat-storage-error-recovery/
+?? ios/FocusMateTests/AppRecoveryTests.swift
+?? ios/FocusMateTests/StorageRecoveryTests.swift

@@ -20,18 +20,69 @@ final class AppModel {
     private(set) var snapshot: AppSnapshot?
     var path: [Destination] = []
     private(set) var saveFailure: StorageIssue?
+    private(set) var recoveryFailure: StorageRecoveryIssue?
+    private(set) var isRecovering = false
+    private(set) var hasAttemptedCleanup = false
+    private var cleanupSource: RecoverySource?
+    var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
     private let store: LocalSnapshotStore
     @ObservationIgnored private var hasLoaded = false
     init(store: LocalSnapshotStore) { self.store = store }
 
+    func retryLoad() {
+        guard case .failed = launchState, cleanupSource == nil, !isRecovering else { return }
+        recoveryFailure = nil
+        isRecovering = true
+        defer { isRecovering = false }
+        loadSnapshot()
+    }
+
+    func requestCleanup() {
+        guard case .failed = launchState, cleanupSource == nil, !isRecovering else { return }
+        recoveryFailure = nil
+        isRecovering = true
+        defer { isRecovering = false }
+        cleanupSource = store.recoverySource()
+    }
+
+    func cancelCleanup() {
+        guard !isRecovering else { return }
+        cleanupSource = nil
+    }
+
+    @discardableResult func confirmCleanup() -> Bool {
+        guard case .failed = launchState, let source = cleanupSource, !isRecovering else { return false }
+        cleanupSource = nil
+        hasAttemptedCleanup = true
+        isRecovering = true
+        defer { isRecovering = false }
+        do {
+            _ = try store.backupAndClear(expectedSource: source)
+            snapshot = .empty
+            launchState = .ready(.cardEntry)
+            path = []
+            saveFailure = nil
+            recoveryFailure = nil
+            return true
+        } catch let issue as StorageRecoveryIssue { recoveryFailure = issue }
+        catch { recoveryFailure = .backupFailed }
+        return false
+    }
+
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
+        loadSnapshot()
+    }
+
+    private func loadSnapshot() {
         do {
             let restored = try store.load() ?? .empty
             let route = try restored.launchRoute()
             snapshot = restored
             launchState = .ready(route)
+            path = []
+            saveFailure = nil
         } catch let issue as StorageIssue {
             snapshot = nil; path = []; launchState = .failed(issue)
         } catch {
@@ -41,6 +92,7 @@ final class AppModel {
 
     @discardableResult
     func save(_ candidate: AppSnapshot) -> Bool {
+        guard !isRecovering else { return false }
         guard case let .ready(previousRoute) = launchState else {
             if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
             else { saveFailure = .notReady }

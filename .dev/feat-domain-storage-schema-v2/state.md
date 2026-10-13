@@ -1,5 +1,5 @@
 phase: requirements
-status: in_progress
+status: completed
 pipeline: gx-tdd
 verify-status: passed
 verify-fingerprint: "55188dc:6231ba19d6b5"
@@ -19,7 +19,7 @@ last-known-head: 55188dc
 auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 3
-current-step: "complete: 인수 검증"
+current-step: "완료"
 steps:
   implement:
     - 태스크 분해 승인: completed
@@ -27,7 +27,7 @@ steps:
     - "RGR T2 (AC-1~4 코덱, C1~C10)": { red: completed, test-file: ios/FocusMateTests/SnapshotCodecTests.swift, test-file-hash: bb554cf96e44c1ab0c8f3ea4c6f902be8017c289, test-count: 40, report: reports/t2-impl.md, impl: completed, review: skipped }
     - "RGR T3 (AC-1~5 저장소)": { red: completed, test-file: ios/FocusMateTests/StorageV2Tests.swift, test-file-hash: 1b35811345b2a697b7d48cc34d74ffa3dd72205c, test-count: 48, report: reports/t3-impl.md, impl: completed, review: skipped }
     - 변경사항 수집: completed
-phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: in_progress }
+phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed }
 execution-log:
   - { phase: setup, result: "W00 착수 기록 커밋 55188dc, 원격 브랜치 push" }
   - { phase: requirements, agent: product-owner, result: "PRD 작성 FR-7 BR-5 AC-5, 질문 2건 답변(백업 없음·영역 누락 손상)" }
@@ -52,3 +52,5 @@ execution-log:
   - { phase: review, agent: reviewer, result: "2회차 SPEC PASS 5/5 · Important ADDRESSED, Critical 0, Important 0, Minor 3 유예" }
   - { phase: review, agent: security-auditor, result: "2회차 MEDIUM 1 (설계서 FR-5 문구) 정정" }
   - { phase: complete, gate: verify, result: "통과 — iOS Unit 63 + UI 11 0 fail, node test·build exit0, 경고 0 (기준선 3), 지문 기록" }
+  - { phase: complete, agent: product-owner, result: "인수 검증 ACCEPT — AC 5/5, Must 12/12" }
+  - { phase: complete, result: "커밋 ed39c30, PR #8 생성, plan.md W00 완료" }

@@ -29430,6 +29430,7 @@
           "x": 328.0312,
           "y": 452.44,
           "name": "새 태그",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare-filled"
@@ -29447,6 +29448,7 @@
           "x": 29.5,
           "y": 485.5,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29470,6 +29472,7 @@
           "x": 44.25,
           "y": 500.25,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29493,6 +29496,7 @@
           "x": 67,
           "y": 499.56,
           "name": "독서",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare-filled"
@@ -29510,6 +29514,7 @@
           "x": 112.5,
           "y": 485.5,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29533,6 +29538,7 @@
           "x": 126.5,
           "y": 500.25,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29556,6 +29562,7 @@
           "x": 150.4531,
           "y": 499.56,
           "name": "공부",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare-filled"
@@ -29573,6 +29580,7 @@
           "x": 196.5,
           "y": 485.5,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29596,6 +29604,7 @@
           "x": 211.25,
           "y": 503.25,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29619,6 +29628,7 @@
           "x": 215,
           "y": 500.25,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29642,6 +29652,7 @@
           "x": 233.9062,
           "y": 499.56,
           "name": "업무",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare-filled"
@@ -29659,6 +29670,7 @@
           "x": 279.5,
           "y": 485.5,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29682,6 +29694,7 @@
           "x": 294.25,
           "y": 500.25,
           "name": "벡터 · 준비 · 입력 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare-filled"
@@ -29705,6 +29718,7 @@
           "x": 317.3594,
           "y": 499.56,
           "name": "휴식",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare-filled"
@@ -29722,6 +29736,7 @@
           "x": 316.75,
           "y": 544.44,
           "name": "태그 관리",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare-filled"
@@ -29778,7 +29793,7 @@
             "scene": "prepare-filled"
           },
           "fill": "#B5B5BA",
-          "content": "여행 소리 · 선택 사항",
+          "content": "백색소음",
           "lineHeight": 1,
           "fontFamily": "Noto Sans KR",
           "fontSize": 11,
@@ -29795,7 +29810,7 @@
             "scene": "prepare-filled"
           },
           "fill": "#FFFFFF",
-          "content": "소리 없음",
+          "content": "핑크 노이즈",
           "lineHeight": 1,
           "fontFamily": "Noto Sans KR",
           "fontSize": 14,
@@ -29935,6 +29950,192 @@
           "fontFamily": "Noto Sans KR",
           "fontSize": 12,
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "ZHvFQ",
+          "x": 30,
+          "y": 486,
+          "name": "여행 태그 · 칩과 추가",
+          "width": 342,
+          "height": 43,
+          "gap": 8,
+          "children": [
+            {
+              "type": "frame",
+              "id": "y5aNuD",
+              "name": "태그 · 독서",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF",
+              "strokeWidth": 1.5,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "pTvR8",
+                  "name": "독서 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "book-open",
+                  "library": "lucide",
+                  "fill": "#D7B378"
+                },
+                {
+                  "type": "text",
+                  "id": "hYD1a",
+                  "name": "독서",
+                  "fill": "#FFFFFF",
+                  "content": "독서",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WGmZT",
+              "name": "태그 · 공부",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "k5gG3e",
+                  "name": "공부 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "graduation-cap",
+                  "library": "lucide",
+                  "fill": "#B89BE8"
+                },
+                {
+                  "type": "text",
+                  "id": "UCF4T",
+                  "name": "공부",
+                  "fill": "#FFFFFF",
+                  "content": "공부",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "VMz68",
+              "name": "태그 · 업무",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "wQ7hC",
+                  "name": "업무 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "briefcase",
+                  "library": "lucide",
+                  "fill": "#7FB4FF"
+                },
+                {
+                  "type": "text",
+                  "id": "Q6C5X",
+                  "name": "업무",
+                  "fill": "#FFFFFF",
+                  "content": "업무",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "z7ulJ",
+              "name": "태그 · 휴식",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "STifL",
+                  "name": "휴식 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "pencil",
+                  "library": "lucide",
+                  "fill": "#8EDBA4"
+                },
+                {
+                  "type": "text",
+                  "id": "qrwCW",
+                  "name": "휴식",
+                  "fill": "#FFFFFF",
+                  "content": "휴식",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "YDikq",
+              "name": "새 태그 추가",
+              "width": 46,
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "C1oYZ",
+                  "name": "추가 아이콘",
+                  "width": 18,
+                  "height": 18,
+                  "icon": "plus",
+                  "library": "lucide",
+                  "fill": "#FFFFFF"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -38969,6 +39170,7 @@
           "x": 328.0312,
           "y": 532.44,
           "name": "새 태그",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare"
@@ -38986,6 +39188,7 @@
           "x": 29.5,
           "y": 565.5,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39009,6 +39212,7 @@
           "x": 44.25,
           "y": 580.25,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39032,6 +39236,7 @@
           "x": 67,
           "y": 579.56,
           "name": "독서",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare"
@@ -39049,6 +39254,7 @@
           "x": 112.5,
           "y": 565.5,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39072,6 +39278,7 @@
           "x": 126.5,
           "y": 580.25,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39095,6 +39302,7 @@
           "x": 150.4531,
           "y": 579.56,
           "name": "공부",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare"
@@ -39112,6 +39320,7 @@
           "x": 196.5,
           "y": 565.5,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39135,6 +39344,7 @@
           "x": 211.25,
           "y": 583.25,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39158,6 +39368,7 @@
           "x": 215,
           "y": 580.25,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39181,6 +39392,7 @@
           "x": 233.9062,
           "y": 579.56,
           "name": "업무",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare"
@@ -39198,6 +39410,7 @@
           "x": 279.5,
           "y": 565.5,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39221,6 +39434,7 @@
           "x": 294.25,
           "y": 580.25,
           "name": "벡터 · 준비 · 처음",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "prepare"
@@ -39244,6 +39458,7 @@
           "x": 317.3594,
           "y": 579.56,
           "name": "휴식",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare"
@@ -39261,6 +39476,7 @@
           "x": 316.75,
           "y": 624.44,
           "name": "태그 관리",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "prepare"
@@ -39283,7 +39499,7 @@
             "scene": "prepare"
           },
           "fill": "#B5B5BA",
-          "content": "여행 소리 · 선택 사항",
+          "content": "백색소음",
           "lineHeight": 1,
           "fontFamily": "Noto Sans KR",
           "fontSize": 11,
@@ -39300,7 +39516,7 @@
             "scene": "prepare"
           },
           "fill": "#FFFFFF",
-          "content": "소리 없음",
+          "content": "핑크 노이즈",
           "lineHeight": 1,
           "fontFamily": "Noto Sans KR",
           "fontSize": 14,
@@ -39440,6 +39656,192 @@
           "fontFamily": "Noto Sans KR",
           "fontSize": 12,
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "asN42",
+          "x": 30,
+          "y": 566,
+          "name": "여행 태그 · 칩과 추가",
+          "width": 342,
+          "height": 43,
+          "gap": 8,
+          "children": [
+            {
+              "type": "frame",
+              "id": "xVyHo",
+              "name": "태그 · 독서",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "OvGuE",
+                  "name": "독서 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "book-open",
+                  "library": "lucide",
+                  "fill": "#D7B378"
+                },
+                {
+                  "type": "text",
+                  "id": "L3Xdno",
+                  "name": "독서",
+                  "fill": "#FFFFFF",
+                  "content": "독서",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "A7Q6y",
+              "name": "태그 · 공부",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "wpsju",
+                  "name": "공부 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "graduation-cap",
+                  "library": "lucide",
+                  "fill": "#B89BE8"
+                },
+                {
+                  "type": "text",
+                  "id": "R60sde",
+                  "name": "공부",
+                  "fill": "#FFFFFF",
+                  "content": "공부",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "T9nKbD",
+              "name": "태그 · 업무",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Wxlj7",
+                  "name": "업무 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "briefcase",
+                  "library": "lucide",
+                  "fill": "#7FB4FF"
+                },
+                {
+                  "type": "text",
+                  "id": "ETZfX",
+                  "name": "업무",
+                  "fill": "#FFFFFF",
+                  "content": "업무",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "S5Ydm",
+              "name": "태그 · 휴식",
+              "width": "fill_container",
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 5,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Is4J6",
+                  "name": "휴식 아이콘",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "pencil",
+                  "library": "lucide",
+                  "fill": "#8EDBA4"
+                },
+                {
+                  "type": "text",
+                  "id": "W0rnmF",
+                  "name": "휴식",
+                  "fill": "#FFFFFF",
+                  "content": "휴식",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 13,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "W6cse",
+              "name": "새 태그 추가",
+              "width": 46,
+              "height": 43,
+              "fill": "#141617",
+              "cornerRadius": 14,
+              "stroke": "#FFFFFF33",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "h8PQEt",
+                  "name": "추가 아이콘",
+                  "width": 18,
+                  "height": 18,
+                  "icon": "plus",
+                  "library": "lucide",
+                  "fill": "#FFFFFF"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -41787,6 +42189,7 @@
           "x": 12,
           "y": 470,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41808,6 +42211,7 @@
           "x": 11.84,
           "y": 469.76,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41827,8 +42231,8 @@
         {
           "type": "text",
           "id": "LxluZ",
-          "x": 45.2812,
-          "y": 496.76,
+          "x": 34,
+          "y": 465,
           "name": "‹",
           "metadata": {
             "type": "editable-text",
@@ -41847,6 +42251,7 @@
           "x": 81,
           "y": 495.4,
           "name": "승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -41864,6 +42269,7 @@
           "x": 29,
           "y": 655,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41885,6 +42291,7 @@
           "x": 29,
           "y": 723,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41906,6 +42313,7 @@
           "x": 141,
           "y": 539,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41927,6 +42335,7 @@
           "x": 151,
           "y": 547,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41948,6 +42357,7 @@
           "x": 154.4286,
           "y": 553.8571,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41971,6 +42381,7 @@
           "x": 156.1429,
           "y": 551.2857,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -41994,6 +42405,7 @@
           "x": 156.1429,
           "y": 558.1429,
           "name": "벡터 · 승차권",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board"
@@ -42017,6 +42429,7 @@
           "x": 181.2344,
           "y": 553.2,
           "name": "지선",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42034,6 +42447,7 @@
           "x": 206.0469,
           "y": 547.4,
           "name": "2014",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42051,6 +42465,7 @@
           "x": 103.5938,
           "y": 593.2,
           "name": "출발",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42068,6 +42483,7 @@
           "x": 90.4375,
           "y": 611.92,
           "name": "성수역",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42085,6 +42501,7 @@
           "x": 279.5938,
           "y": 593.2,
           "name": "도착",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42102,6 +42519,7 @@
           "x": 249.3125,
           "y": 611.92,
           "name": "서울숲 입구",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42119,6 +42537,7 @@
           "x": 63.5625,
           "y": 668.2,
           "name": "여행 시간",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42136,6 +42555,7 @@
           "x": 64.0312,
           "y": 686.56,
           "name": "25 min",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42153,6 +42573,7 @@
           "x": 186.8906,
           "y": 668.2,
           "name": "정류장",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42170,6 +42591,7 @@
           "x": 191.2344,
           "y": 686.56,
           "name": "5개",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42187,6 +42609,7 @@
           "x": 298.2188,
           "y": 668.2,
           "name": "이동 거리",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42204,6 +42627,7 @@
           "x": 298.7656,
           "y": 686.56,
           "name": "2.8 km",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42221,6 +42645,7 @@
           "x": 29,
           "y": 746.8,
           "name": "독서 · 책 한 챕터 읽기",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board"
@@ -42343,6 +42768,383 @@
           "fontFamily": "Noto Sans KR",
           "fontSize": 12,
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "WfVaX",
+          "x": 24,
+          "y": 451,
+          "name": "승차권 · 티켓",
+          "width": 354,
+          "fill": [
+            "#1B1C1E",
+            {
+              "type": "image",
+              "enabled": true,
+              "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+              "mode": "contain"
+            }
+          ],
+          "cornerRadius": 22,
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            24,
+            22,
+            0,
+            22
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "RmezX",
+              "name": "출발 · 도착",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "osOWx",
+                  "name": "출발",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "rorl7",
+                      "name": "출발 라벨",
+                      "fill": "#FFFFFF80",
+                      "content": "출발",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "HNnW2",
+                      "name": "출발 값",
+                      "fill": "#FFFFFF",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "성수역",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 24,
+                      "fontWeight": "800",
+                      "letterSpacing": -0.6
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "JtfSS",
+                  "name": "도착",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "alignItems": "end",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "h8EE1",
+                      "name": "도착 라벨",
+                      "fill": "#FFFFFF80",
+                      "content": "도착",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "DLfzF",
+                      "name": "도착 값",
+                      "fill": "#FFFFFF",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "서울숲 입구",
+                      "textAlign": "right",
+                      "fontFamily": "Noto Sans KR",
+                      "fontSize": 24,
+                      "fontWeight": "800",
+                      "letterSpacing": -0.6
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "vn8P1",
+              "name": "정보",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "wpPPK",
+                  "name": "정보 · 정류장/거리",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "HBaoe",
+                      "name": "정류장",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tf9jE",
+                          "name": "정류장 라벨",
+                          "fill": "#FFFFFF80",
+                          "content": "정류장",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "HeRng",
+                          "name": "정류장 값",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "5개",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 15,
+                          "fontWeight": "700",
+                          "letterSpacing": -0.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "k4lWO",
+                      "name": "거리",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "jbbU0",
+                          "name": "거리 라벨",
+                          "fill": "#FFFFFF80",
+                          "content": "거리",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "eczkf",
+                          "name": "거리 값",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "2.8 km",
+                          "textAlign": "right",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 15,
+                          "fontWeight": "700",
+                          "letterSpacing": -0.2
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "vn2NW",
+                  "name": "정보 · 탑승/날짜",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "aW621",
+                      "name": "탑승",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "I2p3z4",
+                          "name": "탑승 라벨",
+                          "fill": "#FFFFFF80",
+                          "content": "탑승",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "E1hUAM",
+                          "name": "탑승 값",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "지금",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 15,
+                          "fontWeight": "700",
+                          "letterSpacing": -0.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "z2rs2q",
+                      "name": "날짜",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "i5zcNV",
+                          "name": "날짜 라벨",
+                          "fill": "#FFFFFF80",
+                          "content": "날짜",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PoaWA",
+                          "name": "날짜 값",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "2026/10/13",
+                          "textAlign": "right",
+                          "fontFamily": "JetBrains Mono",
+                          "fontSize": 15,
+                          "fontWeight": "700",
+                          "letterSpacing": -0.2
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "QWnl0",
+              "name": "절취선 아래",
+              "width": "fill_container",
+              "height": 72,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "jB4wg",
+                  "name": "태그 · 할 일",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "GECat",
+                      "name": "태그",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VRcjj",
+                          "name": "태그 라벨",
+                          "fill": "#FFFFFF80",
+                          "content": "태그",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "aXeVI",
+                          "name": "태그 값",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "독서",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 15,
+                          "fontWeight": "700",
+                          "letterSpacing": -0.2
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "chGH0",
+                      "name": "할 일",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 3,
+                      "alignItems": "end",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "w0pRg",
+                          "name": "할 일 라벨",
+                          "fill": "#FFFFFF80",
+                          "content": "할 일",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "y0nBs",
+                          "name": "할 일 값",
+                          "fill": "#FFFFFF",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "책 한 챕터 읽기",
+                          "textAlign": "right",
+                          "fontFamily": "Noto Sans KR",
+                          "fontSize": 15,
+                          "fontWeight": "700",
+                          "letterSpacing": -0.2
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "ellipse",
+          "id": "nBctz",
+          "x": 11,
+          "y": 749,
+          "name": "노치 · 왼쪽",
+          "fill": "#0E1214",
+          "width": 26,
+          "height": 26
+        },
+        {
+          "type": "ellipse",
+          "id": "h0AAs",
+          "x": 365,
+          "y": 749,
+          "name": "노치 · 오른쪽",
+          "fill": "#0E1214",
+          "width": 26,
+          "height": 26
         }
       ]
     },
@@ -42511,9 +43313,9 @@
               "name": "태그 완료 표시",
               "width": 44,
               "height": 44,
-              "icon": "check",
+              "icon": "nfc",
               "library": "lucide",
-              "fill": "#FFFFFFBF"
+              "fill": "#FFFFFF8C"
             }
           ]
         },
@@ -42765,8 +43567,8 @@
         {
           "type": "text",
           "id": "uoM9v",
-          "x": 199,
-          "y": 192,
+          "x": 82,
+          "y": 178,
           "name": "승차 완료",
           "metadata": {
             "type": "editable-text",
@@ -42774,12 +43576,12 @@
           },
           "fill": "#FFFFFF",
           "textGrowth": "fixed-width",
-          "width": 80,
+          "width": 238,
           "content": "집중동행카드",
           "lineHeight": 1,
           "textAlign": "center",
           "fontFamily": "Noto Sans KR",
-          "fontSize": 12,
+          "fontSize": 18,
           "fontWeight": "700"
         },
         {
@@ -42788,6 +43590,7 @@
           "x": 94,
           "y": 186.7188,
           "name": "카드 캔버스 · 고정 IC 칩 · 승차 태그 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-card-canvas",
             "scene": "board-success"
@@ -42841,6 +43644,22 @@
               "fill": "#121416",
               "width": 99,
               "height": 63
+            },
+            {
+              "type": "rectangle",
+              "id": "s33Oe",
+              "x": 36,
+              "y": 7.083333333333332,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 78,
+              "height": 49.833333333333336
             },
             {
               "type": "text",
@@ -42922,6 +43741,7 @@
               "x": 8,
               "y": 54.1479,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "board-success"
@@ -43010,6 +43830,7 @@
           "x": 198,
           "y": 226,
           "name": "집중동행카드",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "board-success"
@@ -43030,6 +43851,7 @@
           "x": 258.75,
           "y": 187.5,
           "name": "벡터 · 승차 태그 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "board-success"
@@ -43109,6 +43931,22 @@
               "height": 14.5833,
               "stroke": "#E5EEE7",
               "strokeWidth": 2.9167
+            },
+            {
+              "type": "rectangle",
+              "id": "uiBIV",
+              "x": 75.81599999999999,
+              "y": 9.145499999999998,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 164.268,
+              "height": 104.949
             },
             {
               "type": "text",
@@ -43268,6 +44106,7 @@
               "x": 16.38,
               "y": 104.3964,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "board-success"
@@ -43513,6 +44352,7 @@
           "x": 200,
           "y": 243,
           "name": "인식된 카드 번호",
+          "enabled": false,
           "fill": "#B7C1BA",
           "textGrowth": "fixed-width",
           "width": 80,
@@ -43582,6 +44422,22 @@
               "fill": "#121416",
               "width": 268,
               "height": 156
+            },
+            {
+              "type": "rectangle",
+              "id": "nOb1M",
+              "x": 97.2,
+              "y": 11.724999999999994,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 210.6,
+              "height": 134.55
             },
             {
               "type": "text",
@@ -43663,6 +44519,7 @@
               "x": 21,
               "y": 133.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "boarding"
@@ -43751,6 +44608,7 @@
           "x": 290,
           "y": 458,
           "name": "태그 완료 배지",
+          "enabled": false,
           "width": 34,
           "height": 34,
           "fill": "#D7EFDC",
@@ -43769,6 +44627,18 @@
               "fill": "#183822"
             }
           ]
+        },
+        {
+          "type": "icon",
+          "id": "ZSFwZ",
+          "x": 189,
+          "y": 208,
+          "name": "LCD · 인식 완료",
+          "width": 24,
+          "height": 24,
+          "icon": "check",
+          "library": "lucide",
+          "fill": "#CFE9D6"
         }
       ]
     },
@@ -44604,7 +45474,10 @@
             {
               "type": "frame",
               "id": "GnDT5",
+              "x": 0,
+              "y": 0,
               "name": "나침반 · 북쪽 정렬",
+              "enabled": false,
               "width": 46,
               "height": 46,
               "justifyContent": "center",
@@ -44653,9 +45526,6 @@
               "width": 46,
               "height": 46,
               "stroke": "#FFFFFF1F",
-              "strokeWidth": {
-                "top": 1
-              },
               "strokeAlignment": "inner",
               "justifyContent": "center",
               "alignItems": "center",
@@ -44678,7 +45548,7 @@
           "type": "frame",
           "id": "i0K7A",
           "x": 340,
-          "y": 162,
+          "y": 116,
           "name": "지도 도구 · 보기",
           "clip": true,
           "width": 46,
@@ -45873,7 +46743,10 @@
             {
               "type": "frame",
               "id": "haLeL",
+              "x": 0,
+              "y": 0,
               "name": "나침반 · 북쪽 정렬",
+              "enabled": false,
               "width": 46,
               "height": 46,
               "justifyContent": "center",
@@ -45922,9 +46795,6 @@
               "width": 46,
               "height": 46,
               "stroke": "#FFFFFF1F",
-              "strokeWidth": {
-                "top": 1
-              },
               "strokeAlignment": "inner",
               "justifyContent": "center",
               "alignItems": "center",
@@ -45947,7 +46817,7 @@
           "type": "frame",
           "id": "rwdnp",
           "x": 340,
-          "y": 162,
+          "y": 116,
           "name": "지도 도구 · 보기",
           "clip": true,
           "width": 46,
@@ -78024,6 +78894,22 @@
               "height": 156
             },
             {
+              "type": "rectangle",
+              "id": "NqoCI",
+              "x": 97.2,
+              "y": 11.724999999999994,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 210.6,
+              "height": 134.55
+            },
+            {
               "type": "text",
               "id": "KBODL",
               "x": 21,
@@ -78103,6 +78989,7 @@
               "x": 21,
               "y": 133.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "boarding"
@@ -78251,6 +79138,18 @@
           "icon": "chevrons-up",
           "library": "lucide",
           "fill": "#C5CFC7"
+        },
+        {
+          "type": "rectangle",
+          "cornerRadius": 22,
+          "id": "ga6Gc",
+          "x": 57,
+          "y": 584,
+          "name": "카드 안내 테두리",
+          "width": 288,
+          "height": 176,
+          "stroke": "#FFFFFF59",
+          "strokeWidth": 1.5
         }
       ]
     },
@@ -78903,6 +79802,22 @@
               "height": 156
             },
             {
+              "type": "rectangle",
+              "id": "C4FYv",
+              "x": 97.2,
+              "y": 11.724999999999994,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 210.6,
+              "height": 134.55
+            },
+            {
               "type": "text",
               "id": "A8tWp",
               "x": 21,
@@ -78982,6 +79897,7 @@
               "x": 21,
               "y": 133.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "alighting"
@@ -79118,6 +80034,18 @@
           "fill": "#FFFFFF",
           "width": 124,
           "height": 4
+        },
+        {
+          "type": "rectangle",
+          "cornerRadius": 22,
+          "id": "aSecP",
+          "x": 57,
+          "y": 584,
+          "name": "카드 안내 테두리",
+          "width": 288,
+          "height": 176,
+          "stroke": "#FFFFFF59",
+          "strokeWidth": 1.5
         }
       ]
     },
@@ -79286,9 +80214,9 @@
               "name": "태그 완료 표시",
               "width": 44,
               "height": 44,
-              "icon": "check",
+              "icon": "nfc",
               "library": "lucide",
-              "fill": "#FFFFFFBF"
+              "fill": "#FFFFFF8C"
             }
           ]
         },
@@ -79510,18 +80438,21 @@
         {
           "type": "text",
           "id": "vSVU9",
-          "x": 202,
-          "y": 207.68,
+          "x": 82,
+          "y": 178,
           "name": "하차 완료",
           "metadata": {
             "type": "editable-text",
             "scene": "alight-success"
           },
           "fill": "#FFFFFF",
-          "content": "하차 완료",
+          "textGrowth": "fixed-width",
+          "width": 238,
+          "content": "집중동행카드",
           "lineHeight": 1,
+          "textAlign": "center",
           "fontFamily": "Noto Sans KR",
-          "fontSize": 14,
+          "fontSize": 18,
           "fontWeight": "700"
         },
         {
@@ -79530,6 +80461,7 @@
           "x": 94,
           "y": 186.7188,
           "name": "카드 캔버스 · 고정 IC 칩 · 하차 태그 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-card-canvas",
             "scene": "alight-success"
@@ -79583,6 +80515,22 @@
               "fill": "#121416",
               "width": 99,
               "height": 63
+            },
+            {
+              "type": "rectangle",
+              "id": "J18vM",
+              "x": 36,
+              "y": 7.083333333333332,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 78,
+              "height": 49.833333333333336
             },
             {
               "type": "text",
@@ -79664,6 +80612,7 @@
               "x": 8,
               "y": 54.1479,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "alight-success"
@@ -79752,6 +80701,7 @@
           "x": 214.6094,
           "y": 234.07999999999998,
           "name": "집중동행카드",
+          "enabled": false,
           "metadata": {
             "type": "editable-text",
             "scene": "alight-success"
@@ -79769,6 +80719,7 @@
           "x": 258.75,
           "y": 187.5,
           "name": "벡터 · 하차 태그 완료",
+          "enabled": false,
           "metadata": {
             "type": "editable-vector",
             "scene": "alight-success"
@@ -79848,6 +80799,22 @@
               "height": 14.5833,
               "stroke": "#E5EEE7",
               "strokeWidth": 2.9167
+            },
+            {
+              "type": "rectangle",
+              "id": "T4wMy6",
+              "x": 75.81599999999999,
+              "y": 9.145499999999998,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 164.268,
+              "height": 104.949
             },
             {
               "type": "text",
@@ -80007,6 +80974,7 @@
               "x": 16.38,
               "y": 104.3964,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "alight-success"
@@ -80308,6 +81276,22 @@
               "height": 156
             },
             {
+              "type": "rectangle",
+              "id": "oDv9v",
+              "x": 97.2,
+              "y": 11.724999999999994,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 210.6,
+              "height": 134.55
+            },
+            {
               "type": "text",
               "id": "I3FPj5",
               "x": 21,
@@ -80387,6 +81371,7 @@
               "x": 21,
               "y": 133.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "alighting"
@@ -80475,6 +81460,7 @@
           "x": 290,
           "y": 458,
           "name": "태그 완료 배지",
+          "enabled": false,
           "width": 34,
           "height": 34,
           "fill": "#D7EFDC",
@@ -80493,6 +81479,18 @@
               "fill": "#183822"
             }
           ]
+        },
+        {
+          "type": "icon",
+          "id": "ziqv8",
+          "x": 189,
+          "y": 208,
+          "name": "LCD · 인식 완료",
+          "width": 24,
+          "height": 24,
+          "icon": "check",
+          "library": "lucide",
+          "fill": "#CFE9D6"
         }
       ]
     },
@@ -85358,6 +86356,22 @@
               "height": 182
             },
             {
+              "type": "rectangle",
+              "id": "KzItI",
+              "x": 105.11999999999999,
+              "y": 19.243333333333325,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 227.76000000000002,
+              "height": 145.51333333333335
+            },
+            {
               "type": "text",
               "id": "IeHEU",
               "x": 21,
@@ -85437,6 +86451,7 @@
               "x": 21,
               "y": 156.585,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "issue-printing"
@@ -85901,6 +86916,22 @@
               "height": 182
             },
             {
+              "type": "rectangle",
+              "id": "dprS4",
+              "x": 105.11999999999999,
+              "y": 19.243333333333325,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 227.76000000000002,
+              "height": 145.51333333333335
+            },
+            {
               "type": "text",
               "id": "sMKyx",
               "x": 21,
@@ -85980,6 +87011,7 @@
               "x": 21,
               "y": 156.585,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "issue-done"
@@ -86812,6 +87844,22 @@
               "height": 221
             },
             {
+              "type": "rectangle",
+              "id": "Ik6pe",
+              "x": 127.44,
+              "y": 23.38875,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 276.12,
+              "height": 176.41
+            },
+            {
               "type": "text",
               "id": "n85V6M",
               "x": 21,
@@ -86891,6 +87939,7 @@
               "x": 21,
               "y": 198.8556,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "profile"
@@ -87807,6 +88856,22 @@
               "height": 221
             },
             {
+              "type": "rectangle",
+              "id": "IqsJz",
+              "x": 126.72,
+              "y": 22.887083333333322,
+              "name": "서울 점묘 배경",
+              "opacity": 0.85,
+              "fill": {
+                "type": "image",
+                "enabled": true,
+                "url": "assets/next-stop/ticket/ticket-seoul-dots.png",
+                "mode": "contain"
+              },
+              "width": 274.56,
+              "height": 175.41333333333336
+            },
+            {
               "type": "path",
               "id": "s6LZb",
               "x": 0,
@@ -87907,6 +88972,7 @@
               "x": 20,
               "y": 197.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "card-studio"
@@ -88914,6 +89980,7 @@
               "x": 20,
               "y": 17,
               "name": "벡터 · 카드 꾸미기 · 사진 배치",
+              "enabled": false,
               "metadata": {
                 "type": "editable-vector",
                 "scene": "card-studio-photos"
@@ -88935,6 +90002,7 @@
               "x": 25,
               "y": 19.2,
               "name": "Focus Mate",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "card-studio-photos"
@@ -88975,6 +90043,7 @@
               "x": 20,
               "y": 194,
               "name": "벡터 · 카드 꾸미기 · 사진 배치",
+              "enabled": false,
               "metadata": {
                 "type": "editable-vector",
                 "scene": "card-studio-photos"
@@ -88996,6 +90065,7 @@
               "x": 25,
               "y": 195.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "card-studio-photos"
@@ -89840,6 +90910,7 @@
               "x": 21,
               "y": 18.0156,
               "name": "벡터 · 꾸민 카드 · 마이페이지",
+              "enabled": false,
               "metadata": {
                 "type": "editable-vector",
                 "scene": "profile-custom"
@@ -89861,6 +90932,7 @@
               "x": 26,
               "y": 20.2156,
               "name": "Focus Mate",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "profile-custom"
@@ -89901,6 +90973,7 @@
               "x": 21,
               "y": 195.0156,
               "name": "벡터 · 꾸민 카드 · 마이페이지",
+              "enabled": false,
               "metadata": {
                 "type": "editable-vector",
                 "scene": "profile-custom"
@@ -89922,6 +90995,7 @@
               "x": 26,
               "y": 196.8556,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "profile-custom"
@@ -90783,6 +91857,7 @@
               "x": 21,
               "y": 18,
               "name": "벡터 · 꾸민 카드 · 승차",
+              "enabled": false,
               "metadata": {
                 "type": "editable-vector",
                 "scene": "boarding-custom"
@@ -90804,6 +91879,7 @@
               "x": 26,
               "y": 20.2,
               "name": "Focus Mate",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "boarding-custom"
@@ -90844,6 +91920,7 @@
               "x": 21,
               "y": 130,
               "name": "벡터 · 꾸민 카드 · 승차",
+              "enabled": false,
               "metadata": {
                 "type": "editable-vector",
                 "scene": "boarding-custom"
@@ -90865,6 +91942,7 @@
               "x": 26,
               "y": 131.84,
               "name": "FM · 0842 3017",
+              "enabled": false,
               "metadata": {
                 "type": "editable-text",
                 "scene": "boarding-custom"
@@ -91013,6 +92091,18 @@
           "icon": "chevrons-up",
           "library": "lucide",
           "fill": "#C5CFC7"
+        },
+        {
+          "type": "rectangle",
+          "cornerRadius": 22,
+          "id": "AAz5m",
+          "x": 57,
+          "y": 584,
+          "name": "카드 안내 테두리",
+          "width": 288,
+          "height": 176,
+          "stroke": "#FFFFFF59",
+          "strokeWidth": 1.5
         }
       ]
     },
@@ -91355,6 +92445,7 @@
           "x": 16,
           "y": 581,
           "name": "출발 안내 패널",
+          "enabled": false,
           "width": 370,
           "fill": "#0D0F10EB",
           "cornerRadius": 28,
@@ -91547,6 +92638,174 @@
               ]
             }
           ]
+        },
+        {
+          "type": "rectangle",
+          "id": "Y0ugJX",
+          "x": 0,
+          "y": 0,
+          "name": "안내 배경 그라데이션",
+          "fill": {
+            "type": "gradient",
+            "gradientType": "linear",
+            "enabled": true,
+            "rotation": 180,
+            "size": {
+              "height": 1
+            },
+            "colors": [
+              {
+                "color": "#05080A40",
+                "position": 0
+              },
+              {
+                "color": "#05080AA6",
+                "position": 0.38
+              },
+              {
+                "color": "#05080AF0",
+                "position": 0.74
+              },
+              {
+                "color": "#000000",
+                "position": 1
+              }
+            ]
+          },
+          "width": 402,
+          "height": 874,
+          "effect": {
+            "type": "background_blur",
+            "radius": 10
+          }
+        },
+        {
+          "type": "frame",
+          "id": "R91ma",
+          "x": 0,
+          "y": 250,
+          "name": "안내 문구",
+          "width": 402,
+          "layout": "vertical",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "JQWjl",
+              "name": "안내 아이콘",
+              "width": 44,
+              "height": 44,
+              "icon": "bus-front",
+              "library": "lucide",
+              "fill": "#FFFFFF"
+            },
+            {
+              "type": "frame",
+              "id": "hJCfn",
+              "name": "간격",
+              "width": 10,
+              "height": 36
+            },
+            {
+              "type": "text",
+              "id": "wj7dv",
+              "x": 127,
+              "y": 56,
+              "name": "노선",
+              "enabled": false,
+              "fill": "#FFFFFF99",
+              "content": "2014 · 성수역 → 서울숲 입구",
+              "fontFamily": "Noto Sans KR",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "bUEy2",
+              "name": "간격",
+              "width": 10,
+              "height": 28
+            },
+            {
+              "type": "frame",
+              "id": "DZ37K",
+              "name": "순차 문구",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "W76EqT",
+                  "x": 19,
+                  "y": 0,
+                  "name": "문을 닫습니다",
+                  "enabled": false,
+                  "fill": "#FFFFFF",
+                  "content": "문을 닫습니다",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 21,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.4
+                },
+                {
+                  "type": "text",
+                  "id": "BbDLC",
+                  "x": 0,
+                  "y": 40,
+                  "name": "자리에 앉아주세요",
+                  "enabled": false,
+                  "fill": "#FFFFFF",
+                  "content": "자리에 앉아주세요",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 21,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.4
+                },
+                {
+                  "type": "text",
+                  "id": "RTLga",
+                  "name": "버스 출발합니다",
+                  "fill": "#FFFFFF",
+                  "content": "버스 출발합니다",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 21,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.4
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "DKB9O",
+              "name": "간격",
+              "width": 10,
+              "height": 64
+            },
+            {
+              "type": "frame",
+              "id": "t4Ya8K",
+              "name": "시작 버튼",
+              "width": 160,
+              "height": 52,
+              "fill": "#F2F2F2",
+              "cornerRadius": 26,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "i698w",
+                  "name": "시작",
+                  "fill": "#111111",
+                  "content": "시작",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 17,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -91645,6 +92904,7 @@
           "x": 16,
           "y": 581,
           "name": "출발 안내 패널",
+          "enabled": false,
           "width": 370,
           "fill": "#0D0F10EB",
           "cornerRadius": 28,
@@ -91833,6 +93093,174 @@
                   "fontFamily": "Noto Sans KR",
                   "fontSize": 16,
                   "fontWeight": "700"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "rectangle",
+          "id": "pRxqK",
+          "x": 0,
+          "y": 0,
+          "name": "안내 배경 그라데이션",
+          "fill": {
+            "type": "gradient",
+            "gradientType": "linear",
+            "enabled": true,
+            "rotation": 180,
+            "size": {
+              "height": 1
+            },
+            "colors": [
+              {
+                "color": "#05080A40",
+                "position": 0
+              },
+              {
+                "color": "#05080AA6",
+                "position": 0.38
+              },
+              {
+                "color": "#05080AF0",
+                "position": 0.74
+              },
+              {
+                "color": "#000000",
+                "position": 1
+              }
+            ]
+          },
+          "width": 402,
+          "height": 874,
+          "effect": {
+            "type": "background_blur",
+            "radius": 10
+          }
+        },
+        {
+          "type": "frame",
+          "id": "cyKUQ",
+          "x": 0,
+          "y": 250,
+          "name": "안내 문구",
+          "width": 402,
+          "layout": "vertical",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "BNEwk",
+              "name": "안내 아이콘",
+              "width": 44,
+              "height": 44,
+              "icon": "map-pin",
+              "library": "lucide",
+              "fill": "#FFFFFF"
+            },
+            {
+              "type": "frame",
+              "id": "GdY0G",
+              "name": "간격",
+              "width": 10,
+              "height": 36
+            },
+            {
+              "type": "text",
+              "id": "XDkKg",
+              "x": 140,
+              "y": 56,
+              "name": "노선",
+              "enabled": false,
+              "fill": "#FFFFFF99",
+              "content": "2014 · 서울숲 입구 도착",
+              "fontFamily": "Noto Sans KR",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "CywOi",
+              "name": "간격",
+              "width": 10,
+              "height": 28
+            },
+            {
+              "type": "frame",
+              "id": "F9H8cj",
+              "name": "순차 문구",
+              "layout": "vertical",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "FDOJ9",
+                  "x": 0,
+                  "y": 0,
+                  "name": "곧 서울숲 입구에 도착합니다",
+                  "enabled": false,
+                  "fill": "#FFFFFF",
+                  "content": "곧 서울숲 입구에 도착합니다",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 21,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.4
+                },
+                {
+                  "type": "text",
+                  "id": "BpnEj",
+                  "x": 2.5,
+                  "y": 40,
+                  "name": "버스가 멈추면 일어나주세요",
+                  "enabled": false,
+                  "fill": "#FFFFFF",
+                  "content": "버스가 멈추면 일어나주세요",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 21,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.4
+                },
+                {
+                  "type": "text",
+                  "id": "IdNQm",
+                  "name": "카드를 찍고 내려주세요",
+                  "fill": "#FFFFFF",
+                  "content": "카드를 찍고 내려주세요",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 21,
+                  "fontWeight": "600",
+                  "letterSpacing": -0.4
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "XA5FC",
+              "name": "간격",
+              "width": 10,
+              "height": 64
+            },
+            {
+              "type": "frame",
+              "id": "J3qZWw",
+              "name": "확인 버튼",
+              "width": 160,
+              "height": 52,
+              "fill": "#F2F2F2",
+              "cornerRadius": 26,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "hVEN9",
+                  "name": "확인",
+                  "fill": "#111111",
+                  "content": "확인",
+                  "fontFamily": "Noto Sans KR",
+                  "fontSize": 17,
+                  "fontWeight": "600"
                 }
               ]
             }

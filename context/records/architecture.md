@@ -4,17 +4,25 @@
 
 ## 현재 시스템 구조
 
-제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. Swift는 Phase 1 앱 기반(`ios/FocusMate`: 진입 분기·기본 화면 왕복·`app-state.json` 버전 1 저장)만 있고 이 도메인의 네이티브 기능은 아직 없다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
+웹 제품 상태·DOM·스타일은 [animation-preview.html](../../designs/final/animation-preview.html)에 함께 있다. 화면 모아보기는 `flow-viewer.js`와 빌드/캡처 스크립트로 구성한다. 별도 API 서버·도메인 서비스 레이어는 없다. 이 context 폴더의 4개 도메인은 물리 코드 분리안이 아니다.
 
-주요 현재 함수/경계: recordJourney/loadRecords/persistRecords, renderRecords, renderAnalytics, saveSummaryMemo 및 postMemo 함수.
+웹의 주요 함수/경계: recordJourney/loadRecords/persistRecords, renderRecords, renderAnalytics, saveSummaryMemo 및 postMemo 함수.
 
-저장·자산: `next-step-prototype-records-v1`. 완료·메모는 로컬 저장이고 현재 서버나 계정이 없다.
+웹 저장 키는 `next-step-prototype-records-v1`이다. 완료·메모는 로컬 저장이고 현재 서버나 계정이 없다.
 
-연계: journey의 하차 성공을 입력으로 받는다. 카드 외형이나 진행 타이머를 변경하지 않으며 완료 기록에 있는 태그/시간으로 분석한다.
+## iOS W08 완료·메모 저장 모델
+
+`ios/FocusMate/RecordSection.swift`의 `RecordSnapshot`은 완료 당시의 여행 정보와 연결 메모를 보관한다. `RecordSection`은 하차 성공(`alighted`)만 기록하고 진행·포기·예시 입력을 제외한다. 같은 여행 ID의 재요청은 기존 기록을 유지한다. 완료 시각은 UTC로 저장하고, 일별 집계에 쓸 `date`는 완료 당시 전달된 시간대로 생성한다. 복원할 때 날짜를 다시 계산하지 않는다. 기록은 완료 시각의 최신순으로 정렬하며 일별 횟수·분 합계를 제공한다.
+
+`AppModel.recordCompletion`과 `AppModel.saveRecordMemo`는 기존 `LocalSnapshotStore`를 통해 저장한다. 메모는 앞뒤 공백·개행을 제거하고 Unicode scalar를 분할하지 않는 범위에서 UTF-16 200단위까지 저장한다. 빈 메모로 수정하면 메모를 삭제한다. 파일 저장에 성공한 뒤에만 메모리 상태를 갱신하므로 쓰기 실패 시 기존 기록·메모·화면 경로와 파일 원본을 유지한다.
+
+`SnapshotCodec`은 `app-state.json`의 버전 2 계약을 유지하며 `AppSnapshot.records.items`를 복원한다. 버전 1은 기존 카드·정류장 정보를 유지하고 빈 기록으로 이관한다. 손상·지원하지 않는 버전·중복 여행 ID·잘못된 기록을 거부하며 로드 실패 상태에서 덮어쓰기를 차단한다. 복원 시 정렬은 메모리에만 적용하고 파일을 다시 쓰지 않는다.
+
+연계: 웹은 journey의 하차 성공을 입력으로 받는다. iOS W08은 완료 저장 API까지 구현했으며, 실제 하차 결과를 이 API로 전달하는 연동은 아직 구현하지 않았다. 카드 외형이나 진행 타이머를 변경하지 않으며 완료 기록에 있는 태그/시간으로 집계한다.
 
 ## 향후 네이티브와 후순위
 
-iOS 로컬 완료/메모 모델·같은 집계 정책은 MVP 예정. 계정·클라우드 동기화·공유·백업은 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
+W09의 iOS 요약·기록·분석 화면, 메모 입력·수정 화면과 실제 하차 outcome 연동은 미구현이다. 계정·클라우드 동기화·공유·백업은 후순위다. 상세 범위는 [MVP](../../docs/MVP.md)에 있다.
 
 ## 주제 문서
 
@@ -27,4 +35,4 @@ iOS 로컬 완료/메모 모델·같은 집계 정책은 MVP 예정. 계정·클
 
 ## 개발 단계 연결
 
-[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 Phase 1 앱 기반만 있으며 이 도메인의 네이티브 기능은 아직 없습니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.
+[개발 단계](../../docs/DEVELOPMENT-PHASES.md)에 단계 구분과 범위를 연결합니다. 웹 구현은 위의 단일 HTML이고, iOS는 W08 완료·메모 저장 모델과 집계·복원 검증까지 완료했습니다. W09 화면과 실제 하차 연동은 후속입니다. 도메인의 구현 근거와 미반영 항목은 [status.md](status.md)에 기록합니다.

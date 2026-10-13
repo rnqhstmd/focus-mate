@@ -1,0 +1,26 @@
+{
+  "ios/FocusMateTests/StorageRecoveryTests.swift": {
+    "git-blob": "98f032e432fc67b06ad36e7768dbc63d53f06c0b",
+    "sha256": "6ac3f05539d7b641f65bffdd2afd63089a8cbb036ea1510e8d74d0ba604df69b"
+  },
+  "ios/FocusMateTests/AppRecoveryTests.swift": {
+    "git-blob": "00db830f0d69679a5297bcfa717f613bb3a098a8",
+    "sha256": "05d53f24d63d3f2fe050ac6b540dbcdace10668b70fb789741a80f8ee0c4ae2e"
+  },
+  "ios/FocusMateTests/RecoveryBootstrapTests.swift": {
+    "git-blob": "0f57f2fb97cf98ad1bd95ac2f01efd930686b87d",
+    "sha256": "088cabc98572e282d767944813299d2e6a8260d399197b5b61101e79c4aef560"
+  },
+  "ios/FocusMateTests/RecoveryHistoryTests.swift": {
+    "git-blob": "bbe4fa38948ce765d406539345175ace06be57ad",
+    "sha256": "d556b0648fd230039df8a359fa736f91959ddaec19722f9c6e2afae5c8ccb43e"
+  },
+  "ios/FocusMateUITests/StorageRecoveryFlowTests.swift": {
+    "git-blob": "ed91585953ef00f2d7607b90c324d800ffe1f3e0",
+    "sha256": "b52f1863386a9d21d56505d7cdb0df38a8f5874d2694cd635c48f70f76a12174"
+  },
+  "ios/FocusMateUITests/RecoveryHistoryFlowTests.swift": {
+    "git-blob": "fb9a887bf4f6a0c41c06d81a1c722d0f9587bae7",
+    "sha256": "0c2341c5d96c1dc984ff26de5ce61603fd67053e494ad6fa9906eefd6ece8c5f"
+  }
+}

@@ -1,0 +1,1 @@
+{"tool_name": "request_user_input", "cwd": "/Users/bonseung/.codex/worktrees/2da6/new", "tool_input": {"questions": [{"id": "pipeline_mode", "question": "진행 방식"}, {"id": "model_profile", "question": "모델 프로파일"}]}, "tool_response": {"answers": {"pipeline_mode": {"answers": ["전체 과정 진행"]}, "model_profile": {"answers": ["표준"]}}}}

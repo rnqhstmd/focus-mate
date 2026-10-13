@@ -1,0 +1,225 @@
+diff --git a/ios/FocusMate/InitialStationSearchView.swift b/ios/FocusMate/InitialStationSearchView.swift
+new file mode 100644
+index 0000000..99c672a
+--- /dev/null
++++ b/ios/FocusMate/InitialStationSearchView.swift
+@@ -0,0 +1,58 @@
++import SwiftUI
++
++/// 최초 1회 출발 정류장을 검색해 고르는 화면. 확인 버튼은 아래에 고정해 키보드·큰 글자에서도 닿게 한다.
++@MainActor
++struct InitialStationSearchView: View {
++    @Bindable var model: AppModel
++    @State private var search = StationSearchState()
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 16) {
++            Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
++            ScrollView {
++                VStack(alignment: .leading, spacing: 12) {
++                    TextField("정류장 검색", text: $search.query)
++                        .textFieldStyle(.roundedBorder).autocorrectionDisabled()
++                        .accessibilityLabel("정류장 검색").accessibilityIdentifier("search.query")
++                    if search.results.isEmpty {
++                        Text("결과가 없어요").foregroundStyle(.secondary).accessibilityIdentifier("search.empty")
++                    }
++                    ForEach(search.results) { option in
++                        resultButton(option)
++                    }
++                    if let confirmation = search.confirmationText {
++                        Text(confirmation).accessibilityIdentifier("search.confirmation")
++                    }
++                }
++            }
++            if model.saveFailure != nil {
++                Text("출발 정류장 저장에 실패했어요. 확인을 다시 눌러 주세요.")
++                    .foregroundStyle(.secondary).accessibilityIdentifier("search.saveFailure")
++            }
++            Button("확인") {
++                if let option = search.selectedOption { model.confirmInitialStation(option) }
++            }
++            .buttonStyle(.borderedProminent).frame(maxWidth: .infinity)
++            .disabled(!search.canConfirm)
++            .accessibilityHint("고른 정류장에서 출발해요").accessibilityIdentifier("search.confirm")
++        }
++    }
++
++    private func resultButton(_ option: StationOption) -> some View {
++        let isSelected = search.selectedOption == option
++        return Button {
++            _ = search.select(option.id)
++        } label: {
++            VStack(alignment: .leading, spacing: 4) {
++                Text(option.name).font(.headline)
++                Text(option.boundLabel).foregroundStyle(.secondary)
++            }
++            .frame(maxWidth: .infinity, alignment: .leading)
++        }
++        .buttonStyle(.bordered)
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel("\(option.name), \(option.boundLabel)")
++        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
++        .accessibilityIdentifier("search.result.\(option.id)")
++    }
++}
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index adbb724..81a788e 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -12,7 +12,7 @@ struct RootView: View {
+         NavigationStack(path: $model.path) {
+             VStack(alignment: .leading, spacing: 24) {
+                 content
+-                if model.saveFailure != nil {
++                if model.saveFailure != nil && model.launchState != .ready(.initialStationEntry) {
+                     Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
+                         .accessibilityIdentifier("storage.saveFailure").foregroundStyle(.secondary)
+                 }
+@@ -21,16 +21,7 @@ struct RootView: View {
+             .padding(24)
+             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
+-            .navigationDestination(for: Destination.self) { destination in
+-                VStack(alignment: .leading, spacing: 16) {
+-                    Text(destination.title).font(.largeTitle.bold())
+-                        .accessibilityIdentifier("screen.\(destination.rawValue)")
+-                    if destination == .records { Text("아직 여행 기록이 없어요.").foregroundStyle(.secondary) }
+-                    Spacer()
+-                }
+-                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+-                .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
+-            }
++            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model) }
+         }
+         .preferredColorScheme(.dark)
+         #if DEBUG
+@@ -55,8 +46,7 @@ struct RootView: View {
+             Text("집중동행카드").font(.largeTitle.bold()).accessibilityIdentifier("screen.cardEntry")
+             Text("나만의 카드로 함께 떠나요.").foregroundStyle(.secondary)
+         case .ready(.initialStationEntry):
+-            Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
+-            Text("여행을 시작할 정류장을 골라요.").foregroundStyle(.secondary)
++            InitialStationSearchView(model: model)
+         case .ready(.main):
+             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
+             if let station = model.snapshot?.currentStation {
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index ad3b7a8..8adce31 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -45,8 +45,9 @@ struct UITestBootstrap {
+     }
+ 
+     @MainActor func applySaveScenario(to model: AppModel) throws {
+-        guard shouldFailSave else { return }
+-        guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
++        // 쓰기 실패 저장소는 모든 진입 상태에 주입된다. 시드 실패 저장 1회는 메인에서만 일으킨다.
++        guard shouldFailSave, model.launchState == .ready(.main) else { return }
++        guard let original = model.snapshot else { throw SetupIssue.invalidSaveState }
+         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
+                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+     }
+diff --git a/ios/FocusMateUITests/StationSaveFailureUITests.swift b/ios/FocusMateUITests/StationSaveFailureUITests.swift
+new file mode 100644
+index 0000000..db6fa9f
+--- /dev/null
++++ b/ios/FocusMateUITests/StationSaveFailureUITests.swift
+@@ -0,0 +1,98 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class StationSaveFailureUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    private let searchFailureMessage = "출발 정류장 저장에 실패했어요. 확인을 다시 눌러 주세요."
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    func testConfirmWithWriteFailureKeepsSearchScreenAndShowsSearchSaveFailure() throws {
++        let app = launch(seed: "cardOnly", save: "fail")
++        XCTAssertFalse(element("test.setupError", in: app).waitForExistence(timeout: 2))
++        let result = element("search.result.seongsu:-1", in: app)
++        XCTAssertTrue(result.waitForExistence(timeout: timeout))
++        result.tap()
++        let confirm = element("search.confirm", in: app)
++        XCTAssertTrue(confirm.waitForExistence(timeout: timeout))
++        let bytesBefore = try diagnosticValue("test.persistedBytes", in: app)
++
++        confirm.tap()
++
++        let failure = element("search.saveFailure", in: app)
++        XCTAssertTrue(failure.waitForExistence(timeout: timeout))
++        XCTAssertEqual(failure.label, searchFailureMessage)
++        XCTAssertTrue(failure.label.contains("저장에 실패했어요"))
++        XCTAssertFalse(element("test.setupError", in: app).exists)
++        XCTAssertTrue(element("screen.initialStationEntry", in: app).exists)
++        XCTAssertFalse(element("screen.time", in: app).waitForExistence(timeout: 1))
++        XCTAssertFalse(element("storage.saveFailure", in: app).exists)
++
++        let snapshot = try snapshot(in: app)
++        XCTAssertTrue(snapshot["initialStation"] is NSNull)
++        XCTAssertTrue(snapshot["currentStation"] is NSNull)
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), bytesBefore)
++    }
++
++    func testConfirmStaysEnabledAndRetryKeepsSameFailureState() throws {
++        let app = launch(seed: "cardOnly", save: "fail")
++        let result = element("search.result.seongsu:-1", in: app)
++        XCTAssertTrue(result.waitForExistence(timeout: timeout))
++        result.tap()
++        let confirm = element("search.confirm", in: app)
++        XCTAssertTrue(confirm.waitForExistence(timeout: timeout))
++        let bytesBefore = try diagnosticValue("test.persistedBytes", in: app)
++        confirm.tap()
++        XCTAssertTrue(element("search.saveFailure", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(confirm.isEnabled)
++
++        confirm.tap()
++
++        XCTAssertTrue(element("search.saveFailure", in: app).waitForExistence(timeout: timeout))
++        XCTAssertEqual(element("search.saveFailure", in: app).label, searchFailureMessage)
++        XCTAssertTrue(element("screen.initialStationEntry", in: app).exists)
++        XCTAssertFalse(element("screen.time", in: app).waitForExistence(timeout: 1))
++        XCTAssertFalse(element("storage.saveFailure", in: app).exists)
++        XCTAssertTrue(confirm.isEnabled)
++        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), bytesBefore)
++    }
++
++    // 기존 동작 회귀 가드(현재 통과 가능): 메인에서는 공용 storage.saveFailure가 보인다.
++    func testReadySeedWithWriteFailureShowsStorageSaveFailureOnMain() throws {
++        let app = launch(seed: "ready", save: "fail")
++
++        XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
++        XCTAssertTrue(element("storage.saveFailure", in: app).waitForExistence(timeout: timeout))
++    }
++
++    private func launch(seed: String, save: String) -> XCUIApplication {
++        let app = XCUIApplication()
++        app.launchArguments = [
++            "--fm-ui-test-id", UUID().uuidString,
++            "--fm-ui-seed", seed,
++            "--fm-ui-save", save,
++        ]
++        app.launch()
++        return app
++    }
++
++    private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
++        app.descendants(matching: .any)[identifier]
++    }
++
++    private func diagnosticValue(_ identifier: String, in app: XCUIApplication) throws -> String {
++        let diagnostic = element(identifier, in: app)
++        XCTAssertTrue(diagnostic.waitForExistence(timeout: timeout), "Missing diagnostic: \(identifier)")
++        return try XCTUnwrap(diagnostic.value as? String, "Diagnostic has no string value: \(identifier)")
++    }
++
++    private func snapshot(in app: XCUIApplication) throws -> [String: Any] {
++        let raw = try diagnosticValue("test.snapshot", in: app)
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++}

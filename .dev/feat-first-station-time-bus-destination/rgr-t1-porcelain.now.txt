@@ -1,0 +1,4 @@
+?? ios/FocusMate/JourneyPlanner.swift
+?? ios/FocusMate/RouteData.swift
+?? ios/FocusMateTests/JourneyPlannerTests.swift
+?? ios/FocusMateTests/StationCatalogTests.swift

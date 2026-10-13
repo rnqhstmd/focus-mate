@@ -12,7 +12,7 @@ struct RootView: View {
         NavigationStack(path: $model.path) {
             VStack(alignment: .leading, spacing: 24) {
                 content
-                if model.saveFailure != nil {
+                if model.saveFailure != nil && model.launchState != .ready(.initialStationEntry) {
                     Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
                         .accessibilityIdentifier("storage.saveFailure").foregroundStyle(.secondary)
                 }
@@ -21,16 +21,7 @@ struct RootView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Destination.self) { destination in
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(destination.title).font(.largeTitle.bold())
-                        .accessibilityIdentifier("screen.\(destination.rawValue)")
-                    if destination == .records { Text("아직 여행 기록이 없어요.").foregroundStyle(.secondary) }
-                    Spacer()
-                }
-                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
-            }
+            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model) }
         }
         .preferredColorScheme(.dark)
         #if DEBUG
@@ -55,8 +46,7 @@ struct RootView: View {
             Text("집중동행카드").font(.largeTitle.bold()).accessibilityIdentifier("screen.cardEntry")
             Text("나만의 카드로 함께 떠나요.").foregroundStyle(.secondary)
         case .ready(.initialStationEntry):
-            Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
-            Text("여행을 시작할 정류장을 골라요.").foregroundStyle(.secondary)
+            InitialStationSearchView(model: model)
         case .ready(.main):
             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
             if let station = model.snapshot?.currentStation {
@@ -64,8 +54,8 @@ struct RootView: View {
                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
             }
-            ForEach(Destination.allCases, id: \.self) { destination in
-                Button(destination.title) { model.open(destination) }.buttonStyle(.bordered)
+            ForEach(Destination.mainMenu, id: \.self) { destination in
+                Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
                     .accessibilityIdentifier("open.\(destination.rawValue)")
             }
         case let .failed(issue):

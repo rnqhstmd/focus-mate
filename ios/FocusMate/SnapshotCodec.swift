@@ -30,7 +30,7 @@ enum SnapshotCodec {
         catch { throw StorageIssue.corrupt }
         do { try state.validate() }
         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
-        return state
+        return state.updating(records: state.records.sortedNewestFirst())
     }
 
     static func encode(_ snapshot: AppSnapshot) throws -> Data {

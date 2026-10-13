@@ -10,7 +10,7 @@
 | W05 | [P3] 실제 분 타이머·일시정지 | journey | journey FR-5 | W04 | - | 대기 |
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | - | 대기 |
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | - | 대기 |
-| W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 진행 |
+| W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 완료 |
 | W09 | [P4] 하차 태그·요약·기록·분석 | 통합 | journey FR-12, records FR-6 | W05, W08 | - | 대기 |
 | W10 | [P5] 카드 꾸미기 | card | card FR-4, NFR-2 | W01 | - | 대기 |
 | W11 | [P5] 마이페이지 | card | card FR-5 | W01, W08 | - | 대기 |

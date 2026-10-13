@@ -1,0 +1,967 @@
+diff --git a/ios/FocusMate/CardIssuanceView.swift b/ios/FocusMate/CardIssuanceView.swift
+new file mode 100644
+index 0000000..b22231f
+--- /dev/null
++++ b/ios/FocusMate/CardIssuanceView.swift
+@@ -0,0 +1,100 @@
++import SwiftUI
++
++enum CardIssuanceCopy {
++    static let readyTitle = "집중동행카드를 발급받아볼까요?"
++    static let readyBody = "독서도, 작업도, 잠깐의 쉼도. 한 장의 카드로 나만의 여정을 시작해요."
++    static let readyHint = "한 번 발급받아, 모든 몰입 여정에 사용해요."
++    static let issuedTitle = "카드가 발급됐어요. 이제, 어디에서 출발할까요?"
++    static let issuedBody = "오늘부터, 나만의 시간으로. 이 카드가 매 여정에 함께해요."
++    static let issuedHint = "발급받은 카드는 승차할 때와 하차할 때 사용해요."
++    static let issueButton = "집중동행카드 발급받기"
++    static let issuingButton = "카드를 발급하고 있어요"
++    static let retryButton = "다시 발급받기"
++    static let continueButton = "출발지 선택하기"
++    static let issueError = CardIssuanceController.failedAnnouncement
++}
++
++/// 카드 발급 화면. 상태는 `CardIssuanceController`가 갖고, 이 뷰는 그리기와 시스템 동작 줄이기 전달만 한다.
++struct CardIssuanceView: View {
++    let controller: CardIssuanceController
++    @Environment(\.accessibilityReduceMotion) private var reduceMotion
++    @AccessibilityFocusState private var continueFocused: Bool
++    @State private var cardOut = false
++
++    private var isIssued: Bool { controller.phase == .issued }
++    private var showsCard: Bool { controller.phase == .issuing || isIssued }
++
++    var body: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 20) {
++                Text(isIssued ? CardIssuanceCopy.issuedTitle : CardIssuanceCopy.readyTitle)
++                    .font(.title.bold())
++                    .accessibilityValue(isIssued ? CardIssuanceCopy.issuedTitle : CardIssuanceCopy.readyTitle)
++                    .accessibilityIdentifier("card.title")
++                Text(isIssued ? CardIssuanceCopy.issuedBody : CardIssuanceCopy.readyBody)
++                    .foregroundStyle(.secondary)
++                cardStage
++                Text(isIssued ? CardIssuanceCopy.issuedHint : CardIssuanceCopy.readyHint)
++                    .font(.footnote).foregroundStyle(.secondary)
++                if controller.phase == .failed {
++                    Text(CardIssuanceCopy.issueError)
++                        .accessibilityValue(CardIssuanceCopy.issueError)
++                        .accessibilityIdentifier("card.issueError")
++                }
++            }
++            .frame(maxWidth: .infinity, alignment: .leading)
++        }
++        .safeAreaInset(edge: .bottom) { actionButton.padding(.top, 12) }
++        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier("screen.cardEntry")
++        .onChange(of: controller.focusTarget) { _, target in continueFocused = target == .continueButton }
++    }
++
++    private var cardStage: some View {
++        ZStack(alignment: .top) {
++            Capsule().fill(.secondary.opacity(0.4)).frame(width: 180, height: 6)
++            if showsCard {
++                PassFace()
++                    .accessibilityIdentifier("card.face")
++                    .offset(y: cardOut ? 0 : -42)
++                    .mask(alignment: .bottom) {
++                        Rectangle().frame(maxHeight: .infinity).scaleEffect(y: cardOut ? 1 : 0.02, anchor: .bottom)
++                    }
++                    .padding(.top, 14)
++                    .onAppear { slideOut() }
++            }
++        }
++        .frame(maxWidth: 320)
++        .frame(maxWidth: .infinity)
++    }
++
++    @ViewBuilder private var actionButton: some View {
++        if isIssued {
++            Button { controller.proceed() } label: { buttonLabel(CardIssuanceCopy.continueButton) }
++                .buttonStyle(.borderedProminent)
++                .accessibilityIdentifier("card.continueButton")
++                .accessibilityFocused($continueFocused)
++        } else {
++            Button {
++                Task { await controller.issue(reduceMotion: reduceMotion) }
++            } label: {
++                buttonLabel(controller.phase == .issuing ? CardIssuanceCopy.issuingButton
++                            : controller.phase == .failed ? CardIssuanceCopy.retryButton : CardIssuanceCopy.issueButton)
++            }
++            .buttonStyle(.borderedProminent)
++            .disabled(controller.phase == .issuing)
++            .accessibilityIdentifier("card.issueButton")
++        }
++    }
++
++    private func buttonLabel(_ title: String) -> some View {
++        Text(title).frame(maxWidth: .infinity, minHeight: 44).multilineTextAlignment(.center)
++    }
++
++    private func slideOut() {
++        guard !cardOut else { return }
++        if reduceMotion { cardOut = true; return }
++        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: CardIssuanceTiming.slotAnimation)) { cardOut = true }
++    }
++}
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+index 63a50c6..c8475fe 100644
+--- a/ios/FocusMate/FocusMateApp.swift
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -3,9 +3,12 @@ import SwiftUI
+ @main @MainActor
+ struct FocusMateApp: App {
+     @State private var model: AppModel
++    @State private var issuance: CardIssuanceController
+     @State private var hasStarted = false
+     #if DEBUG
+     private let testBootstrap: UITestBootstrap?
++    private let testRecorder: UITestFeedbackRecorder?
++    private let testGate: UITestIssuanceGate?
+     @State private var testSetupError: String?
+     #endif
+ 
+@@ -17,17 +20,37 @@ struct FocusMateApp: App {
+             #if DEBUG
+             let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
+             testBootstrap = bootstrap
+-            _model = State(initialValue: AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL)))
++            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL))
++            _model = State(initialValue: model)
++            if let bootstrap {
++                let recorder = bootstrap.makeFeedbackRecorder()
++                let gate = bootstrap.makeGate()
++                testRecorder = recorder
++                testGate = gate
++                _issuance = State(initialValue: gate.map {
++                    CardIssuanceController(issuer: model, haptics: recorder, announcer: recorder, sleep: $0.wait)
++                } ?? CardIssuanceController(issuer: model, haptics: recorder, announcer: recorder))
++            } else {
++                testRecorder = nil
++                testGate = nil
++                _issuance = State(initialValue: Self.makeIssuance(for: model))
++            }
+             #else
+-            _model = State(initialValue: AppModel(store: LocalSnapshotStore(fileURL: operationalURL)))
++            let model = AppModel(store: LocalSnapshotStore(fileURL: operationalURL))
++            _model = State(initialValue: model)
++            _issuance = State(initialValue: Self.makeIssuance(for: model))
+             #endif
+         } catch {
+             // This store never reads or writes a fallback location.
+             let unavailable = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unavailable-focusmate-state"),
+                 readData: { _ in throw StorageIssue.unreadable })
+-            _model = State(initialValue: AppModel(store: unavailable))
++            let model = AppModel(store: unavailable)
++            _model = State(initialValue: model)
++            _issuance = State(initialValue: Self.makeIssuance(for: model))
+             #if DEBUG
+             testBootstrap = nil
++            testRecorder = nil
++            testGate = nil
+             if ProcessInfo.processInfo.arguments.contains("--fm-ui-test-id") {
+                 _testSetupError = State(initialValue: String(describing: error))
+             }
+@@ -38,13 +61,18 @@ struct FocusMateApp: App {
+     var body: some Scene {
+         WindowGroup {
+             #if DEBUG
+-            RootView(model: model, testBootstrap: testBootstrap, testSetupError: testSetupError).task { start() }
++            RootView(model: model, issuance: issuance, testBootstrap: testBootstrap, testRecorder: testRecorder,
++                     testGate: testGate, testSetupError: testSetupError).task { start() }
+             #else
+-            RootView(model: model).task { start() }
++            RootView(model: model, issuance: issuance).task { start() }
+             #endif
+         }
+     }
+ 
++    private static func makeIssuance(for model: AppModel) -> CardIssuanceController {
++        CardIssuanceController(issuer: model, haptics: CoreHapticsIssuancePlayer(), announcer: SystemAccessibilityAnnouncer())
++    }
++
+     private func start() {
+         guard !hasStarted else { return }
+         hasStarted = true
+@@ -53,7 +81,7 @@ struct FocusMateApp: App {
+         do { try testBootstrap?.prepare() }
+         catch { testSetupError = String(describing: error); return }
+         #endif
+-        model.loadIfNeeded()
++        model.start()
+         #if DEBUG
+         do { try testBootstrap?.applySaveScenario(to: model) }
+         catch { testSetupError = String(describing: error) }
+diff --git a/ios/FocusMate/PassFace.swift b/ios/FocusMate/PassFace.swift
+new file mode 100644
+index 0000000..87ac3c9
+--- /dev/null
++++ b/ios/FocusMate/PassFace.swift
+@@ -0,0 +1,60 @@
++import SwiftUI
++
++/// 발급·승하차·마이페이지가 함께 쓰는 기본 카드(pass-face). 놓인 폭을 채우고 내부는 기준 폭 238 대비 배율로 그린다.
++/// 카드 번호는 그리지 않는다. 식별자(`card.face`)는 호출하는 쪽이 붙인다.
++struct PassFace: View {
++    static let aspectRatio: CGFloat = 85.6 / 53.98
++    static let referenceWidth: CGFloat = 238
++    static let dotsAssetName = "PassDots"
++
++    init() {}
++
++    var body: some View {
++        // 접근성은 바깥 한 요소(이름 + 이미지 특성)만 노출한다. GeometryReader 쪽 children: .ignore는
++        // 내부 장식을 숨기지 못해, 그림 전체를 숨긴 overlay로 두고 빈 바탕을 접근성 요소로 쓴다.
++        Color.clear
++            .aspectRatio(Self.aspectRatio, contentMode: .fit)
++            .overlay { artwork.accessibilityHidden(true) }
++            .accessibilityElement()
++            .accessibilityLabel(PassIdentity.displayName)
++            .accessibilityAddTraits(.isImage)
++    }
++
++    private var artwork: some View {
++        GeometryReader { proxy in
++            let scale = proxy.size.width / Self.referenceWidth
++            let shape = RoundedRectangle(cornerRadius: 16 * scale, style: .continuous)
++            ZStack(alignment: .topLeading) {
++                Color(red: 0x12 / 255, green: 0x14 / 255, blue: 0x16 / 255)
++                Image(Self.dotsAssetName)
++                    .resizable()
++                    .aspectRatio(contentMode: .fit)
++                    .frame(width: proxy.size.width * 0.78)
++                    .opacity(0.85)
++                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
++                    .offset(x: proxy.size.width * 0.12)
++                Text("Focus Mate")
++                    .font(.system(size: 10 * scale, weight: .semibold))
++                    .tracking(1 * scale)
++                    .offset(x: 20 * scale, y: 17 * scale)
++                Image(systemName: "wave.3.right")
++                    .resizable()
++                    .scaledToFit()
++                    .frame(width: 22 * scale, height: 22 * scale)
++                    .frame(maxWidth: .infinity, alignment: .trailing)
++                    .padding(.top, 12 * scale)
++                    .padding(.trailing, 16 * scale)
++                RoundedRectangle(cornerRadius: 3 * scale, style: .continuous)
++                    .fill(Color(red: 0xc5 / 255, green: 0xb9 / 255, blue: 0x98 / 255))
++                    .frame(width: proxy.size.width * 0.12, height: proxy.size.height * 0.15)
++                    .offset(x: proxy.size.width * 0.075, y: proxy.size.height * 0.43)
++                Text(PassIdentity.displayName)
++                    .font(.system(size: 19 * scale, weight: .semibold))
++                    .offset(x: 20 * scale, y: proxy.size.height - 44 * scale)
++            }
++            .foregroundStyle(Color(red: 0xf1 / 255, green: 0xf2 / 255, blue: 0xf3 / 255))
++            .clipShape(shape)
++            .overlay(shape.stroke(Color(red: 0x51 / 255, green: 0x56 / 255, blue: 0x5a / 255), lineWidth: 1))
++        }
++    }
++}
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index adbb724..32902fa 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -3,9 +3,13 @@ import SwiftUI
+ @MainActor
+ struct RootView: View {
+     @Bindable var model: AppModel
++    let issuance: CardIssuanceController
+     #if DEBUG
+     var testBootstrap: UITestBootstrap?
++    var testRecorder: UITestFeedbackRecorder?
++    var testGate: UITestIssuanceGate?
+     var testSetupError: String?
++    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+     #endif
+ 
+     var body: some View {
+@@ -39,25 +43,53 @@ struct RootView: View {
+                 if let testBootstrap {
+                     Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
+                     Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
++                    Text("글자 크기 진단").accessibilityValue(String(describing: dynamicTypeSize)).accessibilityIdentifier("test.dynamicTypeSize")
++                }
++                if let testRecorder {
++                    Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
++                    Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
+                 }
+                 if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
+             }
+             .font(.system(size: 1)).foregroundStyle(.clear)
+         }
++        // 상단 모서리는 상태 표시줄이 터치를 가져가므로, 하단 버튼과도 겹치지 않는 오른쪽 가운데에 둔다.
++        .overlay(alignment: .trailing) {
++            if let testGate {
++                // 거의 투명한 opacity는 SwiftUI 히트 테스트에서 빠질 수 있어, 불투명 뷰에 글자만 투명하게 두고 터치 영역을 명시한다.
++                Button { testGate.release() } label: {
++                    Text("발급 해제").font(.system(size: 1)).foregroundStyle(.clear)
++                        .frame(width: 44, height: 44).contentShape(Rectangle())
++                }
++                .accessibilityLabel("발급 해제")
++                    .accessibilityIdentifier("test.releaseIssuance")
++            }
++        }
+         #endif
+     }
+ 
++    /// 화면 분기는 `presentedRoute`만 쓴다. `launchState`는 로딩·실패 판단에만 쓴다.
+     @ViewBuilder private var content: some View {
+         switch model.launchState {
+         case .loading:
+             Text("불러오는 중").accessibilityIdentifier("screen.loading")
+-        case .ready(.cardEntry):
+-            Text("집중동행카드").font(.largeTitle.bold()).accessibilityIdentifier("screen.cardEntry")
+-            Text("나만의 카드로 함께 떠나요.").foregroundStyle(.secondary)
+-        case .ready(.initialStationEntry):
++        case .ready:
++            route
++        case let .failed(issue):
++            Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
++            Text(message(for: issue)).accessibilityValue(message(for: issue)).accessibilityIdentifier("storage.error")
++            Text("기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
++        }
++    }
++
++    @ViewBuilder private var route: some View {
++        switch model.presentedRoute {
++        case .cardEntry:
++            CardIssuanceView(controller: issuance)
++        case .initialStationEntry:
+             Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
+             Text("여행을 시작할 정류장을 골라요.").foregroundStyle(.secondary)
+-        case .ready(.main):
++        case .main:
+             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
+             if let station = model.snapshot?.currentStation {
+                 Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
+@@ -68,10 +100,8 @@ struct RootView: View {
+                 Button(destination.title) { model.open(destination) }.buttonStyle(.bordered)
+                     .accessibilityIdentifier("open.\(destination.rawValue)")
+             }
+-        case let .failed(issue):
+-            Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
+-            Text(message(for: issue)).accessibilityIdentifier("storage.error")
+-            Text("기존 데이터는 변경하지 않았어요.").foregroundStyle(.secondary)
++        case nil:
++            EmptyView()
+         }
+     }
+ 
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index ad3b7a8..a292dc9 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -1,10 +1,13 @@
+ #if DEBUG
+ import Foundation
++import Observation
+ 
+ struct UITestBootstrap {
+     let fileURL: URL
+     let seed: String?
+     let shouldFailSave: Bool
++    let issueHold: IssueHold
++    enum IssueHold { case standard, manual }
+     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
+ 
+     init?(arguments: [String], applicationSupport: URL) throws {
+@@ -16,26 +19,31 @@ struct UITestBootstrap {
+         guard let id = try argument("--fm-ui-test-id") else { return nil }
+         guard let uuid = UUID(uuidString: id) else { throw SetupIssue.invalidArguments }
+         seed = try argument("--fm-ui-seed")
+-        guard seed == nil || ["none", "cardOnly", "ready", "corrupt", "unsupported"].contains(seed!) else { throw SetupIssue.invalidArguments }
++        guard seed == nil || Self.seeds.contains(seed!) else { throw SetupIssue.invalidArguments }
+         let save = try argument("--fm-ui-save")
+         guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
+         shouldFailSave = save == "fail"
++        let hold = try argument("--fm-ui-issue-hold")
++        guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
++        issueHold = hold == "manual" ? .manual : .standard
+         fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
+             .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
+     }
+ 
++    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard"]).union(rawSeeds.keys)
++
+     func prepare() throws {
+         guard let seed else { return }
+         guard !FileManager.default.fileExists(atPath: fileURL.path) else { throw SetupIssue.existingSeed }
+         switch seed {
+         case "none": break
+-        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: nil, currentStation: nil))
+-        case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
+-        case "corrupt", "unsupported":
+-            let raw = seed == "corrupt" ? "{broken" : #"{"version":999,"state":null}"#
++        case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot.empty.issuingCard(Self.fixedCard))
++        case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard))
++        case "issuedWithoutCard": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
++        default:
++            guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
+             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+             try Data(raw.utf8).write(to: fileURL, options: .atomic)
+-        default: throw SetupIssue.invalidArguments
+         }
+     }
+ 
+@@ -44,21 +52,75 @@ struct UITestBootstrap {
+         return LocalSnapshotStore(fileURL: fileURL)
+     }
+ 
++    /// `fail`은 모든 쓰기를 실패시킨다. 메인에서는 정류장 저장 시나리오를 적용하고, 발급 화면에서는 발급이 실패 저장소를 타게 둔다.
+     @MainActor func applySaveScenario(to model: AppModel) throws {
+         guard shouldFailSave else { return }
++        if model.launchState == .ready(.cardEntry) { return }
+         guard model.launchState == .ready(.main), let original = model.snapshot else { throw SetupIssue.invalidSaveState }
+         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
+                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+     }
+ 
++    @MainActor func makeFeedbackRecorder() -> UITestFeedbackRecorder { UITestFeedbackRecorder() }
++    @MainActor func makeGate() -> UITestIssuanceGate? { issueHold == .manual ? UITestIssuanceGate() : nil }
++
+     var persistedBytes: String {
+         do { return try Data(contentsOf: fileURL).base64EncodedString() }
+         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return "absent" }
+         catch { return "unreadable" }
+     }
+ 
++    private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
+     private static let readySnapshot = AppSnapshot.empty.updatingStage(cardIssued: true,
+         initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
+         currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++
++    private static let stations = #""currentStation":{"direction":-1,"id":"seoulForest","name":"서울숲"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
++    private static let card = #"{"id":"FM-20261013","issuedAt":"2026-10-13T09:00:00Z"}"#
++    private static func state(issued: Bool = true, cards: String, records: String = "", stations: String = stations) -> String {
++        #"{"state":{"cardIssued":\#(issued),"cards":{"items":[\#(cards)]},\#(stations),"journey":{"active":null},"records":{"items":[\#(records)]}},"version":2}"#
++    }
++    /// 파일에 그대로 쓰는 원본 바이트 시드.
++    static let rawSeeds: [String: String] = [
++        "corrupt": "{broken",
++        "unsupported": #"{"version":999,"state":null}"#,
++        "invalidCardShortId": state(cards: #"{"id":"FM-1234","issuedAt":"2026-10-13T09:00:00Z"}"#),
++        "invalidCardPrefix": state(cards: #"{"id":"NS-12345678","issuedAt":"2026-10-13T09:00:00Z"}"#),
++        "invalidCardIssuedAt": state(cards: #"{"id":"FM-20261013","issuedAt":"어제"}"#),
++        "duplicateCards": state(cards: card + "," + #"{"id":"FM-20261014","issuedAt":"2026-10-13T09:00:00Z"}"#),
++        "cardWithoutIssuance": state(issued: false, cards: card, stations: #""currentStation":null,"initialStation":null"#),
++        "undefinedRecord": state(cards: "", records: #"{"kind":"x"}"#),
++    ]
++}
++
++/// UI 테스트에서 햅틱·안내를 기록한다. 햅틱 지원은 항상 true로 두어 "0회" 단언이 의미를 갖게 한다.
++@MainActor @Observable
++final class UITestFeedbackRecorder: IssuanceHaptics, AccessibilityAnnouncing {
++    let isSupported = true
++    private(set) var playCount = 0
++    private(set) var patterns: [IssuanceHapticPattern] = []
++    private(set) var announcements: [String] = []
++    @ObservationIgnored private let system = SystemAccessibilityAnnouncer()
++
++    func play(_ pattern: IssuanceHapticPattern) { playCount += 1; patterns.append(pattern) }
++    func announce(_ message: String) { announcements.append(message); system.announce(message) }
++}
++
++/// `--fm-ui-issue-hold manual`: 테스트가 해제할 때까지 발급 중 상태를 붙잡는다.
++@MainActor @Observable
++final class UITestIssuanceGate {
++    @ObservationIgnored private var waiter: CheckedContinuation<Void, Never>?
++    @ObservationIgnored private var releasedEarly = false
++
++    func wait(_ duration: Duration) async {
++        if releasedEarly { releasedEarly = false; return }
++        await withCheckedContinuation { waiter = $0 }
++    }
++
++    func release() {
++        guard let waiter else { releasedEarly = true; return }
++        self.waiter = nil
++        waiter.resume()
++    }
+ }
+ #endif
+diff --git a/ios/FocusMateUITests/CardIssuanceFlowTests.swift b/ios/FocusMateUITests/CardIssuanceFlowTests.swift
+new file mode 100644
+index 0000000..5e412fe
+--- /dev/null
++++ b/ios/FocusMateUITests/CardIssuanceFlowTests.swift
+@@ -0,0 +1,282 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class CardIssuanceFlowTests: XCTestCase {
++    private let timeout: TimeInterval = 3
++    private let completionTimeout: TimeInterval = 8
++    private let idPattern = "^FM-[0-9]{8}$"
++    private let xxxl = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // MARK: AC-1
++
++    func testAC1_저장_파일이_없으면_발급_전_화면을_보여준다() throws {
++        // 깨짐 명명: cardEntry 대신 initialStationEntry로 보내거나 제목/버튼 문구가 바뀌면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none")
++
++        XCTAssertTrue(h.element("screen.cardEntry").waitForExistence(timeout: timeout))
++        XCTAssertEqual(h.element("card.title").value as? String, "집중동행카드를 발급받아볼까요?")
++        let button = h.element("card.issueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertEqual(button.label, "집중동행카드 발급받기")
++        XCTAssertTrue(button.isEnabled)
++        XCTAssertFalse(h.element("card.face").exists)
++        XCTAssertFalse(h.element("card.continueButton").exists)
++        XCTAssertFalse(h.element("card.issueError").exists)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), "absent")
++    }
++
++    // MARK: AC-2
++
++    func testAC2_발급_버튼을_누르면_카드_한_장이_저장된다() throws {
++        // 깨짐 명명: 저장을 건너뛰거나 카드를 2장 저장하거나 id 형식이 바뀌면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none")
++        try issueAndWait(h)
++
++        try assertIssuedSnapshot(h)
++        XCTAssertNotEqual(try h.diagnostic("test.persistedBytes"), "absent")
++        XCTAssertEqual(try h.diagnostic("test.hapticCount"), "1")
++    }
++
++    // MARK: AC-3
++
++    func testAC3_발급_완료_화면은_5초_동안_유지된다() throws {
++        // 깨짐 명명: 완료 후 자동으로 출발지 선택으로 넘어가면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none")
++        try issueAndWait(h)
++
++        XCTAssertFalse(h.element("screen.initialStationEntry").waitForExistence(timeout: 5))
++
++        XCTAssertTrue(h.element("screen.cardEntry").exists)
++        XCTAssertEqual(h.element("card.title").value as? String, "카드가 발급됐어요. 이제, 어디에서 출발할까요?")
++        XCTAssertTrue(h.element("card.face").exists)
++        XCTAssertEqual(h.element("card.continueButton").label, "출발지 선택하기")
++        XCTAssertFalse(h.element("card.issueButton").exists)
++        XCTAssertFalse(h.element("screen.initialStationEntry").exists)
++    }
++
++    // MARK: AC-4
++
++    func testAC4_계속_버튼은_출발지_선택으로_이동하고_카드를_유지한다() throws {
++        // 깨짐 명명: 이동 시 카드를 새로 발급하거나 cardEntry가 남으면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none")
++        try issueAndWait(h)
++        let issuedID = try cardID(try h.snapshot())
++
++        h.element("card.continueButton").tap()
++
++        XCTAssertTrue(h.element("screen.initialStationEntry").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardEntry").exists)
++        let items = try cardItems(try h.snapshot())
++        XCTAssertEqual(items.count, 1)
++        XCTAssertEqual(items.first?["id"] as? String, issuedID)
++    }
++
++    // MARK: AC-5
++
++    func testAC5_발급_중_연타해도_카드는_한_장이고_버튼이_잠긴다() throws {
++        // 깨짐 명명: 발급 중 재탭이 두 번째 저장을 일으키거나 버튼이 활성이면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none", hold: "manual")
++        let button = h.element("card.issueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        button.tap()
++
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertTrue(waitForLabel(button, "카드를 발급하고 있어요"))
++        XCTAssertFalse(button.isEnabled)
++
++        for _ in 0..<2 {
++            XCTAssertTrue(button.exists)
++            button.tap()
++        }
++
++        let release = h.element("test.releaseIssuance")
++        XCTAssertTrue(release.waitForExistence(timeout: timeout))
++        release.tap()
++
++        XCTAssertTrue(h.element("card.continueButton").waitForExistence(timeout: completionTimeout))
++        XCTAssertEqual(try cardItems(try h.snapshot()).count, 1)
++        XCTAssertFalse(h.element("card.issueButton").exists)
++    }
++
++    // MARK: AC-6
++
++    func testAC6_재실행해도_같은_카드로_출발지_선택이_열린다() throws {
++        // 깨짐 명명: 재실행 때 cardEntry로 돌아가거나 카드를 다시 발급하면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none")
++        try issueAndWait(h)
++        let issuedID = try cardID(try h.snapshot())
++
++        h.relaunch()
++
++        XCTAssertTrue(h.element("screen.initialStationEntry").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardEntry").exists)
++        XCTAssertFalse(h.element("card.issueButton").exists)
++        let items = try cardItems(try h.snapshot())
++        XCTAssertEqual(items.count, 1)
++        XCTAssertEqual(items.first?["id"] as? String, issuedID)
++        XCTAssertEqual(try h.diagnostic("test.hapticCount"), "0")
++    }
++
++    // MARK: AC-7
++
++    func testAC7_저장이_실패하면_오류와_다시_발급_버튼을_보여준다() throws {
++        // 깨짐 명명: 실패인데 카드를 보여주거나 상태에 카드를 남기거나 진동을 울리면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none", save: "fail")
++        let button = h.element("card.issueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        button.tap()
++
++        let error = h.element("card.issueError")
++        XCTAssertTrue(error.waitForExistence(timeout: completionTimeout))
++        XCTAssertEqual(error.value as? String, "카드를 발급하지 못했어요. 다시 시도해 주세요.")
++        XCTAssertFalse(h.element("card.face").exists)
++        XCTAssertFalse(h.element("card.continueButton").exists)
++        XCTAssertFalse(h.element("screen.initialStationEntry").exists)
++        XCTAssertTrue(waitForLabel(button, "다시 발급받기"))
++        XCTAssertTrue(button.isEnabled)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), "absent")
++        let snapshot = try h.snapshot()
++        XCTAssertEqual(snapshot["cardIssued"] as? Bool, false)
++        XCTAssertEqual(try cardItems(snapshot).count, 0)
++        XCTAssertFalse(h.element("storage.saveFailure").exists)
++        XCTAssertEqual(try h.diagnostic("test.hapticCount"), "0")
++    }
++
++    // MARK: AC-16
++
++    func testAC16_완료_화면의_어떤_요소에도_카드_번호가_노출되지_않는다() throws {
++        // 깨짐 명명: 라벨/값/텍스트 어디에든 숫자 8자리나 "FM ·"를 노출하면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none")
++        try issueAndWait(h)
++        let id = try cardID(try h.snapshot())
++        let digits = String(id.dropFirst(3))
++        XCTAssertEqual(digits.count, 8)
++
++        let elements = h.app.descendants(matching: .any).allElementsBoundByIndex
++        XCTAssertGreaterThan(elements.count, 0)
++        var texts: [String] = []
++        for element in elements where !element.identifier.hasPrefix("test.") {
++            texts.append(element.label)
++            if let value = element.value as? String { texts.append(value) }
++        }
++        XCTAssertTrue(texts.contains("집중동행카드"), "조회가 카드 얼굴을 포함해야 한다")
++        XCTAssertEqual(texts.filter { $0.contains(digits) }.count, 0)
++        XCTAssertEqual(texts.filter { $0.hasPrefix("FM ·") }.count, 0)
++    }
++
++    // MARK: AC-19
++
++    func testAC19_상태별_접근성_라벨과_안내_문구가_맞다() throws {
++        // 깨짐 명명: 라벨이 바뀌거나 face 하위에 장식 요소가 노출되거나 안내가 빠지면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none", hold: "manual")
++        let button = h.element("card.issueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertEqual(button.label, "집중동행카드 발급받기")
++        XCTAssertTrue(button.isEnabled)
++
++        button.tap()
++        XCTAssertTrue(waitForLabel(button, "카드를 발급하고 있어요"))
++        XCTAssertFalse(button.isEnabled)
++
++        let release = h.element("test.releaseIssuance")
++        XCTAssertTrue(release.waitForExistence(timeout: timeout))
++        release.tap()
++
++        let continueButton = h.element("card.continueButton")
++        XCTAssertTrue(continueButton.waitForExistence(timeout: completionTimeout))
++        XCTAssertEqual(continueButton.label, "출발지 선택하기")
++        let face = h.element("card.face")
++        XCTAssertTrue(face.waitForExistence(timeout: timeout))
++        XCTAssertEqual(face.label, "집중동행카드")
++        // iOS 27 XCUITest는 accessibilityHidden 하위 요소도 자동화 트리에 노출해 descendants 수로 VoiceOver 노출을 판정할 수 없다 — 장식 비노출은 수동 VoiceOver 확인(trust-ledger)
++
++        let announcements = try h.diagnostic("test.announcements")
++        XCTAssertTrue(announcements.contains("카드를 발급하고 있어요."))
++        XCTAssertTrue(announcements.contains("카드가 발급됐어요. 출발지를 선택해보세요."))
++    }
++
++    // MARK: AC-20
++
++    func testAC20_큰_글자에서_발급_버튼을_누를_수_있다() throws {
++        // 깨짐 명명: 큰 글자에서 버튼이 화면 밖/가려짐이면 isHittable이 false가 되어 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none", extraArguments: xxxl)
++        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
++        let button = h.element("card.issueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertTrue(button.isHittable)
++
++        button.tap()
++
++        XCTAssertTrue(h.element("card.continueButton").waitForExistence(timeout: completionTimeout))
++        try assertIssuedSnapshot(h)
++    }
++
++    func testAC20_큰_글자에서_계속_버튼을_누르면_출발지_선택으로_이동한다() throws {
++        // 깨짐 명명: 완료 화면에서 계속 버튼이 가려지면 isHittable 단언이 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "none", extraArguments: xxxl)
++        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
++        let issue = h.element("card.issueButton")
++        XCTAssertTrue(issue.waitForExistence(timeout: timeout))
++        issue.tap()
++        let button = h.element("card.continueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: completionTimeout))
++        let issuedID = try cardID(try h.snapshot())
++        XCTAssertTrue(button.isHittable)
++
++        button.tap()
++
++        XCTAssertTrue(h.element("screen.initialStationEntry").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardEntry").exists)
++        XCTAssertEqual(try cardID(try h.snapshot()), issuedID)
++    }
++
++    // MARK: helpers
++
++    private func issueAndWait(_ h: FocusMateUIHarness) throws {
++        let button = h.element("card.issueButton")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        button.tap()
++        XCTAssertTrue(h.element("card.continueButton").waitForExistence(timeout: completionTimeout))
++    }
++
++    private func waitForLabel(_ element: XCUIElement, _ label: String) -> Bool {
++        let predicate = NSPredicate(format: "label == %@", label)
++        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
++        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
++    }
++
++    private func cardItems(_ snapshot: [String: Any]) throws -> [[String: Any]] {
++        let cards = try XCTUnwrap(snapshot["cards"] as? [String: Any], "cards 섹션 없음")
++        return try XCTUnwrap(cards["items"] as? [[String: Any]], "cards.items 없음")
++    }
++
++    private func cardID(_ snapshot: [String: Any]) throws -> String {
++        let first = try XCTUnwrap(try cardItems(snapshot).first, "카드 없음")
++        return try XCTUnwrap(first["id"] as? String)
++    }
++
++    private func assertIssuedSnapshot(_ h: FocusMateUIHarness) throws {
++        let snapshot = try h.snapshot()
++        XCTAssertEqual(snapshot["cardIssued"] as? Bool, true)
++        let items = try cardItems(snapshot)
++        XCTAssertEqual(items.count, 1)
++        let id = try XCTUnwrap(items.first?["id"] as? String)
++        XCTAssertNotNil(id.range(of: idPattern, options: .regularExpression), "id 형식: \(id)")
++        let issuedAt = try XCTUnwrap(items.first?["issuedAt"] as? String)
++        let plain = ISO8601DateFormatter()
++        let fractional = ISO8601DateFormatter()
++        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
++        XCTAssertTrue(plain.date(from: issuedAt) != nil || fractional.date(from: issuedAt) != nil, "issuedAt: \(issuedAt)")
++        let journey = try XCTUnwrap(snapshot["journey"] as? [String: Any])
++        XCTAssertTrue(journey["active"] is NSNull)
++        let records = try XCTUnwrap(snapshot["records"] as? [String: Any])
++        XCTAssertEqual((records["items"] as? [Any])?.count, 0)
++        XCTAssertEqual(try h.diagnostic("test.hapticCount"), "1")
++    }
++}
+diff --git a/ios/FocusMateUITests/CardStorageFlowTests.swift b/ios/FocusMateUITests/CardStorageFlowTests.swift
+new file mode 100644
+index 0000000..b0388fe
+--- /dev/null
++++ b/ios/FocusMateUITests/CardStorageFlowTests.swift
+@@ -0,0 +1,127 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class CardStorageFlowTests: XCTestCase {
++    private let timeout: TimeInterval = 3
++    private let idPattern = "^FM-[0-9]{8}$"
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // MARK: AC-10
++
++    func testAC10_카드_없는_기존_사용자는_메인으로_가고_카드가_보충된다() throws {
++        // 깨짐 명명: 보충하지 않거나 cardEntry를 거치거나 실행마다 id가 바뀌거나 진동이 울리면 실패한다.
++        let h = FocusMateUIHarness.launch(seed: "issuedWithoutCard")
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardEntry").exists)
++        let first = try cardID(try h.snapshot())
++        XCTAssertNotNil(first.range(of: idPattern, options: .regularExpression), "id: \(first)")
++        XCTAssertEqual(try cardCount(try h.snapshot()), 1)
++        XCTAssertEqual(h.element("main.currentStation").value as? String, "서울숲")
++        XCTAssertEqual(try h.diagnostic("test.hapticCount"), "0")
++
++        h.relaunch()
++
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardEntry").exists)
++        XCTAssertEqual(try cardCount(try h.snapshot()), 1)
++        XCTAssertEqual(try cardID(try h.snapshot()), first)
++        XCTAssertEqual(h.element("main.currentStation").value as? String, "서울숲")
++        XCTAssertEqual(try h.diagnostic("test.hapticCount"), "0")
++    }
++
++    // MARK: AC-14
++
++    private static let station = #""currentStation":{"direction":-1,"id":"seoulForest","name":"서울숲"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
++    private static let card1 = #"{"id":"FM-20261013","issuedAt":"2026-10-13T09:00:00Z"}"#
++
++    private static func raw(issued: Bool = true, cards: String, records: String = "", stations: String = station) -> String {
++        #"{"state":{"cardIssued":\#(issued),"cards":{"items":[\#(cards)]},\#(stations),"journey":{"active":null},"records":{"items":[\#(records)]}},"version":2}"#
++    }
++
++    private static let nullStations = #""currentStation":null,"initialStation":null"#
++    private static let notReadable = "저장된 이용 상태를 확인할 수 없어요."
++    private static let badFormat = "저장된 데이터 형식을 읽을 수 없어요."
++
++    func testAC14a_카드_id가_너무_짧으면_저장소_오류로_바이트를_보존한다() throws {
++        try assertPreserved(
++            seed: "invalidCardShortId",
++            json: Self.raw(cards: #"{"id":"FM-1234","issuedAt":"2026-10-13T09:00:00Z"}"#),
++            message: Self.notReadable)
++    }
++
++    func testAC14b_카드_id_접두어가_다르면_저장소_오류로_바이트를_보존한다() throws {
++        try assertPreserved(
++            seed: "invalidCardPrefix",
++            json: Self.raw(cards: #"{"id":"NS-12345678","issuedAt":"2026-10-13T09:00:00Z"}"#),
++            message: Self.notReadable)
++    }
++
++    func testAC14c_발급_시각이_날짜가_아니면_형식_오류로_바이트를_보존한다() throws {
++        try assertPreserved(
++            seed: "invalidCardIssuedAt",
++            json: Self.raw(cards: #"{"id":"FM-20261013","issuedAt":"어제"}"#),
++            message: Self.badFormat)
++    }
++
++    func testAC14d_카드가_두_장이면_저장소_오류로_바이트를_보존한다() throws {
++        try assertPreserved(
++            seed: "duplicateCards",
++            json: Self.raw(cards: Self.card1 + #","# + #"{"id":"FM-20261014","issuedAt":"2026-10-13T09:00:00Z"}"#),
++            message: Self.notReadable)
++    }
++
++    func testAC14e_미발급인데_카드가_있으면_저장소_오류로_바이트를_보존한다() throws {
++        try assertPreserved(
++            seed: "cardWithoutIssuance",
++            json: Self.raw(issued: false, cards: Self.card1, stations: Self.nullStations),
++            message: Self.notReadable)
++    }
++
++    func testAC14f_정의되지_않은_기록이_있으면_형식_오류로_보충_없이_바이트를_보존한다() throws {
++        try assertPreserved(
++            seed: "undefinedRecord",
++            json: Self.raw(cards: "", records: #"{"kind":"x"}"#),
++            message: Self.badFormat)
++    }
++
++    // MARK: helpers
++
++    private func assertPreserved(seed: String, json: String, message: String) throws {
++        // 깨짐 명명: 보충·정규화로 파일을 다시 쓰거나 다른 화면으로 가거나 문구가 다르면 실패한다.
++        let expected = Data(json.utf8).base64EncodedString()
++        let h = FocusMateUIHarness.launch(seed: seed)
++
++        try assertStorageError(h, message: message, expected: expected)
++        h.relaunch()
++        try assertStorageError(h, message: message, expected: expected)
++    }
++
++    private func assertStorageError(_ h: FocusMateUIHarness, message: String, expected: String) throws {
++        XCTAssertTrue(h.element("screen.storageError").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardEntry").exists)
++        XCTAssertFalse(h.element("screen.main").exists)
++        let error = h.element("storage.error")
++        XCTAssertTrue(error.waitForExistence(timeout: timeout))
++        XCTAssertEqual(error.value as? String, message)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), expected)
++    }
++
++    private func cardItems(_ snapshot: [String: Any]) throws -> [[String: Any]] {
++        let cards = try XCTUnwrap(snapshot["cards"] as? [String: Any], "cards 섹션 없음")
++        return try XCTUnwrap(cards["items"] as? [[String: Any]], "cards.items 없음")
++    }
++
++    private func cardCount(_ snapshot: [String: Any]) throws -> Int {
++        try cardItems(snapshot).count
++    }
++
++    private func cardID(_ snapshot: [String: Any]) throws -> String {
++        let first = try XCTUnwrap(try cardItems(snapshot).first, "카드 없음")
++        return try XCTUnwrap(first["id"] as? String)
++    }
++}
+diff --git a/ios/FocusMateUITests/UITestLaunchSupport.swift b/ios/FocusMateUITests/UITestLaunchSupport.swift
+new file mode 100644
+index 0000000..bb5ff49
+--- /dev/null
++++ b/ios/FocusMateUITests/UITestLaunchSupport.swift
+@@ -0,0 +1,57 @@
++import Foundation
++import XCTest
++
++/// 카드 발급 UI 테스트용 실행·진단 도우미. (XCTestCase 아님)
++/// Phase1FlowTests의 private 헬퍼와 별개로 둔다.
++struct FocusMateUIHarness {
++    static let timeout: TimeInterval = 3
++
++    let app: XCUIApplication
++    let testID: UUID
++
++    @MainActor
++    static func launch(
++        seed: String? = nil,
++        save: String? = nil,
++        hold: String? = nil,
++        extraArguments: [String] = [],
++        testID: UUID = UUID()
++    ) -> FocusMateUIHarness {
++        let app = XCUIApplication()
++        var arguments = ["--fm-ui-test-id", testID.uuidString]
++        if let seed { arguments += ["--fm-ui-seed", seed] }
++        if let save { arguments += ["--fm-ui-save", save] }
++        if let hold { arguments += ["--fm-ui-issue-hold", hold] }
++        arguments += extraArguments
++        app.launchArguments = arguments
++        app.launch()
++        return FocusMateUIHarness(app: app, testID: testID)
++    }
++
++    /// 앱을 끄고 같은 저장소로 인자 없이 다시 연다.
++    @MainActor
++    func relaunch() {
++        app.terminate()
++        app.launchArguments = ["--fm-ui-test-id", testID.uuidString]
++        app.launch()
++    }
++
++    @MainActor
++    func element(_ identifier: String) -> XCUIElement {
++        app.descendants(matching: .any)[identifier]
++    }
++
++    @MainActor
++    func diagnostic(_ identifier: String) throws -> String {
++        let observed = element(identifier)
++        XCTAssertTrue(observed.waitForExistence(timeout: Self.timeout), "Missing diagnostic: \(identifier)")
++        return try XCTUnwrap(observed.value as? String, "Diagnostic has no string value: \(identifier)")
++    }
++
++    @MainActor
++    func snapshot() throws -> [String: Any] {
++        let raw = try diagnostic("test.snapshot")
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++}
+(참고: PassFace.swift는 T2 신규 파일 — T5에서 접근성 구조(Color.clear 바탕 단일 요소 + 그림 overlay accessibilityHidden)만 바꿈)

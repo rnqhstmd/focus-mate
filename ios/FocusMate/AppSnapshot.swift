@@ -9,6 +9,7 @@ struct StationSnapshot: Codable, Equatable {
 enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
 enum SnapshotValidationIssue: Error, Equatable {
     case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
+    case multipleCards(Int), cardWithoutIssuance, invalidCardID
 }
 
 struct AppSnapshot: Codable, Equatable {
@@ -49,6 +50,14 @@ struct AppSnapshot: Codable, Equatable {
                     cards: cards, journey: journey, records: records)
     }
 
+    var currentCard: CardSnapshot? { cards.items.first }
+    /// 발급은 됐지만 카드 원소가 없는 기존 사용자(버전 1, W00 버전 2). 유효한 상태이며 시작 단계에서 보충한다.
+    var needsCardSupplement: Bool { cardIssued && cards.items.isEmpty }
+    func issuingCard(_ card: CardSnapshot) -> AppSnapshot {
+        updatingStage(cardIssued: true, initialStation: initialStation, currentStation: currentStation)
+            .updating(cards: CardSection(items: [card]))
+    }
+
     func validate() throws {
         let noStations = initialStation == nil && currentStation == nil
         let bothStations = initialStation != nil && currentStation != nil
@@ -58,6 +67,9 @@ struct AppSnapshot: Codable, Equatable {
             guard !station.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationName }
             guard station.direction == 1 || station.direction == -1 else { throw SnapshotValidationIssue.invalidDirection(station.direction) }
         }
+        guard cards.items.count <= 1 else { throw SnapshotValidationIssue.multipleCards(cards.items.count) }
+        guard cards.items.isEmpty || cardIssued else { throw SnapshotValidationIssue.cardWithoutIssuance }
+        guard cards.items.allSatisfy({ CardSnapshot.isValidID($0.id) }) else { throw SnapshotValidationIssue.invalidCardID }
     }
 
     func launchRoute() throws -> LaunchRoute {

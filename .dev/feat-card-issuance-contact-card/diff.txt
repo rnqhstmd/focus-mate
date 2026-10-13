@@ -1,0 +1,32 @@
+ ios/FocusMate/AppModel.swift                       |  68 ++++-
+ ios/FocusMate/AppSnapshot.swift                    |  12 +
+ ios/FocusMate/Assets.xcassets/Contents.json        |   6 +
+ .../PassDots.imageset/Contents.json                |  15 ++
+ .../PassDots.imageset/ticket-dots.svg              |   1 +
+ ios/FocusMate/CardIssuanceController.swift         |  75 ++++++
+ ios/FocusMate/CardIssuanceView.swift               | 100 +++++++
+ ios/FocusMate/CardSection.swift                    |  35 ++-
+ ios/FocusMate/CardSnapshotFactory.swift            |  20 ++
+ ios/FocusMate/FocusMateApp.swift                   |  40 ++-
+ ios/FocusMate/IssuanceFeedback.swift               |  48 ++++
+ ios/FocusMate/IssuanceHapticPattern.swift          |  62 +++++
+ ios/FocusMate/PassFace.swift                       |  60 +++++
+ ios/FocusMate/PassIdentity.swift                   |  19 ++
+ ios/FocusMate/RootView.swift                       |  48 +++-
+ ios/FocusMate/UITestBootstrap.swift                |  74 +++++-
+ .../CardIssuanceControllerTests.swift              | 199 ++++++++++++++
+ ios/FocusMateTests/CardIssuanceModelTests.swift    | 139 ++++++++++
+ ios/FocusMateTests/CardIssuanceTestDoubles.swift   |  91 +++++++
+ ios/FocusMateTests/CardStorageTests.swift          | 151 +++++++++++
+ ios/FocusMateTests/CardSupplementTests.swift       | 121 +++++++++
+ ios/FocusMateTests/CardTestSupport.swift           |  50 ++++
+ .../IssuanceHapticPatternTests.swift               |  34 +++
+ ios/FocusMateTests/PassFaceAssetTests.swift        |  11 +
+ ios/FocusMateTests/PassIdentityTests.swift         |  73 ++++++
+ ios/FocusMateTests/SnapshotCodecTests.swift        |   4 +-
+ ios/FocusMateUITests/CardIssuanceFlowTests.swift   | 288 +++++++++++++++++++++
+ ios/FocusMateUITests/CardStorageFlowTests.swift    | 127 +++++++++
+ ios/FocusMateUITests/UITestLaunchSupport.swift     |  57 ++++
+ 29 files changed, 1991 insertions(+), 37 deletions(-)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라.

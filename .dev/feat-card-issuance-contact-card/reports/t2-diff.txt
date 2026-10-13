@@ -1,0 +1,240 @@
+diff --git a/ios/FocusMate/Assets.xcassets/Contents.json b/ios/FocusMate/Assets.xcassets/Contents.json
+new file mode 100644
+index 0000000..73c0059
+--- /dev/null
++++ b/ios/FocusMate/Assets.xcassets/Contents.json
+@@ -0,0 +1,6 @@
++{
++  "info" : {
++    "author" : "xcode",
++    "version" : 1
++  }
++}
+diff --git a/ios/FocusMate/Assets.xcassets/PassDots.imageset/Contents.json b/ios/FocusMate/Assets.xcassets/PassDots.imageset/Contents.json
+new file mode 100644
+index 0000000..8e1423f
+--- /dev/null
++++ b/ios/FocusMate/Assets.xcassets/PassDots.imageset/Contents.json
+@@ -0,0 +1,15 @@
++{
++  "images" : [
++    {
++      "filename" : "ticket-dots.svg",
++      "idiom" : "universal"
++    }
++  ],
++  "info" : {
++    "author" : "xcode",
++    "version" : 1
++  },
++  "properties" : {
++    "preserves-vector-representation" : true
++  }
++}
+diff --git a/ios/FocusMate/CardSnapshotFactory.swift b/ios/FocusMate/CardSnapshotFactory.swift
+new file mode 100644
+index 0000000..c886ee3
+--- /dev/null
++++ b/ios/FocusMate/CardSnapshotFactory.swift
+@@ -0,0 +1,20 @@
++import Foundation
++
++/// 발급과 기존 사용자 보충이 함께 쓰는 카드 생성기. 난수·시계를 주입해 테스트에서 결정적으로 만든다.
++struct CardSnapshotFactory {
++    private let randomNumber: () -> UInt32
++    private let now: () -> Date
++
++    init(randomNumber: @escaping () -> UInt32 = { .random(in: 0..<100_000_000) },
++         now: @escaping () -> Date = Date.init) {
++        self.randomNumber = randomNumber
++        self.now = now
++    }
++
++    func make() -> CardSnapshot {
++        let digits = String(format: "%08u", randomNumber() % 100_000_000)
++        // 저장 형식이 초 단위라 내려 두어야 저장·로드 왕복 값이 같다.
++        let issuedAt = Date(timeIntervalSince1970: now().timeIntervalSince1970.rounded(.down))
++        return CardSnapshot(id: "FM-" + digits, issuedAt: issuedAt)
++    }
++}
+diff --git a/ios/FocusMate/PassFace.swift b/ios/FocusMate/PassFace.swift
+new file mode 100644
+index 0000000..cc4e637
+--- /dev/null
++++ b/ios/FocusMate/PassFace.swift
+@@ -0,0 +1,53 @@
++import SwiftUI
++
++/// 발급·승하차·마이페이지가 함께 쓰는 기본 카드(pass-face). 놓인 폭을 채우고 내부는 기준 폭 238 대비 배율로 그린다.
++/// 카드 번호는 그리지 않는다. 식별자(`card.face`)는 호출하는 쪽이 붙인다.
++struct PassFace: View {
++    static let aspectRatio: CGFloat = 85.6 / 53.98
++    static let referenceWidth: CGFloat = 238
++    static let dotsAssetName = "PassDots"
++
++    init() {}
++
++    var body: some View {
++        GeometryReader { proxy in
++            let scale = proxy.size.width / Self.referenceWidth
++            let shape = RoundedRectangle(cornerRadius: 16 * scale, style: .continuous)
++            ZStack(alignment: .topLeading) {
++                Color(red: 0x12 / 255, green: 0x14 / 255, blue: 0x16 / 255)
++                Image(Self.dotsAssetName)
++                    .resizable()
++                    .aspectRatio(contentMode: .fit)
++                    .frame(width: proxy.size.width * 0.78)
++                    .opacity(0.85)
++                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
++                    .offset(x: proxy.size.width * 0.12)
++                Text("Focus Mate")
++                    .font(.system(size: 10 * scale, weight: .semibold))
++                    .tracking(1 * scale)
++                    .offset(x: 20 * scale, y: 17 * scale)
++                Image(systemName: "wave.3.right")
++                    .resizable()
++                    .scaledToFit()
++                    .frame(width: 22 * scale, height: 22 * scale)
++                    .frame(maxWidth: .infinity, alignment: .trailing)
++                    .padding(.top, 12 * scale)
++                    .padding(.trailing, 16 * scale)
++                RoundedRectangle(cornerRadius: 3 * scale, style: .continuous)
++                    .fill(Color(red: 0xc5 / 255, green: 0xb9 / 255, blue: 0x98 / 255))
++                    .frame(width: proxy.size.width * 0.12, height: proxy.size.height * 0.15)
++                    .offset(x: proxy.size.width * 0.075, y: proxy.size.height * 0.43)
++                Text(PassIdentity.displayName)
++                    .font(.system(size: 19 * scale, weight: .semibold))
++                    .offset(x: 20 * scale, y: proxy.size.height - 44 * scale)
++            }
++            .foregroundStyle(Color(red: 0xf1 / 255, green: 0xf2 / 255, blue: 0xf3 / 255))
++            .clipShape(shape)
++            .overlay(shape.stroke(Color(red: 0x51 / 255, green: 0x56 / 255, blue: 0x5a / 255), lineWidth: 1))
++        }
++        .aspectRatio(Self.aspectRatio, contentMode: .fit)
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel(PassIdentity.displayName)
++        .accessibilityAddTraits(.isImage)
++    }
++}
+diff --git a/ios/FocusMate/PassIdentity.swift b/ios/FocusMate/PassIdentity.swift
+new file mode 100644
+index 0000000..da35397
+--- /dev/null
++++ b/ios/FocusMate/PassIdentity.swift
+@@ -0,0 +1,19 @@
++import Foundation
++
++/// 카드 이름·번호 표기의 단일 출처. 번호 표기는 지금 어떤 화면에도 노출하지 않는다(BR-4).
++struct PassIdentity: Equatable {
++    static let displayName = "집중동행카드"
++
++    let name: String
++    let numberText: String
++
++    init(card: CardSnapshot) {
++        name = Self.displayName
++        let digits = card.id.dropFirst(3)
++        numberText = "FM · \(digits.prefix(4)) \(digits.suffix(4))"
++    }
++
++    static func current(in snapshot: AppSnapshot?) -> PassIdentity? {
++        snapshot?.currentCard.map(PassIdentity.init(card:))
++    }
++}
+diff --git a/ios/FocusMateTests/PassFaceAssetTests.swift b/ios/FocusMateTests/PassFaceAssetTests.swift
+new file mode 100644
+index 0000000..373973f
+--- /dev/null
++++ b/ios/FocusMateTests/PassFaceAssetTests.swift
+@@ -0,0 +1,11 @@
++import UIKit
++import XCTest
++@testable import FocusMate
++
++final class PassFaceAssetTests: XCTestCase {
++    // 깨짐: 에셋 카탈로그에서 PassDots를 빼거나 dotsAssetName이 다른 이름을 가리키면 실패
++    func testAC15_점묘_이미지_에셋이_앱_번들에서_로드된다() {
++        XCTAssertEqual(PassFace.dotsAssetName, "PassDots")
++        XCTAssertNotNil(UIImage(named: PassFace.dotsAssetName, in: Bundle.main, compatibleWith: nil))
++    }
++}
+diff --git a/ios/FocusMateTests/PassIdentityTests.swift b/ios/FocusMateTests/PassIdentityTests.swift
+new file mode 100644
+index 0000000..7dadc9f
+--- /dev/null
++++ b/ios/FocusMateTests/PassIdentityTests.swift
+@@ -0,0 +1,73 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class PassIdentityTests: XCTestCase {
++    private static func snapshot(cardID: String) -> AppSnapshot {
++        let card = CardSnapshot(id: cardID, issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
++        return AppSnapshot.empty.issuingCard(card)
++    }
++
++    // MARK: - AC-15 이름·번호 단일 출처
++
++    // 깨짐: 이름을 displayName 대신 다른 문구로 채우거나 번호 구분자·간격을 바꾸면 실패
++    func testAC15_카드가_있으면_이름과_번호_표기를_돌려준다() {
++        let identity = PassIdentity.current(in: Self.snapshot(cardID: "FM-01234567"))
++
++        XCTAssertEqual(identity?.name, "집중동행카드")
++        XCTAssertEqual(identity?.numberText, "FM · 0123 4567")
++    }
++
++    // 깨짐: 카드가 없을 때 빈 값이나 기본 카드를 만들어 돌려주면 실패
++    func testAC15_카드가_없으면_nil이다() {
++        XCTAssertNil(PassIdentity.current(in: AppSnapshot.empty))
++        XCTAssertNil(PassIdentity.current(in: nil))
++    }
++
++    // 깨짐: displayName 상수를 다른 값으로 바꾸면 실패
++    func testAC15_표시_이름_상수는_집중동행카드다() {
++        XCTAssertEqual(PassIdentity.displayName, "집중동행카드")
++    }
++
++    // 깨짐: 번호를 숫자로 변환했다가 문자열로 되돌려 앞자리 0이 사라지면 실패
++    func testAC15_번호_표기는_앞자리_0을_유지한다() {
++        let identity = PassIdentity(card: CardSnapshot(
++            id: "FM-00000042",
++            issuedAt: Date(timeIntervalSince1970: 1_791_882_000)
++        ))
++
++        XCTAssertEqual(identity.numberText, "FM · 0000 0042")
++    }
++
++    // MARK: - BR-1 카드 ID 팩토리
++
++    // 깨짐: 0 채움 폭이나 FM- 접두를 바꾸면 실패
++    func testBR1_고정_난수는_앞자리_0을_채운_8자리_ID가_된다() {
++        let factory = CardSnapshotFactory(
++            randomNumber: { 1_234_567 },
++            now: { Date(timeIntervalSince1970: 1_791_882_000) }
++        )
++
++        XCTAssertEqual(factory.make().id, "FM-01234567")
++    }
++
++    // 깨짐: % 100_000_000 접기를 빼거나 다른 수로 나누면 실패
++    func testBR1_범위_밖_난수는_나머지로_접는다() {
++        let factory = CardSnapshotFactory(
++            randomNumber: { 123_456_789 },
++            now: { Date(timeIntervalSince1970: 1_791_882_000) }
++        )
++
++        XCTAssertEqual(factory.make().id, "FM-23456789")
++    }
++
++    // 깨짐: now()를 그대로 쓰거나 올림·반올림하면 실패
++    func testBR1_발급_시각은_초_단위로_내린다() {
++        let factory = CardSnapshotFactory(
++            randomNumber: { 1 },
++            now: { Date(timeIntervalSince1970: 1_791_882_000.75) }
++        )
++
++        XCTAssertEqual(factory.make().issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
++    }
++}
+(참고: ios/FocusMate/Assets.xcassets/PassDots.imageset/ticket-dots.svg 는 designs/final/assets/bus/ticket-dots.svg 원본 복사본(50KB 한 줄)이라 diff에서 제외)

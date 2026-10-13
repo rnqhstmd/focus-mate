@@ -15,7 +15,39 @@ struct AppSnapshot: Codable, Equatable {
     let cardIssued: Bool
     let initialStation: StationSnapshot?
     let currentStation: StationSnapshot?
-    static let empty = AppSnapshot(cardIssued: false, initialStation: nil, currentStation: nil)
+    let cards: CardSection
+    let journey: JourneySection
+    let records: RecordSection
+    static let empty = AppSnapshot(cardIssued: false, initialStation: nil, currentStation: nil,
+                                   cards: .empty, journey: .empty, records: .empty)
+
+    /// 전체 생성자는 막아 두고, 바꾸려는 부분만 고르는 `updating…`으로 다른 영역을 실수로 비우지 않게 한다.
+    private init(cardIssued: Bool, initialStation: StationSnapshot?, currentStation: StationSnapshot?,
+                 cards: CardSection, journey: JourneySection, records: RecordSection) {
+        self.cardIssued = cardIssued
+        self.initialStation = initialStation
+        self.currentStation = currentStation
+        self.cards = cards
+        self.journey = journey
+        self.records = records
+    }
+
+    func updatingStage(cardIssued: Bool, initialStation: StationSnapshot?, currentStation: StationSnapshot?) -> AppSnapshot {
+        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
+                    cards: cards, journey: journey, records: records)
+    }
+    func updating(cards: CardSection) -> AppSnapshot {
+        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
+                    cards: cards, journey: journey, records: records)
+    }
+    func updating(journey: JourneySection) -> AppSnapshot {
+        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
+                    cards: cards, journey: journey, records: records)
+    }
+    func updating(records: RecordSection) -> AppSnapshot {
+        AppSnapshot(cardIssued: cardIssued, initialStation: initialStation, currentStation: currentStation,
+                    cards: cards, journey: journey, records: records)
+    }
 
     func validate() throws {
         let noStations = initialStation == nil && currentStation == nil
@@ -34,7 +66,7 @@ struct AppSnapshot: Codable, Equatable {
         return currentStation == nil ? .initialStationEntry : .main
     }
 
-    private enum CodingKeys: String, CodingKey { case cardIssued, initialStation, currentStation }
+    private enum CodingKeys: String, CodingKey { case cardIssued, initialStation, currentStation, cards, journey, records }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(cardIssued, forKey: .cardIssued)
@@ -42,5 +74,8 @@ struct AppSnapshot: Codable, Equatable {
         else { try c.encodeNil(forKey: .initialStation) }
         if let currentStation { try c.encode(currentStation, forKey: .currentStation) }
         else { try c.encodeNil(forKey: .currentStation) }
+        try c.encode(cards, forKey: .cards)
+        try c.encode(journey, forKey: .journey)
+        try c.encode(records, forKey: .records)
     }
 }

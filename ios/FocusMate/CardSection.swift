@@ -1,11 +1,38 @@
 import Foundation
 
-/// W00은 카드 원소의 계약을 정하지 않는다. 값이 없으므로 원소가 든 파일은 읽지 않고 보존한다.
-enum CardSnapshot: Codable, Equatable {
-    init(from decoder: Decoder) throws {
-        throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "card element is not defined yet"))
+/// 발급 카드 한 장(glossary: issuedPass). id 형식은 디코딩이 아니라 `AppSnapshot.validate`가 판정해 `.invalidState`로 분류된다.
+struct CardSnapshot: Codable, Equatable {
+    let id: String
+    let issuedAt: Date
+
+    init(id: String, issuedAt: Date) {
+        self.id = id
+        self.issuedAt = issuedAt
     }
-    func encode(to encoder: Encoder) throws { switch self {} }
+
+    /// `FM-` + ASCII 숫자 8자리.
+    static func isValidID(_ id: String) -> Bool {
+        let bytes = Array(id.utf8)
+        guard bytes.count == 11, id.hasPrefix("FM-") else { return false }
+        return bytes.dropFirst(3).allSatisfy { (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, issuedAt }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        let text = try c.decode(String.self, forKey: .issuedAt)
+        guard let date = try? Date(text, strategy: .iso8601) else {
+            throw DecodingError.dataCorruptedError(forKey: .issuedAt, in: c, debugDescription: "issuedAt is not ISO 8601")
+        }
+        issuedAt = date
+    }
+    /// 날짜를 직접 문자열로 써서 인코더의 날짜 전략과 무관하게 같은 바이트를 낸다.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(issuedAt.formatted(.iso8601), forKey: .issuedAt)
+    }
 }
 
 struct CardSection: Codable, Equatable {

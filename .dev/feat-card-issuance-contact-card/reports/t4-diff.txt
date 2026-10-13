@@ -1,0 +1,642 @@
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index c6d0868..b2fcc3c 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -20,9 +20,52 @@ final class AppModel {
+     private(set) var snapshot: AppSnapshot?
+     var path: [Destination] = []
+     private(set) var saveFailure: StorageIssue?
++    /// 기존 사용자 카드 보충의 실패. 화면에 표시하지 않고 다음 실행에서 다시 시도한다(BR-8).
++    private(set) var supplementFailure: StorageIssue?
++    /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
++    private var isHoldingIssuedCard = false
+     private let store: LocalSnapshotStore
++    private let cardFactory: CardSnapshotFactory
+     @ObservationIgnored private var hasLoaded = false
+-    init(store: LocalSnapshotStore) { self.store = store }
++    @ObservationIgnored private var hasAttemptedSupplement = false
++    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init()) {
++        self.store = store
++        self.cardFactory = cardFactory
++    }
++
++    /// 화면 분기는 이 값만 쓴다. `launchState`는 로딩·실패 판단과 모델 내부 가드용이다.
++    var presentedRoute: LaunchRoute? {
++        guard case let .ready(route) = launchState else { return nil }
++        return isHoldingIssuedCard ? .cardEntry : route
++    }
++
++    /// 읽기(`loadIfNeeded`)와 보충 쓰기를 분리해 둔다 — 읽기는 쓰지 않는다.
++    func start() {
++        loadIfNeeded()
++        supplementCardIfNeeded()
++    }
++
++    func supplementCardIfNeeded() {
++        guard !hasAttemptedSupplement, case .ready = launchState,
++              let snapshot, snapshot.needsCardSupplement else { return }
++        hasAttemptedSupplement = true
++        let candidate = snapshot.updating(cards: CardSection(items: [cardFactory.make()]))
++        do {
++            try store.save(candidate)
++            self.snapshot = candidate
++        } catch let issue as StorageIssue { supplementFailure = issue }
++        catch { supplementFailure = .writeFailed }
++    }
++
++    @discardableResult
++    func issueCard() -> Bool {
++        guard launchState == .ready(.cardEntry), let snapshot, !snapshot.cardIssued else { return false }
++        guard persist(snapshot.issuingCard(cardFactory.make())) == nil else { return false }
++        isHoldingIssuedCard = true
++        return true
++    }
++
++    func finishCardIssuance() { isHoldingIssuedCard = false }
+ 
+     func loadIfNeeded() {
+         guard !hasLoaded else { return }
+@@ -41,21 +84,25 @@ final class AppModel {
+ 
+     @discardableResult
+     func save(_ candidate: AppSnapshot) -> Bool {
++        saveFailure = persist(candidate)
++        return saveFailure == nil
++    }
++
++    /// 저장에 성공하면 snapshot·경로를 바꾸고 nil, 실패하면 아무것도 바꾸지 않고 원인을 돌려준다.
++    private func persist(_ candidate: AppSnapshot) -> StorageIssue? {
+         guard case let .ready(previousRoute) = launchState else {
+-            if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
+-            else { saveFailure = .notReady }
+-            return false
++            if case let .failed(issue) = launchState { return .writeBlocked(issue) }
++            return .notReady
+         }
+         do {
+             let nextRoute = try candidate.launchRoute()
+             try store.save(candidate)
+-            snapshot = candidate; launchState = .ready(nextRoute); saveFailure = nil
++            snapshot = candidate; launchState = .ready(nextRoute)
+             if previousRoute != nextRoute { path = [] }
+-            return true
+-        } catch let issue as SnapshotValidationIssue { saveFailure = .invalidState(issue) }
+-        catch let issue as StorageIssue { saveFailure = issue }
+-        catch { saveFailure = .writeFailed }
+-        return false
++            return nil
++        } catch let issue as SnapshotValidationIssue { return .invalidState(issue) }
++        catch let issue as StorageIssue { return issue }
++        catch { return .writeFailed }
+     }
+ 
+     func open(_ destination: Destination) {
+@@ -67,3 +114,4 @@ final class AppModel {
+         path.removeLast()
+     }
+ }
++extension AppModel: CardIssuing {}
+diff --git a/ios/FocusMate/CardIssuanceController.swift b/ios/FocusMate/CardIssuanceController.swift
+new file mode 100644
+index 0000000..b8fa2f5
+--- /dev/null
++++ b/ios/FocusMate/CardIssuanceController.swift
+@@ -0,0 +1,75 @@
++import Foundation
++import Observation
++
++@MainActor
++protocol CardIssuing: AnyObject {
++    func issueCard() -> Bool
++    func finishCardIssuance()
++}
++
++enum CardIssuanceTiming {
++    /// 발급 중 상태 유지 상한(FR-3-9).
++    static let standardHold: Duration = .milliseconds(900)
++    /// 화면의 슬롯 연출 길이. hold와 분리해 고정한다 — 테스트가 hold를 붙잡아도 애니메이션은 끝나 앱이 idle이 된다.
++    static let slotAnimation: TimeInterval = 0.86
++    static let hapticDuration: TimeInterval = 0.9
++}
++
++/// 카드 1회 발급 상태 머신. ready/failed에서만 발급을 시작하며, 이 검사가 첫 suspension 전에 MainActor에서 일어나 연타가 직렬화된다.
++@MainActor @Observable
++final class CardIssuanceController {
++    enum Phase: Equatable { case ready, issuing, failed, issued }
++    enum FocusTarget: Equatable { case continueButton }
++
++    static let issuingAnnouncement = "카드를 발급하고 있어요."
++    static let issuedAnnouncement = "카드가 발급됐어요. 출발지를 선택해보세요."
++    static let failedAnnouncement = "카드를 발급하지 못했어요. 다시 시도해 주세요."
++
++    private(set) var phase: Phase = .ready
++    private(set) var focusTarget: FocusTarget?
++
++    @ObservationIgnored private let issuer: CardIssuing
++    @ObservationIgnored private let haptics: IssuanceHaptics
++    @ObservationIgnored private let announcer: AccessibilityAnnouncing
++    @ObservationIgnored private let standardDuration: Duration
++    @ObservationIgnored private let sleep: (Duration) async -> Void
++
++    init(issuer: CardIssuing, haptics: IssuanceHaptics, announcer: AccessibilityAnnouncing,
++         standardDuration: Duration = CardIssuanceTiming.standardHold,
++         sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
++        self.issuer = issuer
++        self.haptics = haptics
++        self.announcer = announcer
++        self.standardDuration = standardDuration
++        self.sleep = sleep
++    }
++
++    static func holdDuration(reduceMotion: Bool, standard: Duration) -> Duration {
++        reduceMotion ? .zero : standard
++    }
++
++    @discardableResult
++    func issue(reduceMotion: Bool) async -> Bool {
++        guard phase == .ready || phase == .failed else { return false }
++        phase = .issuing
++        announcer.announce(Self.issuingAnnouncement)
++        guard issuer.issueCard() else {
++            phase = .failed
++            announcer.announce(Self.failedAnnouncement)
++            return false
++        }
++        // 진동은 연출 시작과 함께, 동작 줄이기와 무관하게 재생한다.
++        if haptics.isSupported { haptics.play(.issuance) }
++        let hold = Self.holdDuration(reduceMotion: reduceMotion, standard: standardDuration)
++        if hold > .zero { await sleep(hold) }
++        phase = .issued
++        announcer.announce(Self.issuedAnnouncement)
++        focusTarget = .continueButton
++        return true
++    }
++
++    func proceed() {
++        guard phase == .issued else { return }
++        issuer.finishCardIssuance()
++    }
++}
+diff --git a/ios/FocusMate/IssuanceFeedback.swift b/ios/FocusMate/IssuanceFeedback.swift
+new file mode 100644
+index 0000000..54b7f62
+--- /dev/null
++++ b/ios/FocusMate/IssuanceFeedback.swift
+@@ -0,0 +1,46 @@
++import CoreHaptics
++import UIKit
++
++@MainActor
++protocol IssuanceHaptics: AnyObject {
++    var isSupported: Bool { get }
++    func play(_ pattern: IssuanceHapticPattern)
++}
++
++@MainActor
++protocol AccessibilityAnnouncing: AnyObject {
++    func announce(_ message: String)
++}
++
++/// 지원 판단과 재생을 모두 CoreHaptics로 한다. 엔진·재생 오류는 조용히 무시한다(발급 흐름을 막지 않는다).
++@MainActor
++final class CoreHapticsIssuancePlayer: IssuanceHaptics {
++    let isSupported = CHHapticEngine.capabilitiesForHardware().supportsHaptics
++    private var engine: CHHapticEngine?
++
++    func play(_ pattern: IssuanceHapticPattern) {
++        guard isSupported, let engine = engine ?? makeEngine() else { return }
++        do {
++            try engine.start()
++            let player = try engine.makePlayer(with: pattern.makeCHHapticPattern())
++            try player.start(atTime: CHHapticTimeImmediate)
++        } catch {
++            self.engine = nil
++        }
++    }
++
++    private func makeEngine() -> CHHapticEngine? {
++        guard let engine = try? CHHapticEngine() else { return nil }
++        engine.stoppedHandler = { [weak self] _ in Task { @MainActor in self?.engine = nil } }
++        engine.resetHandler = { [weak self] in Task { @MainActor in self?.engine = nil } }
++        self.engine = engine
++        return engine
++    }
++}
++
++@MainActor
++final class SystemAccessibilityAnnouncer: AccessibilityAnnouncing {
++    func announce(_ message: String) {
++        UIAccessibility.post(notification: .announcement, argument: message)
++    }
++}
+diff --git a/ios/FocusMate/IssuanceHapticPattern.swift b/ios/FocusMate/IssuanceHapticPattern.swift
+new file mode 100644
+index 0000000..2106fcc
+--- /dev/null
++++ b/ios/FocusMate/IssuanceHapticPattern.swift
+@@ -0,0 +1,62 @@
++import CoreHaptics
++import Foundation
++
++/// 발급 진동 패턴. 카드가 슬롯에서 나오는 동안 약→강으로 커지는 연속 진동과 끝의 짧은 탭("점점 세게 → 끝에 뚝").
++/// 순수 값으로 두어 테스트가 구조를 직접 확인하고, CoreHaptics 변환은 `makeCHHapticPattern()`이 맡는다.
++struct IssuanceHapticPattern: Equatable {
++    struct CurvePoint: Equatable {
++        let time: TimeInterval
++        let intensity: Float
++    }
++    struct Tap: Equatable {
++        let time: TimeInterval
++        let intensity: Float
++        let sharpness: Float
++    }
++
++    let continuousDuration: TimeInterval
++    let continuousSharpness: Float
++    let intensityCurve: [CurvePoint]
++    let taps: [Tap]
++
++    var duration: TimeInterval { max(continuousDuration, taps.map(\.time).max() ?? 0) }
++
++    static let issuance = IssuanceHapticPattern(
++        continuousDuration: CardIssuanceTiming.hapticDuration,
++        continuousSharpness: 0.3,
++        intensityCurve: [
++            CurvePoint(time: 0, intensity: 0.15),
++            CurvePoint(time: 0.45, intensity: 0.45),
++            CurvePoint(time: CardIssuanceTiming.hapticDuration, intensity: 1.0),
++        ],
++        taps: [Tap(time: CardIssuanceTiming.hapticDuration, intensity: 1.0, sharpness: 0.9)]
++    )
++
++    func makeCHHapticPattern() throws -> CHHapticPattern {
++        let continuous = CHHapticEvent(
++            eventType: .hapticContinuous,
++            parameters: [
++                CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
++                CHHapticEventParameter(parameterID: .hapticSharpness, value: continuousSharpness),
++            ],
++            relativeTime: 0,
++            duration: continuousDuration
++        )
++        let tapEvents = taps.map { tap in
++            CHHapticEvent(
++                eventType: .hapticTransient,
++                parameters: [
++                    CHHapticEventParameter(parameterID: .hapticIntensity, value: tap.intensity),
++                    CHHapticEventParameter(parameterID: .hapticSharpness, value: tap.sharpness),
++                ],
++                relativeTime: tap.time
++            )
++        }
++        let curve = CHHapticParameterCurve(
++            parameterID: .hapticIntensityControl,
++            controlPoints: intensityCurve.map { .init(relativeTime: $0.time, value: $0.intensity) },
++            relativeTime: 0
++        )
++        return try CHHapticPattern(events: [continuous] + tapEvents, parameterCurves: [curve])
++    }
++}
+diff --git a/ios/FocusMateTests/CardIssuanceControllerTests.swift b/ios/FocusMateTests/CardIssuanceControllerTests.swift
+new file mode 100644
+index 0000000..311f6e0
+--- /dev/null
++++ b/ios/FocusMateTests/CardIssuanceControllerTests.swift
+@@ -0,0 +1,199 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++@MainActor
++final class CardIssuanceControllerTests: XCTestCase {
++    private struct Rig {
++        let controller: CardIssuanceController
++        let issuer: FakeCardIssuer
++        let haptics: FakeIssuanceHaptics
++        let announcer: RecordingAnnouncer
++        let sleeper: SuspendingSleep
++        let log: EventLog
++    }
++
++    private func rig(results: [Bool] = [true], supported: Bool = true, standard: Duration? = .milliseconds(900)) -> Rig {
++        let log = EventLog()
++        let issuer = FakeCardIssuer(results: results, log: log)
++        let haptics = FakeIssuanceHaptics(isSupported: supported, log: log)
++        let announcer = RecordingAnnouncer()
++        let sleeper = SuspendingSleep()
++        let controller: CardIssuanceController
++        if let standard {
++            controller = CardIssuanceController(
++                issuer: issuer, haptics: haptics, announcer: announcer,
++                standardDuration: standard, sleep: { await sleeper.sleep($0) })
++        } else {
++            controller = CardIssuanceController(
++                issuer: issuer, haptics: haptics, announcer: announcer,
++                sleep: { await sleeper.sleep($0) })
++        }
++        return Rig(controller: controller, issuer: issuer, haptics: haptics, announcer: announcer, sleeper: sleeper, log: log)
++    }
++
++    // 깨짐 명명: phase 가드가 없어 발급 중 재호출이 issueCard 를 또 부르거나 true 를 돌려주면 실패.
++    func testAC5_발급_중_연타는_모두_거절되고_발급은_한_번만_한다() async {
++        let r = rig()
++        let first = Task { await r.controller.issue(reduceMotion: false) }
++        await r.sleeper.untilSuspended()
++
++        let second = await r.controller.issue(reduceMotion: false)
++        let third = await r.controller.issue(reduceMotion: false)
++
++        XCTAssertFalse(second)
++        XCTAssertFalse(third)
++        XCTAssertEqual(r.issuer.issueCalls, 1)
++        XCTAssertEqual(r.controller.phase, .issuing)
++
++        r.sleeper.resume()
++        let firstResult = await first.value
++        XCTAssertTrue(firstResult)
++        XCTAssertEqual(r.controller.phase, .issued)
++    }
++
++    // 깨짐 명명: 햅틱을 저장 전에 재생하거나, 패턴이 .issuance 가 아니거나, 2회 이상 재생하면 실패.
++    func testAC17_지원_기기는_저장_성공_뒤에_발급_패턴을_한_번_재생한다() async {
++        let r = rig()
++        let task = Task { await r.controller.issue(reduceMotion: false) }
++        await r.sleeper.untilSuspended()
++        r.sleeper.resume()
++        _ = await task.value
++
++        XCTAssertEqual(r.haptics.patterns, [IssuanceHapticPattern.issuance])
++        XCTAssertEqual(r.log.events, ["issueCard", "play"])
++    }
++
++    // 깨짐 명명: isSupported 를 보지 않고 재생하거나, 미지원일 때 결과/phase 가 달라지면 실패.
++    func testAC17_미지원_기기는_재생_없이_발급이_성공한다() async {
++        let r = rig(supported: false)
++        let task = Task { await r.controller.issue(reduceMotion: false) }
++        await r.sleeper.untilSuspended()
++        r.sleeper.resume()
++        let result = await task.value
++
++        XCTAssertTrue(result)
++        XCTAssertEqual(r.haptics.patterns.count, 0)
++        XCTAssertEqual(r.controller.phase, .issued)
++    }
++
++    // 깨짐 명명: 저장 실패인데 햅틱을 재생하거나 phase 가 .failed 가 아니면 실패.
++    func testAC17_저장_실패는_재생_없이_failed가_된다() async {
++        let r = rig(results: [false])
++
++        let result = await r.controller.issue(reduceMotion: false)
++
++        XCTAssertFalse(result)
++        XCTAssertEqual(r.haptics.patterns.count, 0)
++        XCTAssertEqual(r.controller.phase, .failed)
++    }
++
++    // 깨짐 명명: 상한 상수(900ms)를 넘기거나 0 이하이거나 sleep 을 두 번 이상 부르면 실패.
++    func testAC18_동작_줄이기_꺼짐은_0점9초_이하로_한_번_기다린다() async throws {
++        let r = rig(standard: nil)
++        let task = Task { await r.controller.issue(reduceMotion: false) }
++        await r.sleeper.untilSuspended()
++
++        XCTAssertEqual(r.sleeper.requested.count, 1)
++        let d = try XCTUnwrap(r.sleeper.requested.first)
++        XCTAssertGreaterThan(d, Duration.zero)
++        XCTAssertLessThanOrEqual(d, Duration.milliseconds(900))
++
++        r.sleeper.resume()
++        let result = await task.value
++        XCTAssertTrue(result)
++        XCTAssertEqual(r.controller.phase, .issued)
++        XCTAssertEqual(r.haptics.patterns.count, 1)
++    }
++
++    // 깨짐 명명: 동작 줄이기가 켜졌는데 sleep 을 부르거나 햅틱을 빼먹으면 실패 (sleep 이 걸리면 이 await 가 멈춰 테스트가 실패한다).
++    func testAC18_동작_줄이기_켜짐은_기다리지_않고_바로_완료한다() async {
++        let r = rig()
++
++        let result = await r.controller.issue(reduceMotion: true)
++
++        XCTAssertTrue(result)
++        XCTAssertEqual(r.sleeper.requested, [])
++        XCTAssertEqual(r.controller.phase, .issued)
++        XCTAssertEqual(r.haptics.patterns.count, 1)
++    }
++
++    // 깨짐 명명: 두 분기가 뒤바뀌거나 standard 를 무시하면 실패.
++    func testAC18_holdDuration은_켜짐이면_0_꺼짐이면_표준값이다() {
++        XCTAssertEqual(CardIssuanceController.holdDuration(reduceMotion: true, standard: .milliseconds(700)), .zero)
++        XCTAssertEqual(CardIssuanceController.holdDuration(reduceMotion: false, standard: .milliseconds(700)), .milliseconds(700))
++    }
++
++    // 깨짐 명명: 안내 문구/순서가 다르거나 포커스를 주지 않으면 실패.
++    func testAC19_성공하면_안내_두_건을_내고_계속_버튼에_포커스를_준다() async {
++        let r = rig()
++
++        _ = await r.controller.issue(reduceMotion: true)
++
++        XCTAssertEqual(r.announcer.messages, ["카드를 발급하고 있어요.", "카드가 발급됐어요. 출발지를 선택해보세요."])
++        XCTAssertEqual(r.controller.focusTarget, .continueButton)
++    }
++
++    // 깨짐 명명: 실패 문구가 다르거나 실패인데 포커스를 옮기면 실패.
++    func testAC19_실패하면_실패_안내를_내고_포커스는_없다() async {
++        let r = rig(results: [false])
++
++        _ = await r.controller.issue(reduceMotion: true)
++
++        XCTAssertEqual(r.announcer.messages, ["카드를 발급하고 있어요.", "카드를 발급하지 못했어요. 다시 시도해 주세요."])
++        XCTAssertNil(r.controller.focusTarget)
++    }
++
++    // 깨짐 명명: failed 에서 재시도를 막으면 실패.
++    func testAC19_실패_뒤에는_다시_발급할_수_있다() async {
++        let r = rig(results: [false, true])
++        _ = await r.controller.issue(reduceMotion: true)
++
++        let retry = await r.controller.issue(reduceMotion: true)
++
++        XCTAssertTrue(retry)
++        XCTAssertEqual(r.issuer.issueCalls, 2)
++        XCTAssertEqual(r.controller.phase, .issued)
++    }
++
++    // 깨짐 명명: ready/failed 에서 finishCardIssuance 를 부르면 실패.
++    func testProceed_발급_전과_실패_상태에서는_모델을_건드리지_않는다() async {
++        let r = rig(results: [false])
++        r.controller.proceed()
++        _ = await r.controller.issue(reduceMotion: true)
++        r.controller.proceed()
++
++        XCTAssertEqual(r.issuer.finishCalls, 0)
++    }
++
++    // 깨짐 명명: issued 에서 finishCardIssuance 를 부르지 않으면 실패.
++    func testProceed_발급_완료_상태에서는_모델에_완료를_알린다() async {
++        let r = rig()
++        _ = await r.controller.issue(reduceMotion: true)
++
++        r.controller.proceed()
++
++        XCTAssertEqual(r.issuer.finishCalls, 1)
++    }
++
++    // 깨짐 명명: 컨트롤러가 저장 전에 햅틱을 재생하면 재생 시점의 카드 수가 0 이라 실패.
++    func testIntegration_실제_AppModel_저장_뒤에_햅틱이_재생된다() async {
++        let fake = memoryStore(initial: nil)
++        let random = SequenceRandom([12_345_678])
++        let model = AppModel(
++            store: fake.store,
++            cardFactory: CardSnapshotFactory(randomNumber: { random.next() }, now: { Date(timeIntervalSince1970: 1_791_882_000) }))
++        model.start()
++        let haptics = FakeIssuanceHaptics(isSupported: true)
++        var countsAtPlay: [Int] = []
++        haptics.onPlay = { countsAtPlay.append(model.snapshot?.cards.items.count ?? -1) }
++        let controller = CardIssuanceController(
++            issuer: model, haptics: haptics, announcer: RecordingAnnouncer(), sleep: { _ in })
++
++        let result = await controller.issue(reduceMotion: false)
++
++        XCTAssertTrue(result)
++        XCTAssertEqual(model.snapshot?.cards.items.count, 1)
++        XCTAssertEqual(countsAtPlay, [1])
++    }
++}
+diff --git a/ios/FocusMateTests/CardIssuanceTestDoubles.swift b/ios/FocusMateTests/CardIssuanceTestDoubles.swift
+new file mode 100644
+index 0000000..7b84a42
+--- /dev/null
++++ b/ios/FocusMateTests/CardIssuanceTestDoubles.swift
+@@ -0,0 +1,91 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 가짜 객체들이 공유하는 호출 순서 기록.
++final class EventLog {
++    private(set) var events: [String] = []
++    func record(_ event: String) { events.append(event) }
++}
++
++@MainActor
++final class FakeIssuanceHaptics: IssuanceHaptics {
++    let isSupported: Bool
++    private(set) var patterns: [IssuanceHapticPattern] = []
++    var onPlay: (() -> Void)?
++    private let log: EventLog?
++
++    init(isSupported: Bool, log: EventLog? = nil) {
++        self.isSupported = isSupported
++        self.log = log
++    }
++
++    func play(_ pattern: IssuanceHapticPattern) {
++        patterns.append(pattern)
++        log?.record("play")
++        onPlay?()
++    }
++}
++
++@MainActor
++final class RecordingAnnouncer: AccessibilityAnnouncing {
++    private(set) var messages: [String] = []
++    func announce(_ message: String) { messages.append(message) }
++}
++
++@MainActor
++final class FakeCardIssuer: CardIssuing {
++    private var results: [Bool]
++    private(set) var issueCalls = 0
++    private(set) var finishCalls = 0
++    private let log: EventLog?
++
++    init(results: [Bool], log: EventLog? = nil) {
++        self.results = results
++        self.log = log
++    }
++
++    func issueCard() -> Bool {
++        issueCalls += 1
++        log?.record("issueCard")
++        return results.isEmpty ? true : results.removeFirst()
++    }
++
++    func finishCardIssuance() {
++        finishCalls += 1
++        log?.record("finish")
++    }
++}
++
++/// sleep 진입을 기록하고, resume 될 때까지 멈춰 있는다.
++@MainActor
++final class SuspendingSleep {
++    private(set) var requested: [Duration] = []
++    private var continuation: CheckedContinuation<Void, Never>?
++    private var waiter: CheckedContinuation<Void, Never>?
++
++    func sleep(_ duration: Duration) async {
++        requested.append(duration)
++        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
++            continuation = c
++            waiter?.resume()
++            waiter = nil
++        }
++    }
++
++    func untilSuspended() async {
++        if continuation != nil { return }
++        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
++            waiter = c
++        }
++    }
++
++    func resume() {
++        guard let c = continuation else {
++            XCTFail("resume 할 sleep 이 없다")
++            return
++        }
++        continuation = nil
++        c.resume()
++    }
++}
+diff --git a/ios/FocusMateTests/IssuanceHapticPatternTests.swift b/ios/FocusMateTests/IssuanceHapticPatternTests.swift
+new file mode 100644
+index 0000000..8ea7e33
+--- /dev/null
++++ b/ios/FocusMateTests/IssuanceHapticPatternTests.swift
+@@ -0,0 +1,34 @@
++import CoreHaptics
++import XCTest
++@testable import FocusMate
++
++final class IssuanceHapticPatternTests: XCTestCase {
++    // 깨짐 명명: 곡선이 내려가거나 평평하게 바뀌면(시작 >= 끝) 실패.
++    func testAC17_세기_곡선은_약하게_시작해_강하게_끝난다() throws {
++        let curve = IssuanceHapticPattern.issuance.intensityCurve
++        let first = try XCTUnwrap(curve.first)
++        let last = try XCTUnwrap(curve.last)
++
++        XCTAssertLessThan(first.intensity, last.intensity)
++    }
++
++    // 깨짐 명명: 끝 탭이 없거나 2개 이상이거나 패턴 끝과 다른 시간에 있으면 실패.
++    func testAC17_끝_탭은_하나이고_패턴_끝에_있다() throws {
++        let pattern = IssuanceHapticPattern.issuance
++
++        XCTAssertEqual(pattern.taps.count, 1)
++        XCTAssertEqual(try XCTUnwrap(pattern.taps.first).time, pattern.duration)
++    }
++
++    // 깨짐 명명: 패턴 길이가 0.9 가 아니거나 CardIssuanceTiming.hapticDuration 과 어긋나면 실패.
++    func testAC17_패턴_길이는_0점9초이고_타이밍_상수와_같다() {
++        XCTAssertEqual(IssuanceHapticPattern.issuance.duration, 0.9, accuracy: 0.0001)
++        XCTAssertEqual(CardIssuanceTiming.hapticDuration, 0.9, accuracy: 0.0001)
++        XCTAssertEqual(IssuanceHapticPattern.issuance.duration, CardIssuanceTiming.hapticDuration, accuracy: 0.0001)
++    }
++
++    // 깨짐 명명: 제어점이나 파라미터가 CoreHaptics 가 거부하는 값이면 실패.
++    func testAC17_CoreHaptics_패턴으로_변환해도_던지지_않는다() {
++        XCTAssertNoThrow(try IssuanceHapticPattern.issuance.makeCHHapticPattern())
++    }
++}
+(참고: AppModel.swift diff에는 T3 변경도 함께 보인다. T4의 AppModel 변경은 마지막 줄 'extension AppModel: CardIssuing {}' 하나)

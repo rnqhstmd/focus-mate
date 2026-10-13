@@ -1,0 +1,34 @@
+## Rulings
+- T2 과잉 구현 정리 — PassFace.aspectRatio·PassFace.referenceWidth는 focused 테스트가 참조하지 않지만 설계서 §5 인터페이스가 명시하므로 "설계 예약"으로 유지했다. 제거한 멤버 없음. (틀리면: 두 상수를 지우고 PassFace 내부 리터럴로 치환(호출부 없음, 비용 낮음).)
+- T4 과잉 구현 정리 — CardIssuanceTiming.slotAnimation, CoreHapticsIssuancePlayer, SystemAccessibilityAnnouncer, 안내 문구 static 3종은 focused 테스트가 직접 참조하지 않지만 설계서 §7·§8·§9가 명시하므로 유지했다. 안내 문구는 설계상 CardIssuanceCopy 소속이지만 실제 사용처인 컨트롤러에 두었다(뷰는 T5에서 이 상수를 참조). (틀리면: 안내 문구를 T5의 CardIssuanceCopy로 옮기고 컨트롤러가 그것을 참조하게 바꾼다(동작 불변 정리).)
+- review 동작 불변 정리 2건 — (1) IssuanceFeedback.swift makeEngine에 `engine.isAutoShutdownEnabled = true` 추가(세션 정리). (2) CardIssuanceFlowTests testAC19 깨짐 명명 주석 정정 + 안내 순서(시작→완료) 단언 추가 — 테스트 파일이므로 red-writer에 위임. (틀리면: (1) 한 줄 제거. (2) red-writer 변경 diff를 되돌림.)
+- review Minor 25건 유예 · MEDIUM 3건 유예 — quality Minor(1회차 잔여 20 + 2회차 신규 2 + 기타 3)는 수정하지 않고 reports/review-deferred.md에 올렸다. security MEDIUM 3건은 모두 문서 이관(W04·W11 AC, A11/W13) 또는 테스트 하네스 후속 정리로 유예했다 — 동작 불변이 명백한 코드 정리 대상이 아니다. PRD에 W04·W11 공통 이관 항목과 가정 A11을 추가했다. (틀리면: review-deferred.md 목록에서 골라 정리 모드(동작 불변) 또는 RGR(동작 변경)로 별도 처리.)
+
+## Deferred
+- [Minor] CardSection.swift:25 — ISO 8601 소수초·오프셋 처리 불확실 (A11 → W13)
+- [Minor] CardStorageTests.swift:118 — 11바이트 내 비ASCII 혼합 케이스 없음
+- [Minor] CardStorageTests.swift:48-110 — a~f 입력 중복
+- [Minor] CardStorageTests.swift:113,123 — 메서드명 testACn_ 컨벤션 아님
+- [Minor] PassIdentity.swift:10-14 — 접두·길이 미검사 (validate가 막음)
+- [Minor] PassFace.swift — 테두리 lineWidth 배율 미적용
+- [Minor] PassFace — #Preview 없음, 폭 238/320 시각 확인 필요
+- [Minor] PassFaceAssetTests/PassIdentityTests — 상수 change detector 단언
+- [Minor] IssuanceFeedback.swift — stopped/reset 핸들러 엔진 동일성 미비교 (R2에서 auto shutdown으로 빈도 증가 — 확신 낮음)
+- [Minor] IssuanceFeedback.swift — 핸들러 클로저 격리(Swift 6 전환 시 재검토)
+- [Minor] IssuanceFeedback.swift:24 — engine.start() 동기 호출
+- [Minor] IssuanceFeedback.swift:34 — 주석 "다시 켜진다"가 실제(새 엔진 생성)와 다름
+- [Minor] CardIssuanceController.swift — private let의 @ObservationIgnored 중복
+- [Minor] CardIssuanceController.swift:55-66 — 안내 두 건 연달아 발화, VoiceOver가 앞을 끊을 수 있음 (AC-19M 수동 확인 시 함께)
+- [Minor] CardIssuanceView.swift:51,77 — focusTarget과 버튼 등장 같은 트랜잭션, 포커스 무시 가능 (AC-19M)
+- [Minor] CardIssuanceView.swift:22 — cardOut phase 리셋 없음 (도달 불가)
+- [Minor] CardIssuanceView — 동작 줄이기 첫 프레임 offset/마스크
+- [Minor] CardIssuanceView.swift:54-70 — 카드 등장 시 무대 높이 점프
+- [Minor] CardIssuanceView.swift:32,41 — accessibilityValue 중복 낭독 가능 (AC-19M)
+- [Minor] CardIssuanceTestDoubles.swift:67-74 — SuspendingSleep 이중 sleep 시 hang
+- [Minor] UITestBootstrap.swift:111-125 — 게이트 이중 wait 덮어쓰기, @Observable 불필요 (DEBUG)
+- [Minor] CardStorageFlowTests.swift:19-30 — AC-10 cardEntry 순간 노출 미검출 (구조상 보장)
+- [Minor] FocusMateApp.swift:30-32 — 컨트롤러 생성 중복 표현
+- [Minor] 테스트 더블이 CardTestSupport·CardIssuanceTestDoubles 두 파일로 분리 (설계서 표 갱신 대상)
+- [MEDIUM] BR-4 후속 화면 검증 → W04·W11 이관
+- [MEDIUM] HarnessUITests 운영 저장소 사용 → 후속 테스트 하네스 정리
+- [MEDIUM] issuedAt 관용성·범위 → A11, W13 이관

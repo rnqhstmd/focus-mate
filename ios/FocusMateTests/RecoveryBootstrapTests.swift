@@ -5,11 +5,12 @@ import XCTest
 @MainActor
 final class RecoveryBootstrapTests: XCTestCase {
     private static let corruptBytes = Data("{broken".utf8)
+    // W01부터 ready 시드는 고정 카드(FM-20261013, 2026-10-13T09:00:00Z)를 포함한다.
     private static let readySnapshot = stage(
         true,
         StationSnapshot(id: "seongsu", name: "성수", direction: 1),
         StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
-    )
+    ).issuingCard(CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000)))
 
     // 깨짐 명명: invalidState 시드가 손상 JSON이거나 일관된 단계이면 inconsistentStage 분기를 실행하지 못해 실패.
     func testInvalidStateSeedWritesReadableV1ThatFailsOnlyStageValidation() throws {

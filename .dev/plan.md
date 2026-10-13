@@ -3,7 +3,7 @@
 | ID | 작업 | 도메인 | 요구사항 | 의존 | 작업 위치 | 상태 |
 |----|------|--------|----------|------|-----------|------|
 | W00 | 도메인 저장 구조 확장(버전 1→2) | 공통 | Phase 1 `app-state.json` 확장 | - | feat/domain-storage-schema-v2 | 완료 |
-| W01 | [P2] 카드 발급·접촉 카드 | card | card FR-3 | W00 | - | 대기 |
+| W01 | [P2] 카드 발급·접촉 카드 | card | card FR-3 | W00 | feat/card-issuance-contact-card | 완료 |
 | W02 | [P2] 첫 출발지·시간·버스·도착지 선택 | journey | journey FR-7, FR-8 | W00 | feat/first-station-time-bus-destination | 완료 |
 | W03 | [P2] 준비 허브·태그·소리 | journey | journey FR-9, FR-10 | W02 | - | 대기 |
 | W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | - | 대기 |

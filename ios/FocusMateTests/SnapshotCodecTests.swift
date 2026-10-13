@@ -126,8 +126,8 @@ final class SnapshotCodecTests: XCTestCase {
         }
     }
 
-    // 깨짐 명명: 아직 정의되지 않은 원소를 조용히 버리거나 수용하면 실패한다.
-    func testV2UndefinedElementsAreCorrupt() {
+    // 깨짐 명명: 카드 원소의 필수 키가 없거나 여정·기록이 미정의 원소면 .corrupt로 처리하지 않으면 실패한다.
+    func testV2MalformedOrUndefinedElementsAreCorrupt() {
         let cases = [
             #""cards":{"items":[1]},"journey":{"active":null},"records":{"items":[]}"#,
             #""cards":{"items":[{}]},"journey":{"active":null},"records":{"items":[]}"#,

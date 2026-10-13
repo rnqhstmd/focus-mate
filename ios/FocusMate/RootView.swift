@@ -3,11 +3,14 @@ import SwiftUI
 @MainActor
 struct RootView: View {
     @Bindable var model: AppModel
+    let issuance: CardIssuanceController
     private enum RecoveryFocus: Hashable { case error, confirmation, failure }
     @AccessibilityFocusState private var recoveryFocus: RecoveryFocus?
     #if DEBUG
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var testBootstrap: UITestBootstrap?
+    var testRecorder: UITestFeedbackRecorder?
+    var testGate: UITestIssuanceGate?
     var testSetupError: String?
     #endif
 
@@ -44,39 +47,42 @@ struct RootView: View {
                     Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
                     Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
                 }
+                if let testRecorder {
+                    Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
+                    Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
+                }
                 if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
             }
             .font(.system(size: 1)).foregroundStyle(.clear)
         }
+        // 상단 모서리는 상태 표시줄이 터치를 가져가므로, 하단 버튼과도 겹치지 않는 오른쪽 가운데에 둔다.
+        .overlay(alignment: .trailing) {
+            if let testGate {
+                // 거의 투명한 opacity는 SwiftUI 히트 테스트에서 빠질 수 있어, 불투명 뷰에 글자만 투명하게 두고 터치 영역을 명시한다.
+                Button { testGate.release() } label: {
+                    Text("발급 해제").font(.system(size: 1)).foregroundStyle(.clear)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .accessibilityLabel("발급 해제")
+                    .accessibilityIdentifier("test.releaseIssuance")
+            }
+        }
         #endif
     }
 
+    /// 화면 분기는 `presentedRoute`만 쓴다. `launchState`는 로딩·실패 판단에만 쓴다.
     @ViewBuilder private var content: some View {
         switch model.launchState {
         case .loading:
             Text("불러오는 중").accessibilityIdentifier("screen.loading")
-        case .ready(.cardEntry):
-            Text("집중동행카드").font(.largeTitle.bold()).accessibilityIdentifier("screen.cardEntry")
-            Text("나만의 카드로 함께 떠나요.").foregroundStyle(.secondary)
-        case .ready(.initialStationEntry):
-            InitialStationSearchView(model: model)
-        case .ready(.main):
-            Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
-            if let station = model.snapshot?.currentStation {
-                Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
-                Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
-                    .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
-            }
-            ForEach(Destination.mainMenu, id: \.self) { destination in
-                Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
-                    .accessibilityIdentifier("open.\(destination.rawValue)")
-            }
+        case .ready:
+            route
         case let .failed(issue):
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
                         .accessibilityAddTraits(.isHeader).accessibilityFocused($recoveryFocus, equals: .error)
-                    Text(message(for: issue)).accessibilityIdentifier("storage.error")
+                    Text(message(for: issue)).accessibilityValue(message(for: issue)).accessibilityIdentifier("storage.error")
                     if model.isCleanupConfirmationPresented {
                         Text("저장 데이터 정리").font(.headline).accessibilityIdentifier("storage.cleanupConfirmation")
                             .accessibilityAddTraits(.isHeader).accessibilityFocused($recoveryFocus, equals: .confirmation)
@@ -104,6 +110,28 @@ struct RootView: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).disabled(model.isRecovering)
             }
+        }
+    }
+
+    @ViewBuilder private var route: some View {
+        switch model.presentedRoute {
+        case .cardEntry:
+            CardIssuanceView(controller: issuance)
+        case .initialStationEntry:
+            InitialStationSearchView(model: model)
+        case .main:
+            Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
+            if let station = model.snapshot?.currentStation {
+                Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
+                Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
+                    .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
+            }
+            ForEach(Destination.mainMenu, id: \.self) { destination in
+                Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
+                    .accessibilityIdentifier("open.\(destination.rawValue)")
+            }
+        case nil:
+            EmptyView()
         }
     }
 

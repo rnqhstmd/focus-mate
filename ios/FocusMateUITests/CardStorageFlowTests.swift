@@ -36,7 +36,7 @@ final class CardStorageFlowTests: XCTestCase {
 
     // MARK: AC-14
 
-    private static let station = #""currentStation":{"direction":-1,"id":"seoulForest","name":"서울숲"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
+    nonisolated private static let station = #""currentStation":{"direction":-1,"id":"seoulForest","name":"서울숲"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
     private static let card1 = #"{"id":"FM-20261013","issuedAt":"2026-10-13T09:00:00Z"}"#
 
     private static func raw(issued: Bool = true, cards: String, records: String = "", stations: String = station) -> String {

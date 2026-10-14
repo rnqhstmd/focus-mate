@@ -12,11 +12,12 @@ struct TimeSelectionView: View {
         VStack(spacing: 8) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // 제목·현재 분은 상단 바 제목·휠 값과 같은 정보라 크기 상한을 둬 큰 글자에서 후보가 들어갈 자리를 남긴다.
-                    Text(Destination.time.title).font(.largeTitle.bold())
+                    // 제목·출발지·현재 분은 상단 바 제목·휠 값과 겹치는 정보라 접근성 크기에서 줄여, 첫 후보 버튼이 잘리지 않고 통째로 보이게 한다.
+                    // (잘린 버튼은 중앙을 눌러도 닿지 않는다.)
+                    Text(Destination.time.title).font(isLarge ? .title3.bold() : .largeTitle.bold())
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1).accessibilityIdentifier("screen.time")
                     origin
-                    Text("\(model.journeyPlan.minutes)분").font(.title.bold())
+                    Text("\(model.journeyPlan.minutes)분").font(isLarge ? .headline : .title.bold())
                         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                         .accessibilityValue("\(model.journeyPlan.minutes)").accessibilityIdentifier("time.minutesLabel")
                     ForEach(model.journeyCandidates) { candidateButton($0) }
@@ -39,14 +40,17 @@ struct TimeSelectionView: View {
     @ViewBuilder private var origin: some View {
         if let station = model.snapshot?.currentStation {
             VStack(alignment: .leading, spacing: 4) {
-                Text(station.name).font(.title2.bold())
+                Text(station.name).font(isLarge ? .headline : .title2.bold())
                     .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
                 if let position = model.journeyOrigin {
                     Text(RouteStops.boundLabel(from: position)).foregroundStyle(.secondary)
                 }
             }
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
     }
+
+    private var isLarge: Bool { dynamicTypeSize.isAccessibilitySize }
 
     private var minutes: Binding<Int> {
         Binding(get: { model.journeyPlan.minutes }, set: { model.journeyPlan.setMinutes($0) })
@@ -60,7 +64,7 @@ struct TimeSelectionView: View {
             // 접근성 글자 크기에서는 버튼이 길어져 아래가 고정 영역에 가려지므로 같은 정보를 두 줄로 압축한다.
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    if dynamicTypeSize.isAccessibilitySize {
+                    if isLarge {
                         Text("\(candidate.bus.kind) \(candidate.bus.number) · \(candidate.destination)").font(.headline)
                     } else {
                         Text("\(candidate.bus.kind) \(candidate.bus.number)").font(.headline)

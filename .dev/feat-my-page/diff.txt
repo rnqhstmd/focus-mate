@@ -1,0 +1,18 @@
+ ios/FocusMate/AppModel+Profile.swift               |  36 +++
+ ios/FocusMate/AppModel.swift                       |   2 +
+ ios/FocusMate/DestinationScreen.swift              |   9 +
+ ios/FocusMate/ProfileTimeText.swift                |  14 +
+ ios/FocusMate/ProfileView.swift                    | 169 ++++++++++++
+ ios/FocusMate/RecordSection.swift                  |   5 +
+ ios/FocusMate/TimeSelectionView.swift              |  14 +-
+ ios/FocusMate/UITestBootstrap.swift                |   4 +
+ ios/FocusMateTests/ProfileModelTests.swift         | 241 +++++++++++++++++
+ ios/FocusMateTests/ProfileSeedTests.swift          |  41 +++
+ ios/FocusMateTests/ProfileStatsDisplayTests.swift  |  38 +++
+ ios/FocusMateTests/ProfileTimeTextTests.swift      |  85 ++++++
+ .../RecordLifetimeSummaryTests.swift               | 114 ++++++++
+ ios/FocusMateUITests/Phase1FlowTests.swift         |   1 -
+ ios/FocusMateUITests/ProfileUITests.swift          | 298 +++++++++++++++++++++
+ 15 files changed, 1065 insertions(+), 6 deletions(-)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라. 프로젝트 루트: /Users/bonseung/Documents/ChatGPT/new-w11

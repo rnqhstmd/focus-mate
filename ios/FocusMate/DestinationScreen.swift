@@ -7,6 +7,15 @@ struct DestinationScreen: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        // 마이페이지는 시안대로 자체 여백·좌측 제목을 쓰므로 공통 자리표시 체인 밖에서 그린다.
+        if destination == .profile {
+            ProfileView(model: model, onCustomize: { model.openFromProfile(.customize) })
+        } else {
+            placeholderOrTime
+        }
+    }
+
+    private var placeholderOrTime: some View {
         Group {
             if destination == .time {
                 TimeSelectionView(model: model)

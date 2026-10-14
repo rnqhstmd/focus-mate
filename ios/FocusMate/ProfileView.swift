@@ -60,14 +60,14 @@ struct ProfileView: View {
                     .accessibilityIdentifier("profile.headline")
                 Text(ProfileCopy.subhead).font(.subheadline).foregroundStyle(.secondary)
                     .padding(.top, 8).accessibilityIdentifier("profile.subhead")
-                PassFace().frame(maxWidth: .infinity)
+                PassFace(style: model.currentCardStyle).frame(maxWidth: .infinity)
                     .padding(.top, 32).accessibilityIdentifier("profile.card")
                 Text(PassIdentity.displayName).font(.title3.bold())
                     .padding(.top, 16).accessibilityIdentifier("profile.cardName")
                 Text(ProfileCopy.cardTagline).font(.subheadline).foregroundStyle(.secondary)
                     .padding(.top, 4).accessibilityIdentifier("profile.cardTagline")
                 Divider().padding(.top, 28)
-                ProfileMenuRow(systemImage: "pencil", title: Destination.cardStudio.title,
+                ProfileMenuRow(systemImage: "pencil", title: "카드 꾸미기",
                                identifier: "profile.customize", action: onCustomize)
                 statsSection(stats).padding(.top, 20)
                 Divider().padding(.top, 32)

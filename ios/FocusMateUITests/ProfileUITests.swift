@@ -173,25 +173,73 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(settings.isHittable)
     }
 
-    // 깨짐 명명: 카드 꾸미기 탭이 카드 스튜디오로 이동하지 않으면 실패
-    func testAC24_카드_꾸미기를_누르면_카드_스튜디오가_열린다() {
-        let h = FocusMateUIHarness.launch(seed: "ready")
+    // 깨짐 명명: 실제 편집 대신 placeholder를 열거나 저장 뒤 프로필 복귀/안내/외형 또는 사용 기록을 잃으면 실패
+    func testAC24_프로필에서_실제편집을_저장하면_복귀안내와외형을_유지한다() throws {
+        let h = FocusMateUIHarness.launch(seed: "profileRecords")
+        let beforeUsage = try profileUsage(h)
         _ = openProfile(h)
+        assertProfileRecordStats(h)
         h.element("profile.customize").tap()
-        let studio = h.element("screen.cardStudio")
-        XCTAssertTrue(studio.waitForExistence(timeout: timeout))
-        XCTAssertEqual(studio.label, "카드 꾸미기")
+        XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
+        let originalStyle = try customizationJSON(h)
+        let close = h.element("cardCustomization.close")
+        XCTAssertTrue(close.isHittable); close.tap()
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
+        XCTAssertFalse(h.element("screen.cardCustomization").exists)
+        XCTAssertEqual(try profileUsage(h), beforeUsage)
+
+        h.element("profile.customize").tap()
+        XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
+        let sand = h.element("cardCustomization.color.sand")
+        try reachVisible(sand, h)
+        sand.tap()
+        let edited = try customizationJSON(h)
+        let draft = try XCTUnwrap(edited["draft"] as? [String: Any])
+        let background = try XCTUnwrap(draft["background"] as? [String: Any])
+        XCTAssertEqual(try XCTUnwrap(background["red"] as? Double), 217.0 / 255, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(background["green"] as? Double), 205.0 / 255, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(background["blue"] as? Double), 185.0 / 255, accuracy: 0.000001)
+        let save = h.element("cardCustomization.save")
+        XCTAssertTrue(save.isHittable); save.tap()
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !h.element("screen.cardCustomization").exists
+        }, object: h.app)
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: timeout), .completed)
+        let notice = h.element("cardCustomization.savedNotice")
+        XCTAssertTrue(notice.waitForExistence(timeout: timeout))
+        XCTAssertEqual(notice.label, "카드 외형을 저장했어요.")
+        XCTAssertTrue(h.app.frame.contains(notice.frame), "저장 안내 전체가 현재 프로필 화면에 보여야 한다")
+        XCTAssertTrue(notice.isHittable, "저장 안내가 가려지면 안 된다")
+        XCTAssertEqual(try profileUsage(h), beforeUsage)
+        assertProfileRecordStats(h)
+        let savedStyle = try customizationJSON(h)
+        XCTAssertEqual(savedStyle["cardID"] as? String, originalStyle["cardID"] as? String)
+        XCTAssertEqual(try canonicalJSON(savedStyle["background"]), try canonicalJSON(background))
+        h.element("profile.customize").tap()
+        XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
+        let reopened = try XCTUnwrap(try customizationJSON(h)["draft"] as? [String: Any])
+        XCTAssertEqual(try canonicalJSON(reopened["background"]), try canonicalJSON(background))
+        h.element("cardCustomization.close").tap()
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
     }
 
-    // 깨짐 명명: 카드 스튜디오에서 뒤로가 마이페이지로 복귀시키지 않으면 실패
-    func testAC25_카드_스튜디오에서_뒤로가면_마이페이지로_돌아온다() {
-        let h = FocusMateUIHarness.launch(seed: "ready")
+    // 깨짐 명명: 실제 편집기 닫기가 프로필로 복귀하지 않거나 정체성/기록/파일을 변경하면 실패
+    func testAC25_실제편집을_변경없이닫으면_프로필과정체성과기록을_보존한다() throws {
+        let h = FocusMateUIHarness.launch(seed: "profileRecords")
+        let beforeUsage = try profileUsage(h)
+        let bytes = try h.diagnostic("test.persistedBytes")
         _ = openProfile(h)
+        assertProfileRecordStats(h)
         h.element("profile.customize").tap()
-        XCTAssertTrue(h.element("screen.cardStudio").waitForExistence(timeout: timeout))
-        backButton(h).tap()
+        XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
+        let close = h.element("cardCustomization.close")
+        XCTAssertTrue(close.isHittable); close.tap()
         XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
-        XCTAssertFalse(h.element("screen.cardStudio").exists)
+        XCTAssertFalse(h.element("screen.cardCustomization").exists)
+        XCTAssertEqual(try profileUsage(h), beforeUsage)
+        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
+        assertProfileRecordStats(h)
     }
 
     // 깨짐 명명: 설정 탭이 설정 화면으로 이동하지 않으면 실패
@@ -270,6 +318,26 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
     }
 
+    func testW10AC35_XXXL메인을_실제스크롤해_프로필편집을_열고닫는다() throws {
+        let h = FocusMateUIHarness.launch(seed: "profileRecords", extraArguments: xxxl)
+        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
+        let beforeUsage = try profileUsage(h)
+        let entry = h.element("open.profile")
+        try reachVisible(entry, h)
+        entry.tap()
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
+        let customize = h.element("profile.customize")
+        try reachVisible(customize, h)
+        customize.tap()
+        XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
+        let close = h.element("cardCustomization.close")
+        XCTAssertTrue(close.isHittable); close.tap()
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
+        XCTAssertFalse(h.element("screen.cardCustomization").exists)
+        XCTAssertEqual(try profileUsage(h), beforeUsage)
+        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
+    }
+
     // MARK: - Helpers
 
     private let xxxl = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
@@ -294,5 +362,47 @@ final class ProfileUITests: XCTestCase {
             if let value = node.value as? String, !value.isEmpty { texts.append(value) }
         }
         for child in node.children { collect(child, into: &texts) }
+    }
+
+    private func reachVisible(_ target: XCUIElement, _ h: FocusMateUIHarness) throws {
+        XCTAssertTrue(target.waitForExistence(timeout: timeout))
+        func visible() -> Bool {
+            let top = h.app.navigationBars.firstMatch.exists ? h.app.navigationBars.firstMatch.frame.maxY : h.app.frame.minY
+            return target.isHittable && h.app.frame.contains(target.frame) && target.frame.minY >= top
+        }
+        for _ in 0..<6 {
+            if visible() { break }
+            // Native swipe only; no tapping an offscreen coordinate or synthesizing a product action.
+            if target.frame.minY < h.app.frame.minY { h.app.swipeDown() }
+            else { h.app.swipeUp() }
+        }
+        XCTAssertTrue(visible(), "실제 스크롤로 화면 안에 도달해야 한다: " + target.identifier)
+    }
+
+    private func profileUsage(_ h: FocusMateUIHarness) throws -> Data {
+        let snapshot = try h.snapshot()
+        let cards = try XCTUnwrap(snapshot["cards"] as? [String: Any])
+        let firstCard = try XCTUnwrap((cards["items"] as? [[String: Any]])?.first)
+        XCTAssertEqual(firstCard["id"] as? String, "FM-12345678")
+        let records = try XCTUnwrap(snapshot["records"] as? [String: Any])
+        let items = try XCTUnwrap(records["items"] as? [[String: Any]])
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.compactMap { $0["minutes"] as? Int }.sorted(), [15, 25, 25])
+        return try canonicalJSON(["cardID": firstCard["id"] ?? NSNull(),
+                                  "issuedAt": firstCard["issuedAt"] ?? NSNull(), "records": records])
+    }
+
+    private func assertProfileRecordStats(_ h: FocusMateUIHarness) {
+        XCTAssertEqual(h.element("profile.stat.journeys.value").label, "3")
+        XCTAssertEqual(h.element("profile.stat.time.value").label, "1 h 5 min")
+    }
+
+    private func customizationJSON(_ h: FocusMateUIHarness) throws -> [String: Any] {
+        let raw = try h.diagnostic("test.cardStyleJSON")
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
+    }
+
+    private func canonicalJSON(_ value: Any?) throws -> Data {
+        try JSONSerialization.data(withJSONObject: value ?? NSNull(), options: [.sortedKeys, .fragmentsAllowed])
     }
 }

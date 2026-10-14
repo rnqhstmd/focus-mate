@@ -1,0 +1,49 @@
+[
+  {
+    "step": "notice-final-unit",
+    "command": [
+      "xcodebuild",
+      "-project",
+      "ios/FocusMate.xcodeproj",
+      "-scheme",
+      "FocusMate",
+      "-destination",
+      "platform=iOS Simulator,id=F226C28A-81D5-4708-B939-81B605AC748E",
+      "-derivedDataPath",
+      "/Users/bonseung/.codex/worktrees/w10-card-customization/new/.build/ios",
+      "-parallel-testing-enabled",
+      "NO",
+      "test",
+      "CODE_SIGNING_ALLOWED=NO",
+      "-collect-test-diagnostics",
+      "never",
+      "-only-testing:FocusMateTests"
+    ],
+    "exit_code": 0,
+    "started": "2026-10-15T00:34:40.642042+09:00",
+    "seconds": 18.545
+  },
+  {
+    "step": "notice-final-release",
+    "command": [
+      "xcodebuild",
+      "-project",
+      "ios/FocusMate.xcodeproj",
+      "-scheme",
+      "FocusMate",
+      "-destination",
+      "platform=iOS Simulator,id=F226C28A-81D5-4708-B939-81B605AC748E",
+      "-derivedDataPath",
+      "/Users/bonseung/.codex/worktrees/w10-card-customization/new/.build/ios",
+      "-parallel-testing-enabled",
+      "NO",
+      "-configuration",
+      "Release",
+      "build",
+      "CODE_SIGNING_ALLOWED=NO"
+    ],
+    "exit_code": 0,
+    "started": "2026-10-15T00:34:59.187685+09:00",
+    "seconds": 6.147
+  }
+]

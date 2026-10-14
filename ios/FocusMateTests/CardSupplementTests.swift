@@ -30,7 +30,7 @@ final class CardSupplementTests: XCTestCase {
 
         let saved = try decode(fake.bytes())
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(fake.bytes())) as? [String: Any])
-        XCTAssertEqual(root["version"] as? Int, 2)
+        XCTAssertEqual(root["version"] as? Int, 3)
         XCTAssertEqual(saved.cards.items.count, 1)
         assertCardID(saved.currentCard?.id)
         XCTAssertEqual(saved.initialStation, Self.seongsu)

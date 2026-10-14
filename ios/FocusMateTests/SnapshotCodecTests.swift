@@ -34,7 +34,7 @@ final class SnapshotCodecTests: XCTestCase {
         let out = try SnapshotCodec.encode(AppSnapshot.empty)
         XCTAssertEqual(
             String(decoding: out, as: UTF8.self),
-            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":2}"#
+            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":3}"#
         )
     }
 
@@ -43,7 +43,7 @@ final class SnapshotCodecTests: XCTestCase {
         let out = try SnapshotCodec.encode(try SnapshotCodec.decode(data(Self.v1Issued)))
         XCTAssertEqual(
             String(decoding: out, as: UTF8.self),
-            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":2}"#
+            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":3}"#
         )
     }
 
@@ -65,9 +65,9 @@ final class SnapshotCodecTests: XCTestCase {
         XCTAssertEqual(first, second)
     }
 
-    func testCurrentVersionIsTwo() {
-        // 깨짐 명명: currentVersion이 2가 아니면 실패한다.
-        XCTAssertEqual(SnapshotCodec.currentVersion, 2)
+    func testCurrentVersionIsThree() {
+        // 깨짐 명명: currentVersion이 3이 아니면 실패한다.
+        XCTAssertEqual(SnapshotCodec.currentVersion, 3)
     }
 
     // 깨짐 명명: 헤더/버전 검사 순서나 분류가 틀리면 해당 입력에서 실패한다.
@@ -81,7 +81,7 @@ final class SnapshotCodecTests: XCTestCase {
             (#"{"state":{}}"#, .corrupt),
             (#"{"version":0,"state":{}}"#, .unsupportedVersion(0)),
             (#"{"version":-1,"state":{}}"#, .unsupportedVersion(-1)),
-            (#"{"version":3,"state":{}}"#, .unsupportedVersion(3)),
+            (#"{"version":4,"state":{}}"#, .unsupportedVersion(4)),
             (#"{"version":999}"#, .unsupportedVersion(999)),
         ]
         for (input, issue) in cases {

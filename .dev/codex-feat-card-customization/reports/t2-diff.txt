@@ -1,0 +1,1783 @@
+diff --git a/ios/FocusMate/AppSnapshot.swift b/ios/FocusMate/AppSnapshot.swift
+index 52a3da0..42d702b 100644
+--- a/ios/FocusMate/AppSnapshot.swift
++++ b/ios/FocusMate/AppSnapshot.swift
+@@ -11,6 +11,7 @@ enum SnapshotValidationIssue: Error, Equatable {
+     case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
+     case multipleCards(Int), cardWithoutIssuance, invalidCardID
+     case invalidRecords(RecordValidationIssue)
++    case invalidCardStyle(CardStyleValidationIssue), invalidCardPhoto
+ }
+ 
+ struct AppSnapshot: Codable, Equatable {
+@@ -71,6 +72,10 @@ struct AppSnapshot: Codable, Equatable {
+         guard cards.items.count <= 1 else { throw SnapshotValidationIssue.multipleCards(cards.items.count) }
+         guard cards.items.isEmpty || cardIssued else { throw SnapshotValidationIssue.cardWithoutIssuance }
+         guard cards.items.allSatisfy({ CardSnapshot.isValidID($0.id) }) else { throw SnapshotValidationIssue.invalidCardID }
++        for card in cards.items {
++            do { try card.style.validate() }
++            catch let issue as CardStyleValidationIssue { throw SnapshotValidationIssue.invalidCardStyle(issue) }
++        }
+         do { try records.validate() }
+         catch let issue as RecordValidationIssue { throw SnapshotValidationIssue.invalidRecords(issue) }
+     }
+diff --git a/ios/FocusMate/CardPhotoProcessor.swift b/ios/FocusMate/CardPhotoProcessor.swift
+new file mode 100644
+index 0000000..a0a612d
+--- /dev/null
++++ b/ios/FocusMate/CardPhotoProcessor.swift
+@@ -0,0 +1,154 @@
++import Foundation
++import ImageIO
++import UniformTypeIdentifiers
++
++struct ProcessedCardPhoto: Equatable, Sendable {
++    let data: Data
++    let pixelWidth: Int
++    let pixelHeight: Int
++
++    init(data: Data, pixelWidth: Int, pixelHeight: Int) {
++        self.data = data
++        self.pixelWidth = pixelWidth
++        self.pixelHeight = pixelHeight
++    }
++}
++
++enum CardPhotoProcessingIssue: Error, Equatable {
++    case inputTooLarge, unreadable, unsupportedAspectRatio
++    case encodingFailed, cannotMeetStorageLimit
++}
++
++protocol CardPhotoProcessing: Sendable {
++    func process(_ data: Data) async throws -> ProcessedCardPhoto
++}
++
++struct ImageIOCardPhotoProcessor: CardPhotoProcessing {
++    private static let maximumPixelSize = 2048
++    private static let minimumPixelSize = 64
++    private static let jpegQualities = [0.85, 0.7, 0.55, 0.4]
++
++    func process(_ data: Data) async throws -> ProcessedCardPhoto {
++        guard data.count <= CardCustomizationPolicy.inputByteLimit else { throw CardPhotoProcessingIssue.inputTooLarge }
++        let source = try Self.completeSource(data)
++        let dimensions = try Self.dimensions(source)
++        guard CardCustomizationPolicy.aspectRatioRange.contains(Double(dimensions.width) / Double(dimensions.height)) else {
++            throw CardPhotoProcessingIssue.unsupportedAspectRatio
++        }
++        var maximum = min(Self.maximumPixelSize, max(dimensions.width, dimensions.height))
++        while true {
++            let image = try Self.thumbnail(source, maximum: maximum)
++            let hasAlpha = Self.hasAlpha(image)
++            for quality in hasAlpha ? [1.0] : Self.jpegQualities {
++                let bytes = try Self.encode(image, hasAlpha: hasAlpha, quality: quality)
++                if bytes.count <= CardCustomizationPolicy.photoByteLimit {
++                    let outputSource = try Self.completeSource(bytes)
++                    let outputDimensions = try Self.dimensions(outputSource)
++                    guard outputDimensions.orientation == 1,
++                          max(outputDimensions.width, outputDimensions.height) <= Self.maximumPixelSize,
++                          CardCustomizationPolicy.aspectRatioRange.contains(Double(outputDimensions.width) / Double(outputDimensions.height)) else {
++                        throw CardPhotoProcessingIssue.encodingFailed
++                    }
++                    let decoded = try Self.thumbnail(outputSource, maximum: Self.maximumPixelSize)
++                    guard decoded.width == outputDimensions.width, decoded.height == outputDimensions.height else {
++                        throw CardPhotoProcessingIssue.encodingFailed
++                    }
++                    return ProcessedCardPhoto(data: bytes, pixelWidth: decoded.width, pixelHeight: decoded.height)
++                }
++            }
++            guard maximum > Self.minimumPixelSize else { throw CardPhotoProcessingIssue.cannotMeetStorageLimit }
++            maximum = max(Self.minimumPixelSize, Int(Double(maximum) * 0.75))
++        }
++    }
++
++    static func validateStoredPhoto(_ photo: CardPhoto) throws {
++        do {
++            guard !photo.data.isEmpty, photo.data.count <= CardCustomizationPolicy.photoByteLimit else {
++                throw SnapshotValidationIssue.invalidCardPhoto
++            }
++            let source = try completeSource(photo.data)
++            let size = try dimensions(source)
++            guard size.orientation == 1, size.width == photo.pixelWidth, size.height == photo.pixelHeight,
++                  max(size.width, size.height) <= maximumPixelSize,
++                  CardCustomizationPolicy.aspectRatioRange.contains(Double(size.width) / Double(size.height)) else {
++                throw SnapshotValidationIssue.invalidCardPhoto
++            }
++            let image = try thumbnail(source, maximum: maximumPixelSize)
++            guard image.width == photo.pixelWidth, image.height == photo.pixelHeight else {
++                throw SnapshotValidationIssue.invalidCardPhoto
++            }
++        } catch { throw SnapshotValidationIssue.invalidCardPhoto }
++    }
++
++    static func validateStoredStyle(_ style: CardStyle) throws {
++        for photo in style.photos { try validateStoredPhoto(photo) }
++    }
++
++    private static func completeSource(_ data: Data) throws -> CGImageSource {
++        guard !data.isEmpty,
++              let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
++              CGImageSourceGetCount(source) > 0,
++              CGImageSourceGetStatus(source) == .statusComplete,
++              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else {
++            throw CardPhotoProcessingIssue.unreadable
++        }
++        return source
++    }
++
++    private static func dimensions(_ source: CGImageSource) throws -> (width: Int, height: Int, orientation: Int) {
++        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
++              let width = properties[kCGImagePropertyPixelWidth] as? Int,
++              let height = properties[kCGImagePropertyPixelHeight] as? Int, width > 0, height > 0 else {
++            throw CardPhotoProcessingIssue.unreadable
++        }
++        let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
++        return (width: (5...8).contains(orientation) ? height : width,
++                height: (5...8).contains(orientation) ? width : height, orientation: orientation)
++    }
++
++    private static func hasAlpha(_ image: CGImage) -> Bool {
++        switch image.alphaInfo {
++        case .first, .last, .premultipliedFirst, .premultipliedLast, .alphaOnly: return true
++        default: return false
++        }
++    }
++
++    private static func thumbnail(_ source: CGImageSource, maximum: Int) throws -> CGImage {
++        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
++            kCGImageSourceThumbnailMaxPixelSize: maximum, kCGImageSourceCreateThumbnailWithTransform: true,
++            kCGImageSourceShouldCache: true, kCGImageSourceShouldCacheImmediately: true]
++        // 손상 source가 투명 thumbnail로 부분 복구되는 경우도 원본 픽셀 decode는 실패한다.
++        guard let sourceImage = CGImageSourceCreateImageAtIndex(source, 0,
++                  [kCGImageSourceShouldCache: true, kCGImageSourceShouldCacheImmediately: true,
++                   kCGImageSourceSubsampleFactor: 8] as CFDictionary),
++              sourceImage.dataProvider?.data != nil,
++              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
++              image.width > 0, image.height > 0, max(image.width, image.height) <= maximum,
++              CGImageSourceGetStatus(source) == .statusComplete,
++              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
++              let context = CGContext(data: nil, width: image.width, height: image.height,
++                bitsPerComponent: 8, bytesPerRow: image.width * 4, space: image.colorSpace?.model == .rgb ? image.colorSpace! : CGColorSpaceCreateDeviceRGB(),
++                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
++            throw CardPhotoProcessingIssue.unreadable
++        }
++        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
++        guard context.data != nil, context.makeImage() != nil,
++              CGImageSourceGetStatus(source) == .statusComplete,
++              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else {
++            throw CardPhotoProcessingIssue.unreadable
++        }
++        return image
++    }
++
++    private static func encode(_ image: CGImage, hasAlpha: Bool, quality: Double) throws -> Data {
++        let data = NSMutableData()
++        let type = hasAlpha ? UTType.png : UTType.jpeg
++        guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
++            throw CardPhotoProcessingIssue.encodingFailed
++        }
++        CGImageDestinationAddImage(destination, image,
++            [kCGImageDestinationLossyCompressionQuality: quality, kCGImagePropertyOrientation: 1] as CFDictionary)
++        guard CGImageDestinationFinalize(destination) else { throw CardPhotoProcessingIssue.encodingFailed }
++        return data as Data
++    }
++}
+diff --git a/ios/FocusMate/CardSection.swift b/ios/FocusMate/CardSection.swift
+index eb875c8..d920cfa 100644
+--- a/ios/FocusMate/CardSection.swift
++++ b/ios/FocusMate/CardSection.swift
+@@ -4,12 +4,16 @@ import Foundation
+ struct CardSnapshot: Codable, Equatable {
+     let id: String
+     let issuedAt: Date
++    let style: CardStyle
+ 
+-    init(id: String, issuedAt: Date) {
++    init(id: String, issuedAt: Date, style: CardStyle = .standard) {
+         self.id = id
+         self.issuedAt = issuedAt
++        self.style = style
+     }
+ 
++    func updating(style: CardStyle) -> CardSnapshot { CardSnapshot(id: id, issuedAt: issuedAt, style: style) }
++
+     /// `FM-` + ASCII 숫자 8자리.
+     static func isValidID(_ id: String) -> Bool {
+         let bytes = Array(id.utf8)
+@@ -17,7 +21,7 @@ struct CardSnapshot: Codable, Equatable {
+         return bytes.dropFirst(3).allSatisfy { (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }
+     }
+ 
+-    private enum CodingKeys: String, CodingKey { case id, issuedAt }
++    private enum CodingKeys: String, CodingKey { case id, issuedAt, style }
+     init(from decoder: Decoder) throws {
+         let c = try decoder.container(keyedBy: CodingKeys.self)
+         id = try c.decode(String.self, forKey: .id)
+@@ -26,12 +30,14 @@ struct CardSnapshot: Codable, Equatable {
+             throw DecodingError.dataCorruptedError(forKey: .issuedAt, in: c, debugDescription: "issuedAt is not ISO 8601")
+         }
+         issuedAt = date
++        style = try c.decode(CardStyle.self, forKey: .style)
+     }
+     /// 날짜를 직접 문자열로 써서 인코더의 날짜 전략과 무관하게 같은 바이트를 낸다.
+     func encode(to encoder: Encoder) throws {
+         var c = encoder.container(keyedBy: CodingKeys.self)
+         try c.encode(id, forKey: .id)
+         try c.encode(issuedAt.formatted(.iso8601), forKey: .issuedAt)
++        try c.encode(style, forKey: .style)
+     }
+ }
+ 
+diff --git a/ios/FocusMate/CardStyle.swift b/ios/FocusMate/CardStyle.swift
+new file mode 100644
+index 0000000..f7e1c9c
+--- /dev/null
++++ b/ios/FocusMate/CardStyle.swift
+@@ -0,0 +1,96 @@
++import Foundation
++
++enum CardCustomizationPolicy {
++    static let inputByteLimit = 8_388_608
++    static let maximumPhotos = 6
++    static let photoByteLimit = 1_048_576
++    static let totalPhotoByteLimit = 6_291_456
++    static let aspectRatioRange = 0.1...10.0
++    static let widthFractionRange = 0.15...2.5
++    static let centerRange = -1.0...2.0
++    static let undoLimit = 20
++}
++
++struct CardColor: Codable, Equatable, Sendable {
++    let red: Double
++    let green: Double
++    let blue: Double
++    static let standard = CardColor(red: 18.0 / 255.0, green: 20.0 / 255.0, blue: 22.0 / 255.0)
++
++    init(red: Double, green: Double, blue: Double) {
++        self.red = red
++        self.green = green
++        self.blue = blue
++    }
++}
++
++struct CardPhoto: Codable, Equatable, Identifiable, Sendable {
++    let id: UUID
++    let data: Data
++    let pixelWidth: Int
++    let pixelHeight: Int
++    var centerX: Double
++    var centerY: Double
++    var widthFraction: Double
++
++    init(id: UUID, data: Data, pixelWidth: Int, pixelHeight: Int,
++         centerX: Double, centerY: Double, widthFraction: Double) {
++        self.id = id
++        self.data = data
++        self.pixelWidth = pixelWidth
++        self.pixelHeight = pixelHeight
++        self.centerX = centerX
++        self.centerY = centerY
++        self.widthFraction = widthFraction
++    }
++}
++
++enum CardStyleValidationIssue: Error, Equatable {
++    case invalidColor, tooManyPhotos(Int), duplicatePhotoID
++    case emptyPhotoData(UUID), invalidDimensions(UUID), invalidPlacement(UUID)
++    case photoTooLarge(UUID), totalPhotosTooLarge
++}
++
++struct CardStyle: Codable, Equatable, Sendable {
++    var background: CardColor
++    var photos: [CardPhoto]
++    static let standard = CardStyle(background: .standard, photos: [])
++
++    var isStandard: Bool { background == .standard && photos.isEmpty }
++
++    init(background: CardColor, photos: [CardPhoto]) {
++        self.background = background
++        self.photos = photos
++    }
++
++    func validate() throws {
++        guard [background.red, background.green, background.blue].allSatisfy({ $0.isFinite && (0...1).contains($0) }) else {
++            throw CardStyleValidationIssue.invalidColor
++        }
++        guard photos.count <= CardCustomizationPolicy.maximumPhotos else {
++            throw CardStyleValidationIssue.tooManyPhotos(photos.count)
++        }
++        guard Set(photos.map(\.id)).count == photos.count else { throw CardStyleValidationIssue.duplicatePhotoID }
++        var total = 0
++        for photo in photos {
++            guard photo.data.count <= CardCustomizationPolicy.totalPhotoByteLimit - total else {
++                throw CardStyleValidationIssue.totalPhotosTooLarge
++            }
++            total += photo.data.count
++        }
++        for photo in photos {
++            guard !photo.data.isEmpty else { throw CardStyleValidationIssue.emptyPhotoData(photo.id) }
++            guard photo.data.count <= CardCustomizationPolicy.photoByteLimit else { throw CardStyleValidationIssue.photoTooLarge(photo.id) }
++            guard photo.pixelWidth > 0, photo.pixelHeight > 0,
++                  CardCustomizationPolicy.aspectRatioRange.contains(Double(photo.pixelWidth) / Double(photo.pixelHeight)) else {
++                throw CardStyleValidationIssue.invalidDimensions(photo.id)
++            }
++            guard photo.centerX.isFinite, photo.centerY.isFinite, photo.widthFraction.isFinite,
++                  CardCustomizationPolicy.centerRange.contains(photo.centerX),
++                  CardCustomizationPolicy.centerRange.contains(photo.centerY),
++                  CardCustomizationPolicy.widthFractionRange.contains(photo.widthFraction) else {
++                throw CardStyleValidationIssue.invalidPlacement(photo.id)
++            }
++        }
++    }
++}
+diff --git a/ios/FocusMate/LocalSnapshotStore.swift b/ios/FocusMate/LocalSnapshotStore.swift
+index 53e2502..0b0cf33 100644
+--- a/ios/FocusMate/LocalSnapshotStore.swift
++++ b/ios/FocusMate/LocalSnapshotStore.swift
+@@ -18,6 +18,7 @@ final class LocalSnapshotStore {
+     private let backupID: () -> UUID
+     private let writeBackup: (Data, URL) throws -> Void
+     private let removeData: (URL) throws -> Void
++    private let validateCardPhotos: (CardStyle) throws -> Void
+ 
+     init(fileURL: URL,
+          readData: @escaping (URL) throws -> Data = { try Data(contentsOf: $0) },
+@@ -25,7 +26,8 @@ final class LocalSnapshotStore {
+          writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) },
+          backupID: @escaping () -> UUID = UUID.init,
+          writeBackup: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .withoutOverwriting) },
+-         removeData: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) }) {
++         removeData: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) },
++         validateCardPhotos: @escaping (CardStyle) throws -> Void = ImageIOCardPhotoProcessor.validateStoredStyle) {
+         self.fileURL = fileURL
+         self.readData = readData
+         self.createDirectory = createDirectory
+@@ -33,6 +35,7 @@ final class LocalSnapshotStore {
+         self.backupID = backupID
+         self.writeBackup = writeBackup
+         self.removeData = removeData
++        self.validateCardPhotos = validateCardPhotos
+     }
+ 
+     func recoverySource() -> RecoverySource {
+@@ -54,7 +57,8 @@ final class LocalSnapshotStore {
+         default: break
+         }
+         do {
+-            _ = try SnapshotCodec.decode(original)
++            let snapshot = try SnapshotCodec.decode(original)
++            try validatePhotos(in: snapshot)
+             throw StorageRecoveryIssue.notRequired
+         } catch let issue as StorageIssue {
+             switch issue {
+@@ -86,12 +90,21 @@ final class LocalSnapshotStore {
+         do { data = try readData(fileURL) }
+         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+         catch { throw StorageIssue.unreadable }
+-        return try SnapshotCodec.decode(data)
++        let snapshot = try SnapshotCodec.decode(data)
++        try validatePhotos(in: snapshot)
++        return snapshot
++    }
++
++    private func validatePhotos(in snapshot: AppSnapshot) throws {
++        do {
++            for card in snapshot.cards.items { try validateCardPhotos(card.style) }
++        } catch { throw StorageIssue.invalidState(.invalidCardPhoto) }
+     }
+ 
+     func save(_ snapshot: AppSnapshot) throws {
+         do { try snapshot.validate() }
+         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
++        try validatePhotos(in: snapshot)
+         do { _ = try load() }
+         catch let issue as StorageIssue { throw StorageIssue.writeBlocked(issue) }
+         do {
+diff --git a/ios/FocusMate/SnapshotCodec.swift b/ios/FocusMate/SnapshotCodec.swift
+index c53a2f1..79a52a3 100644
+--- a/ios/FocusMate/SnapshotCodec.swift
++++ b/ios/FocusMate/SnapshotCodec.swift
+@@ -7,11 +7,38 @@ struct LegacySnapshotV1: Decodable {
+     let currentStation: StationSnapshot?
+ }
+ 
++/// v2 카드에서는 이후 추가된 style 키를 해석하지 않는다.
++struct LegacyCardV2DTO: Decodable {
++    let id: String
++    let issuedAt: Date
++    private enum CodingKeys: String, CodingKey { case id, issuedAt }
++    init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        id = try c.decode(String.self, forKey: .id)
++        let text = try c.decode(String.self, forKey: .issuedAt)
++        guard let date = try? Date(text, strategy: .iso8601) else {
++            throw DecodingError.dataCorruptedError(forKey: .issuedAt, in: c, debugDescription: "issuedAt is not ISO 8601")
++        }
++        issuedAt = date
++    }
++}
++
++struct LegacySnapshotV2: Decodable {
++    struct Cards: Decodable { let items: [LegacyCardV2DTO] }
++    let cardIssued: Bool
++    let initialStation: StationSnapshot?
++    let currentStation: StationSnapshot?
++    let cards: Cards
++    let journey: JourneySection
++    let records: RecordSection
++}
++
+ /// 저장 파일 바이트와 `AppSnapshot` 사이의 변환. 판정 순서는 헤더 → 버전 → 구조 → 내용이다.
+ enum SnapshotCodec {
+-    static let currentVersion = 2
++    static let currentVersion = 3
+ 
+     private struct VersionHeader: Decodable { let version: Int }
++    private struct EnvelopeV2: Decodable { let state: LegacySnapshotV2 }
+     private struct EnvelopeV1: Decodable { let state: LegacySnapshotV1 }
+     private struct Envelope: Codable { let version: Int; let state: AppSnapshot }
+ 
+@@ -23,6 +50,7 @@ enum SnapshotCodec {
+         do {
+             switch header.version {
+             case 1: state = migrateV1(try JSONDecoder().decode(EnvelopeV1.self, from: data).state)
++            case 2: state = migrateV2(try JSONDecoder().decode(EnvelopeV2.self, from: data).state)
+             case currentVersion: state = try JSONDecoder().decode(Envelope.self, from: data).state
+             default: throw StorageIssue.unsupportedVersion(header.version)
+             }
+@@ -39,6 +67,15 @@ enum SnapshotCodec {
+         return try encoder.encode(Envelope(version: currentVersion, state: snapshot))
+     }
+ 
++    static func migrateV2(_ legacy: LegacySnapshotV2) -> AppSnapshot {
++        AppSnapshot.empty.updatingStage(cardIssued: legacy.cardIssued,
++                                        initialStation: legacy.initialStation,
++                                        currentStation: legacy.currentStation)
++            .updating(cards: CardSection(items: legacy.cards.items.map { CardSnapshot(id: $0.id, issuedAt: $0.issuedAt) }))
++            .updating(journey: legacy.journey)
++            .updating(records: legacy.records)
++    }
++
+     static func migrateV1(_ legacy: LegacySnapshotV1) -> AppSnapshot {
+         AppSnapshot.empty.updatingStage(cardIssued: legacy.cardIssued,
+                                         initialStation: legacy.initialStation,
+diff --git a/ios/FocusMateTests/CardPhotoProcessorTests.swift b/ios/FocusMateTests/CardPhotoProcessorTests.swift
+new file mode 100644
+index 0000000..fdf1d91
+--- /dev/null
++++ b/ios/FocusMateTests/CardPhotoProcessorTests.swift
+@@ -0,0 +1,282 @@
++import Foundation
++import ImageIO
++import UniformTypeIdentifiers
++import XCTest
++@testable import FocusMate
++
++final class CardPhotoProcessorTests: XCTestCase {
++    private func assertProcessIssue(_ expected: CardPhotoProcessingIssue, input: Data,
++                                    file: StaticString = #filePath, line: UInt = #line) async {
++        do {
++            _ = try await ImageIOCardPhotoProcessor().process(input)
++            XCTFail("Expected \(expected)", file: file, line: line)
++        } catch {
++            XCTAssertEqual(error as? CardPhotoProcessingIssue, expected, file: file, line: line)
++        }
++    }
++    private func assertStoredInvalid(_ photo: CardPhoto,
++                                     file: StaticString = #filePath, line: UInt = #line) {
++        XCTAssertThrowsError(try ImageIOCardPhotoProcessor.validateStoredPhoto(photo), file: file, line: line) {
++            XCTAssertEqual($0 as? SnapshotValidationIssue, .invalidCardPhoto, file: file, line: line)
++        }
++    }
++
++    // 깨짐 명명: 빈 반환 또는 디코딩하지 않은 입력 반환은 실패한다.
++    func testAC05_JPEG_실제이미지는_보존가능한_내용으로_처리된다() async throws {
++        let input = try CardPhotoTestFixtures.image(type: .jpeg)
++        _ = try CardPhotoTestFixtures.completeDecoded(input)
++        // 원본 fixture sanity: processor와 독립적으로 sRGB 입력 의미를 확인한다.
++        let inputRGBA = try CardPhotoTestFixtures.rgba(input)
++        XCTAssertGreaterThan(inputRGBA[0], 240, "원본 fixture sRGB red")
++        XCTAssertLessThan(inputRGBA[1], 15, "원본 fixture sRGB green")
++        XCTAssertLessThan(inputRGBA[2], 15, "원본 fixture sRGB blue")
++        XCTAssertEqual(inputRGBA[3], 255, "원본 fixture alpha")
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        let decoded = try CardPhotoTestFixtures.decoded(result.data)
++        XCTAssertEqual(decoded.width, 40)
++        XCTAssertEqual(decoded.height, 20)
++        XCTAssertEqual(result.pixelWidth, 40)
++        XCTAssertEqual(result.pixelHeight, 20)
++        XCTAssertLessThanOrEqual(result.data.count, 1_048_576)
++        let rgba = try CardPhotoTestFixtures.rgba(result.data)
++        XCTAssertGreaterThan(rgba[0], 240)
++        XCTAssertLessThan(rgba[1], 15)
++        XCTAssertLessThan(rgba[2], 15)
++    }
++
++    // 깨짐 명명: 빈 반환 또는 디코딩하지 않은 입력 반환은 실패한다.
++    func testAC05_PNG_실제이미지는_보존가능한_내용으로_처리된다() async throws {
++        let input = try CardPhotoTestFixtures.image(type: .png)
++        _ = try CardPhotoTestFixtures.completeDecoded(input)
++        // 원본 fixture sanity: processor와 독립적으로 sRGB 입력 의미를 확인한다.
++        let inputRGBA = try CardPhotoTestFixtures.rgba(input)
++        XCTAssertGreaterThan(inputRGBA[0], 240, "원본 fixture sRGB red")
++        XCTAssertLessThan(inputRGBA[1], 15, "원본 fixture sRGB green")
++        XCTAssertLessThan(inputRGBA[2], 15, "원본 fixture sRGB blue")
++        XCTAssertEqual(inputRGBA[3], 255, "원본 fixture alpha")
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        let decoded = try CardPhotoTestFixtures.decoded(result.data)
++        XCTAssertEqual(decoded.width, 40)
++        XCTAssertEqual(decoded.height, 20)
++        XCTAssertEqual(result.pixelWidth, 40)
++        XCTAssertEqual(result.pixelHeight, 20)
++        XCTAssertLessThanOrEqual(result.data.count, 1_048_576)
++        let rgba = try CardPhotoTestFixtures.rgba(result.data)
++        XCTAssertGreaterThan(rgba[0], 240)
++        XCTAssertLessThan(rgba[1], 15)
++        XCTAssertLessThan(rgba[2], 15)
++    }
++
++    // 깨짐 명명: 빈 반환 또는 디코딩하지 않은 입력 반환은 실패한다.
++    func testAC05_HEIC_실제이미지는_보존가능한_내용으로_처리된다() async throws {
++        let input = try CardPhotoTestFixtures.image(type: .heic)
++        _ = try CardPhotoTestFixtures.completeDecoded(input)
++        // 원본 fixture sanity: processor와 독립적으로 sRGB 입력 의미를 확인한다.
++        let inputRGBA = try CardPhotoTestFixtures.rgba(input)
++        XCTAssertGreaterThan(inputRGBA[0], 240, "원본 fixture sRGB red")
++        XCTAssertLessThan(inputRGBA[1], 15, "원본 fixture sRGB green")
++        XCTAssertLessThan(inputRGBA[2], 15, "원본 fixture sRGB blue")
++        XCTAssertEqual(inputRGBA[3], 255, "원본 fixture alpha")
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        let decoded = try CardPhotoTestFixtures.decoded(result.data)
++        XCTAssertEqual(decoded.width, 40)
++        XCTAssertEqual(decoded.height, 20)
++        XCTAssertEqual(result.pixelWidth, 40)
++        XCTAssertEqual(result.pixelHeight, 20)
++        XCTAssertLessThanOrEqual(result.data.count, 1_048_576)
++        let rgba = try CardPhotoTestFixtures.rgba(result.data)
++        XCTAssertGreaterThan(rgba[0], 240)
++        XCTAssertLessThan(rgba[1], 15)
++        XCTAssertLessThan(rgba[2], 15)
++    }
++
++    // 깨짐 명명: alpha를 버리고 JPEG로 저장하면 실제 투명도에서 실패한다.
++    func testPNG_투명도를_실제내용에_보존한다() async throws {
++        let input = try CardPhotoTestFixtures.image(alpha: true)
++        _ = try CardPhotoTestFixtures.completeDecoded(input)
++        // 원본 fixture sanity: processor와 독립적으로 sRGB 입력 의미를 확인한다.
++        let inputRGBA = try CardPhotoTestFixtures.rgba(input)
++        XCTAssertEqual(Double(inputRGBA[3]), 128, accuracy: 1, "원본 fixture alpha")
++        XCTAssertGreaterThan(inputRGBA[0], 120, "원본 fixture sRGB red")
++        XCTAssertLessThan(inputRGBA[1], 5, "원본 fixture sRGB green")
++        XCTAssertLessThan(inputRGBA[2], 5, "원본 fixture sRGB blue")
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        let rgba = try CardPhotoTestFixtures.rgba(result.data)
++        XCTAssertEqual(Double(rgba[3]), 128, accuracy: 1)
++        XCTAssertGreaterThan(rgba[0], 120)
++        XCTAssertLessThan(rgba[1], 5)
++    }
++
++    // 깨짐 명명: orientation을 무시하거나 이중 회전하면 출력 치수와 저장 검증에서 실패한다.
++    func testOrientation6_한번만_회전해_저장한다() async throws {
++        let input = try CardPhotoTestFixtures.image(type: .jpeg, orientation: 6)
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        XCTAssertEqual(result.pixelWidth, 20)
++        XCTAssertEqual(result.pixelHeight, 40)
++        let decoded = try CardPhotoTestFixtures.decoded(result.data)
++        XCTAssertEqual(decoded.width, 20)
++        XCTAssertEqual(decoded.height, 40)
++        let source = try CardPhotoTestFixtures.source(result.data)
++        let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
++        let orientation = properties[kCGImagePropertyOrientation] as? Int
++        XCTAssertTrue(orientation == nil || orientation == 1)
++        XCTAssertNoThrow(try ImageIOCardPhotoProcessor.validateStoredPhoto(CardPhotoTestFixtures.photo(data: result.data, width: 20, height: 40)))
++    }
++
++    // 깨짐 명명: 비율 경계를 잘못 판정하거나 이미지 비율을 늘여서 통과시키면 실패한다.
++    func testAC05_RatioLower() async throws {
++        let input = try CardPhotoTestFixtures.image(width: 10, height: 100)
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        XCTAssertEqual(result.pixelWidth, 10)
++        XCTAssertEqual(result.pixelHeight, 100)
++        XCTAssertNoThrow(try ImageIOCardPhotoProcessor.validateStoredPhoto(CardPhotoTestFixtures.photo(data: result.data, width: 10, height: 100)))
++    }
++
++    // 깨짐 명명: 비율 경계를 잘못 판정하거나 이미지 비율을 늘여서 통과시키면 실패한다.
++    func testAC05_RatioUpper() async throws {
++        let input = try CardPhotoTestFixtures.image(width: 100, height: 10)
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        XCTAssertEqual(result.pixelWidth, 100)
++        XCTAssertEqual(result.pixelHeight, 10)
++        XCTAssertNoThrow(try ImageIOCardPhotoProcessor.validateStoredPhoto(CardPhotoTestFixtures.photo(data: result.data, width: 100, height: 10)))
++    }
++
++    // 깨짐 명명: 비율 경계를 잘못 판정하거나 이미지 비율을 늘여서 통과시키면 실패한다.
++    func testAC05_RatioBelow() async throws {
++        let input = try CardPhotoTestFixtures.image(width: 9, height: 100)
++        await assertProcessIssue(.unsupportedAspectRatio, input: input)
++    }
++
++    // 깨짐 명명: 비율 경계를 잘못 판정하거나 이미지 비율을 늘여서 통과시키면 실패한다.
++    func testAC05_RatioAbove() async throws {
++        let input = try CardPhotoTestFixtures.image(width: 101, height: 10)
++        await assertProcessIssue(.unsupportedAspectRatio, input: input)
++    }
++
++    // 깨짐 명명: 크기 선행 검사 또는 실제 본문 decode 검사를 빼면 실패한다.
++    func testAC05_Empty_거절() async throws {
++        await assertProcessIssue(.unreadable, input: Data())
++    }
++
++    // 깨짐 명명: 크기 선행 검사 또는 실제 본문 decode 검사를 빼면 실패한다.
++    func testAC05_Unsupported_거절() async throws {
++        await assertProcessIssue(.unreadable, input: Data("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>".utf8))
++    }
++
++    // 깨짐 명명: 크기 선행 검사 또는 실제 본문 decode 검사를 빼면 실패한다.
++    func testAC05_DamagedBody_거절() async throws {
++        await assertProcessIssue(.unreadable, input: try CardPhotoTestFixtures.damagedBody())
++    }
++
++    // 깨짐 명명: 크기 선행 검사 또는 실제 본문 decode 검사를 빼면 실패한다.
++    func testAC05_TruncatedBody_거절() async throws {
++        await assertProcessIssue(.unreadable, input: Data(try CardPhotoTestFixtures.image().prefix(40)))
++    }
++
++    // 깨짐 명명: 크기 선행 검사 또는 실제 본문 decode 검사를 빼면 실패한다.
++    func testAC05_Above8MiB_거절() async throws {
++        await assertProcessIssue(.inputTooLarge, input: Data(repeating: 1, count: 8_388_609))
++    }
++
++    // 깨짐 명명: 원본을 반환하거나 긴 변만 줄여 찌그러뜨리면 실패한다.
++    func testLongSideAbove2048_비율을_유지하여_축소한다() async throws {
++        let result = try await ImageIOCardPhotoProcessor().process(CardPhotoTestFixtures.image(width: 4096, height: 2048))
++        XCTAssertEqual(result.pixelWidth, 2048)
++        XCTAssertEqual(result.pixelHeight, 1024)
++        XCTAssertNoThrow(try ImageIOCardPhotoProcessor.validateStoredPhoto(CardPhotoTestFixtures.photo(data: result.data, width: 2048, height: 1024)))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testDeclaredWidthMismatch() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image(), width: 41, height: 20))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testDeclaredHeightMismatch() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image(), width: 40, height: 21))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testStoredLongSideTooLarge() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image(width: 2049, height: 1025), width: 2049, height: 1025))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testStoredRatioBelow() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image(width: 9, height: 100), width: 9, height: 100))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testStoredRatioAbove() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image(width: 101, height: 10), width: 101, height: 10))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testStoredDamagedBody() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.damagedBody(), width: 40, height: 20))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testStoredEmpty() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: Data(), width: 40, height: 20))
++    }
++
++    // 깨짐 명명: 저장 이미지 실제 decode·치수·긴 변·비율 확인을 생략하면 실패한다.
++    func testStoredUnsupported() throws {
++        assertStoredInvalid(CardPhotoTestFixtures.photo(data: Data("unsupported".utf8), width: 40, height: 20))
++    }
++
++    // 깨짐 명명: 읽을 수 있는 WebP를 거절하거나 빈/다른 색 이미지로 반환하면 실패한다.
++    func testAC05_WebP_실제이미지는_보존가능한_내용으로_처리된다() async throws {
++        let input = try CardPhotoTestFixtures.losslessWebP()
++        let inputImage = try CardPhotoTestFixtures.completeDecoded(input)
++        XCTAssertEqual(inputImage.width, 40)
++        XCTAssertEqual(inputImage.height, 20)
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        let decoded = try CardPhotoTestFixtures.completeDecoded(result.data)
++        XCTAssertEqual(decoded.width, 40)
++        XCTAssertEqual(decoded.height, 20)
++        XCTAssertEqual(Double(decoded.width) / Double(decoded.height), 2)
++        XCTAssertEqual(result.pixelWidth, 40)
++        XCTAssertEqual(result.pixelHeight, 20)
++        XCTAssertLessThanOrEqual(result.data.count, 1_048_576)
++        let rgba = try CardPhotoTestFixtures.rgba(result.data)
++        // 불투명 입력. JPEG 재인코딩 오차는 허용하되 다른 색으로 대체하면 실패한다.
++        XCTAssertEqual(Double(rgba[0]), 220, accuracy: 8)
++        XCTAssertEqual(Double(rgba[1]), 40, accuracy: 8)
++        XCTAssertEqual(Double(rgba[2]), 80, accuracy: 8)
++        XCTAssertEqual(rgba[3], 255)
++        XCTAssertNoThrow(try ImageIOCardPhotoProcessor.validateStoredPhoto(
++            CardPhotoTestFixtures.photo(data: result.data, width: 40, height: 20)))
++    }
++
++    // 깨짐 명명: 입력 한도를 >=8MiB로 거절하거나 메타데이터 포함 원본을 그대로 반환하면 실패한다.
++    func testAC05_Exact8MiB_완전한PNG는_내용을_보존하여_처리된다() async throws {
++        let input = try CardPhotoTestFixtures.exact8MiBPNG()
++        XCTAssertEqual(input.count, 8_388_608)
++        let inputImage = try CardPhotoTestFixtures.completeDecoded(input)
++        XCTAssertEqual(inputImage.width, 40)
++        XCTAssertEqual(inputImage.height, 20)
++        // 원본 fixture sanity: processor와 독립적으로 sRGB 입력 의미를 확인한다.
++        let inputRGBA = try CardPhotoTestFixtures.rgba(input)
++        XCTAssertGreaterThan(inputRGBA[0], 240, "원본 fixture sRGB red")
++        XCTAssertLessThan(inputRGBA[1], 15, "원본 fixture sRGB green")
++        XCTAssertLessThan(inputRGBA[2], 15, "원본 fixture sRGB blue")
++        XCTAssertEqual(inputRGBA[3], 255, "원본 fixture alpha")
++        let result = try await ImageIOCardPhotoProcessor().process(input)
++        let decoded = try CardPhotoTestFixtures.completeDecoded(result.data)
++        XCTAssertEqual(decoded.width, 40)
++        XCTAssertEqual(decoded.height, 20)
++        XCTAssertEqual(Double(decoded.width) / Double(decoded.height), 2)
++        XCTAssertEqual(result.pixelWidth, 40)
++        XCTAssertEqual(result.pixelHeight, 20)
++        XCTAssertLessThanOrEqual(result.data.count, 1_048_576)
++        let rgba = try CardPhotoTestFixtures.rgba(result.data)
++        XCTAssertGreaterThan(rgba[0], 240)
++        XCTAssertLessThan(rgba[1], 15)
++        XCTAssertLessThan(rgba[2], 15)
++        XCTAssertEqual(rgba[3], 255)
++        XCTAssertNoThrow(try ImageIOCardPhotoProcessor.validateStoredPhoto(
++            CardPhotoTestFixtures.photo(data: result.data, width: 40, height: 20)))
++    }
++}
+diff --git a/ios/FocusMateTests/CardPhotoTestFixtures.swift b/ios/FocusMateTests/CardPhotoTestFixtures.swift
+new file mode 100644
+index 0000000..3596fe7
+--- /dev/null
++++ b/ios/FocusMateTests/CardPhotoTestFixtures.swift
+@@ -0,0 +1,154 @@
++import Foundation
++import CoreGraphics
++import ImageIO
++import UniformTypeIdentifiers
++import XCTest
++@testable import FocusMate
++
++/// 실제 ImageIO 입력. 프로덕션 processor/encoder로 기대 이미지를 만들지 않는다.
++enum CardPhotoTestFixtures {
++    static let photoID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
++
++    static func image(width: Int = 40, height: Int = 20, alpha: Bool = false,
++                      type: UTType = .png, orientation: Int = 1) throws -> Data {
++        let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height,
++            bitsPerComponent: 8, bytesPerRow: width * 4, space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
++            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
++        // 입력의 pure red는 context와 같은 명시적 sRGB에서 정의한다.
++        let color = try XCTUnwrap(CGColor(colorSpace: try XCTUnwrap(context.colorSpace),
++            components: [1, 0, 0, alpha ? 0.5 : 1]))
++        context.setFillColor(color)
++        context.fill(CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
++        let image = try XCTUnwrap(context.makeImage())
++        let bytes = NSMutableData()
++        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(bytes, type.identifier as CFString, 1, nil))
++        CGImageDestinationAddImage(destination, image, [kCGImagePropertyOrientation: orientation] as CFDictionary)
++        guard CGImageDestinationFinalize(destination) else { throw FixtureIssue.encoding }
++        return bytes as Data
++    }
++
++    static func source(_ bytes: Data) throws -> CGImageSource {
++        try XCTUnwrap(CGImageSourceCreateWithData(bytes as CFData, nil))
++    }
++
++    static func decoded(_ bytes: Data) throws -> CGImage {
++        let source = try source(bytes)
++        return try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
++    }
++
++    static func rgba(_ bytes: Data) throws -> [UInt8] {
++        let image = try decoded(bytes)
++        let context = try XCTUnwrap(CGContext(data: nil, width: 1, height: 1,
++            bitsPerComponent: 8, bytesPerRow: 4, space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
++            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
++        context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
++        let pointer = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
++        return Array(UnsafeBufferPointer(start: pointer, count: 4))
++    }
++
++    /// PNG signature와 IHDR은 남기고 IDAT payload를 깨뜨린다. 헤더만 읽는 구현을 잡는다.
++    static func damagedBody() throws -> Data {
++        var bytes = try image()
++        let range = try XCTUnwrap(bytes.range(of: Data("IDAT".utf8)))
++        let start = range.upperBound
++        guard start + 4 < bytes.count else { throw FixtureIssue.encoding }
++        bytes.replaceSubrange(start..<(bytes.count - 12), with: Data(repeating: 0, count: bytes.count - 12 - start))
++        return bytes
++    }
++
++    static func photo(data: Data = Data([1]), width: Int = 40, height: Int = 20,
++                      id: UUID = photoID, x: Double = 0.5, y: Double = 0.5,
++                      fraction: Double = 0.6) -> CardPhoto {
++        CardPhoto(id: id, data: data, pixelWidth: width, pixelHeight: height,
++                  centerX: x, centerY: y, widthFraction: fraction)
++    }
++
++    static func style(_ photos: [CardPhoto]) -> CardStyle {
++        CardStyle(background: CardColor(red: 0.2, green: 0.3, blue: 0.4), photos: photos)
++    }
++
++    static func seed(_ bytes: Data, at url: URL) throws {
++        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
++        try bytes.write(to: url)
++    }
++
++
++    /// 부모가 번들 Python3 Pillow lossless WebP encoder로 자체 생성한 40×20 RGB(220,40,80), 38bytes.
++    /// 외부 사진/라이선스 없음. 출처: .dev/codex-feat-card-customization/reports/t2-fixture-input.md,
++    /// test-webp-base64.txt 및 t2-fixture-validation.log (macOS ImageIO complete/decode/draw 성공).
++    /// 대상 iOS 지원은 skip 없이 실제 processor 테스트에서 검증한다.
++    static func losslessWebP() throws -> Data {
++        try XCTUnwrap(Data(base64Encoded: "UklGRh4AAABXRUJQVlA4TBEAAAAvJ8AEAAdQlHIXqv+BiOh/AAA="))
++    }
++
++    /// 기존 ImageIO PNG의 IEND 앞에 정상 tEXt 메타데이터를 삽입한다. 후행 padding이 아니다.
++    /// 전체 입력 한도에는 메타데이터도 포함된다: base + 12(chunk overhead) + 8(key+NUL) + payload.
++    static func exact8MiBPNG() throws -> Data {
++        var bytes = try image()
++        let targetCount = 8_388_608
++        let keyword = Data("padding\0".utf8)
++        let payloadCount = targetCount - bytes.count - 12 - keyword.count
++        guard payloadCount >= 0 else { throw FixtureIssue.encoding }
++
++        // PNG chunk 경계를 따라 IEND를 찾는다. 압축 본문 안의 우연한 문자열과 혼동하지 않는다.
++        var offset = 8
++        var iendOffset: Int?
++        while offset <= bytes.count - 12 {
++            let length = bytes[offset..<(offset + 4)].reduce(0) { ($0 << 8) | Int($1) }
++            guard length <= bytes.count - offset - 12 else { throw FixtureIssue.encoding }
++            let type = bytes[(offset + 4)..<(offset + 8)]
++            if Data(type) == Data("IEND".utf8) {
++                guard length == 0, offset + 12 == bytes.count else { throw FixtureIssue.encoding }
++                iendOffset = offset
++                break
++            }
++            offset += length + 12
++        }
++        let insertionOffset = try XCTUnwrap(iendOffset)
++        var text = keyword
++        text.append(Data(repeating: 0x78, count: payloadCount)) // 유효한 Latin-1 tEXt 값 'x'.
++        var crcInput = Data("tEXt".utf8)
++        crcInput.append(text)
++        var chunk = bigEndianBytes(UInt32(text.count))
++        chunk.append(crcInput)
++        chunk.append(bigEndianBytes(crc32(crcInput)))
++        bytes.insert(contentsOf: chunk, at: insertionOffset)
++        return bytes
++    }
++
++    private static func bigEndianBytes(_ value: UInt32) -> Data {
++        Data([UInt8(truncatingIfNeeded: value >> 24), UInt8(truncatingIfNeeded: value >> 16),
++              UInt8(truncatingIfNeeded: value >> 8), UInt8(truncatingIfNeeded: value)])
++    }
++
++    // PNG CRC는 chunk type+data를 대상으로 하는 표준 reflected CRC32다.
++    private static func crc32(_ bytes: Data) -> UInt32 {
++        var crc: UInt32 = 0xFFFF_FFFF
++        for byte in bytes {
++            crc ^= UInt32(byte)
++            for _ in 0..<8 {
++                crc = (crc >> 1) ^ ((crc & 1) == 1 ? 0xEDB8_8320 : 0)
++            }
++        }
++        return crc ^ 0xFFFF_FFFF
++    }
++
++    /// 프로덕션 processor와 독립적인 ImageIO 검사. 부분 복구 입력도 성공으로 인정하지 않는다.
++    static func completeDecoded(_ bytes: Data) throws -> CGImage {
++        let source = try source(bytes)
++        guard CGImageSourceGetStatus(source) == .statusComplete,
++              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else {
++            XCTFail("Fixture/output ImageIO source and index must be complete")
++            throw FixtureIssue.encoding
++        }
++        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
++        let context = try XCTUnwrap(CGContext(data: nil, width: image.width, height: image.height,
++            bitsPerComponent: 8, bytesPerRow: image.width * 4, space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
++            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
++        context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(image.width), height: CGFloat(image.height)))
++        _ = try XCTUnwrap(context.data)
++        return image
++    }
++
++    enum FixtureIssue: Error { case encoding }
++}
+diff --git a/ios/FocusMateTests/CardStorageTests.swift b/ios/FocusMateTests/CardStorageTests.swift
+index cb10329..3688423 100644
+--- a/ios/FocusMateTests/CardStorageTests.swift
++++ b/ios/FocusMateTests/CardStorageTests.swift
+@@ -18,7 +18,7 @@ final class CardStorageTests: XCTestCase {
+ 
+     private static let nullStations = #""currentStation":null,"initialStation":null"#
+ 
+-    // 깨짐 명명: id를 숫자로 바꿔 앞자리 0을 잃거나, 날짜를 다른 형식으로 쓰거나, 재저장 바이트가 달라지거나, version이 2가 아니면 실패.
++    // 깨짐 명명: id를 숫자로 바꿔 앞자리 0을 잃거나, 날짜를 다른 형식으로 쓰거나, 재저장 바이트가 달라지거나, v3 필수 style을 누락하면 실패.
+     func testAC13_카드항목은_저장_로드_재저장해도_값과_바이트가_같다() throws {
+         try withTemporaryFile { fileURL in
+             let snapshot = Self.stage(true, Self.seongsu, Self.seongsu)
+@@ -36,11 +36,12 @@ final class CardStorageTests: XCTestCase {
+             XCTAssertEqual(try Data(contentsOf: fileURL), firstBytes)
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 2)
+-            XCTAssertEqual(
+-                String(decoding: firstBytes, as: UTF8.self),
+-                #"{"state":{"cardIssued":true,"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"}]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":2}"#
+-            )
++            XCTAssertEqual(root["version"] as? Int, 3)
++            let state = try XCTUnwrap(root["state"] as? [String: Any])
++            let cards = try XCTUnwrap(state["cards"] as? [String: Any])
++            let items = try XCTUnwrap(cards["items"] as? [[String: Any]])
++            XCTAssertNotNil(try XCTUnwrap(items.first)["style"])
++            XCTAssertEqual(loaded.currentCard?.style, .standard)
+         }
+     }
+ 
+diff --git a/ios/FocusMateTests/CardStyleStorageTests.swift b/ios/FocusMateTests/CardStyleStorageTests.swift
+new file mode 100644
+index 0000000..5a01238
+--- /dev/null
++++ b/ios/FocusMateTests/CardStyleStorageTests.swift
+@@ -0,0 +1,352 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class CardStyleStorageTests: XCTestCase {
++    private enum ProbeError: Error { case write, validation }
++    private static let station = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
++    private static let issuedAt = Date(timeIntervalSince1970: 1_791_882_000)
++    private static let recordJSON = ##"{"id":"journey-001","completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","bus":"버스2014","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","minutes":25,"sound":"빗소리","from":"성수역","to":"서울숲 입구","memo":"첫 메모"}"##
++
++    private func snapshot(_ style: CardStyle) -> AppSnapshot {
++        Self.stage(true, Self.station, Self.station)
++            .issuingCard(CardSnapshot(id: "FM-01234567", issuedAt: Self.issuedAt, style: style))
++    }
++
++    /// legacy 입력은 프로덕션 encoder를 사용하지 않는다. v2 style 필드는 모르는 키다.
++    private func legacyV2(extraCardKey: String = "") -> Data {
++        Data(#"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"\#(extraCardKey)}]},"journey":{"active":null},"records":{"items":[\#(Self.recordJSON)]}}}"#.utf8)
++    }
++
++    /// v3 손상자료 생성은 독립 JSON fixture를 기반으로 하며 encode의 검증 우회를 요구하지 않는다.
++    private func rawV3(photoData: Data, width: Int = 40, height: Int = 20) throws -> Data {
++        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: legacyV2()) as? [String: Any])
++        root["version"] = 3
++        var state = try XCTUnwrap(root["state"] as? [String: Any])
++        let photo: [String: Any] = ["id": "11111111-2222-3333-4444-555555555555",
++            "data": photoData.base64EncodedString(), "pixelWidth": width, "pixelHeight": height,
++            "centerX": 0.5, "centerY": 0.5, "widthFraction": 0.6]
++        state["cards"] = ["items": [["id": "FM-01234567", "issuedAt": "2026-10-13T09:00:00Z",
++            "style": ["background": ["red": 0.2, "green": 0.3, "blue": 0.4], "photos": [photo]]]]]
++        root["state"] = state
++        return try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
++    }
++
++    // 깨짐 명명: 사진 순서/배치/바이트를 버리거나 카드 정체성을 재생성하면 실패한다.
++    func testAC24_실파일_재실행은_여섯장_내용_배치_순서_정체성을_복원한다() throws {
++        try withTemporaryFile { url in
++            let bytes = try CardPhotoTestFixtures.image(alpha: true)
++            let photos = (0..<6).map { index in
++                CardPhotoTestFixtures.photo(data: bytes,
++                    id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!,
++                    x: Double(index) * 0.2, y: 0.4, fraction: 0.3)
++            }
++            let original = snapshot(CardPhotoTestFixtures.style(photos))
++            try LocalSnapshotStore(fileURL: url).save(original)
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
++            let card = try XCTUnwrap(loaded.currentCard)
++            XCTAssertEqual(card.id, "FM-01234567")
++            XCTAssertEqual(card.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
++            XCTAssertEqual(card.style.background, CardColor(red: 0.2, green: 0.3, blue: 0.4))
++            XCTAssertEqual(card.style.photos.count, 6)
++            XCTAssertEqual(card.style.photos.map(\.id), [
++                UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
++                UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
++                UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
++                UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
++                UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
++                UUID(uuidString: "00000000-0000-0000-0000-000000000006")!])
++            for (photo, expectedX) in zip(card.style.photos, [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]) {
++                XCTAssertEqual(photo.centerX, expectedX, accuracy: 0.000001)
++            }
++            XCTAssertEqual(card.style.photos.map(\.centerY), [0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
++            XCTAssertEqual(card.style.photos.map(\.widthFraction), [0.3, 0.3, 0.3, 0.3, 0.3, 0.3])
++            for photo in card.style.photos {
++                XCTAssertEqual(photo.data, bytes)
++                XCTAssertEqual(Double(try CardPhotoTestFixtures.rgba(photo.data)[3]), 128, accuracy: 1)
++            }
++        }
++    }
++
++    // 깨짐 명명: 원본 파일 경로에 의존하거나 재로드 시 사진을 잃으면 실패한다.
++    func testAC25_입력원본파일_삭제후에도_실제사진을_복원한다() throws {
++        try withTemporaryFile { url in
++            let sourceURL = url.deletingLastPathComponent().appendingPathComponent("picker-source.png")
++            try CardPhotoTestFixtures.seed(CardPhotoTestFixtures.image(alpha: true), at: sourceURL)
++            let bytes = try Data(contentsOf: sourceURL)
++            let original = snapshot(CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(data: bytes)]))
++            try LocalSnapshotStore(fileURL: url).save(original)
++            try FileManager.default.removeItem(at: sourceURL)
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
++            XCTAssertEqual(loaded, original)
++            XCTAssertEqual(Double(try CardPhotoTestFixtures.rgba(XCTUnwrap(loaded.currentCard?.style.photos.first).data)[3]), 128, accuracy: 1)
++        }
++    }
++
++    // 깨짐 명명: v3의 필수 style 누락을 기본 외형으로 채우면 실패한다.
++    func testV3_Style누락은_corrupt이며_자동덮어쓰기하지_않는다() throws {
++        var root = try XCTUnwrap(JSONSerialization.jsonObject(with: legacyV2()) as? [String: Any])
++        root["version"] = 3
++        let bytes = try JSONSerialization.data(withJSONObject: root)
++        try withTemporaryFile { url in
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            assertStorageIssue(.corrupt) { _ = try LocalSnapshotStore(fileURL: url).load() }
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++        }
++    }
++
++    // 깨짐 명명: v2에서 알 수 없는 style 키를 해석하면 손상/꾸민 외형으로 읽혀 실패한다.
++    func testAC29_V2UnknownStyle은_무시하고_표준외형으로_마이그레이션한다() throws {
++        let input = legacyV2(extraCardKey: #", "style":{"photos":"broken","background":null},"unknown":7"#)
++        let decoded = try SnapshotCodec.decode(input)
++        XCTAssertEqual(decoded.currentCard?.style, .standard)
++        XCTAssertEqual(decoded.currentCard?.id, "FM-01234567")
++        XCTAssertEqual(decoded.currentCard?.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
++        XCTAssertTrue(try XCTUnwrap(decoded.currentCard).style.isStandard)
++    }
++
++    // 깨짐 명명: v2 읽기가 재저장되거나 꾸미기 저장이 기존 단계/기록을 잃으면 실패한다.
++    func testAC29_V2_읽기는_원본보존_꾸미기저장후_v3로_이용상태를_유지한다() throws {
++        try withTemporaryFile { url in
++            let bytes = legacyV2()
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++            XCTAssertEqual(loaded.currentCard?.style, .standard)
++            let card = try XCTUnwrap(loaded.currentCard)
++            let styledCard = card.updating(style: CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image())]))
++            let updated = loaded.updating(cards: snapshot(styledCard.style).cards)
++            try LocalSnapshotStore(fileURL: url).save(updated)
++            let restored = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
++            XCTAssertEqual(restored, updated)
++            XCTAssertTrue(restored.cardIssued)
++            XCTAssertEqual(restored.initialStation, Self.station)
++            XCTAssertEqual(restored.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++            XCTAssertNil(restored.journey.active)
++            XCTAssertEqual(restored.records.items.count, 1)
++            let record = try XCTUnwrap(restored.records.items.first)
++            XCTAssertEqual(record.id, "journey-001")
++            XCTAssertEqual(record.minutes, 25)
++            XCTAssertEqual(record.memo, "첫 메모")
++            XCTAssertEqual(restored.records, loaded.records)
++            XCTAssertEqual(restored.currentCard?.id, "FM-01234567")
++            XCTAssertEqual(restored.currentCard?.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
++            let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
++            XCTAssertEqual(root["version"] as? Int, 3)
++        }
++    }
++
++    // 깨짐 명명: v1 변환을 제거하거나 읽기 중 쓰면 실패한다. 자동 카드 보충은 기존 별도 통합 시험이다.
++    func testAC29_V1_읽기는_단계와_정류장을_유지하고_쓰지_않는다() throws {
++        let bytes = Data(#"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seongsu","name":"성수","direction":1}}}"#.utf8)
++        try withTemporaryFile { url in
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
++            XCTAssertTrue(loaded.cardIssued)
++            XCTAssertEqual(loaded.initialStation, Self.station)
++            XCTAssertEqual(loaded.currentStation, Self.station)
++            XCTAssertTrue(loaded.cards.items.isEmpty)
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertTrue(loaded.records.items.isEmpty)
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++        }
++    }
++
++    // 깨짐 명명: atomic write 오류를 성공으로 처리하거나 원본 사진 바이트를 지우면 실패한다.
++    func testAtomicWriteFailure_기존외형과_사진_원본을_유지한다() throws {
++        try withTemporaryFile { url in
++            let original = snapshot(CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.image())]))
++            try LocalSnapshotStore(fileURL: url).save(original)
++            let bytes = try Data(contentsOf: url)
++            let failing = LocalSnapshotStore(fileURL: url, writeData: { _, _ in throw ProbeError.write })
++            assertStorageIssue(.writeFailed) { try failing.save(snapshot(.standard)) }
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++            XCTAssertEqual(try LocalSnapshotStore(fileURL: url).load(), original)
++        }
++    }
++
++    // 깨짐 명명: 실제 사진 검사 실패를 무시하거나 다른 오류로 포장하면 쓰기가 발생해서 실패한다.
++    func testCandidatePhotoValidatorError는_invalidCardPhoto이며_IO를_하지않는다() throws {
++        var reads = 0; var directories = 0; var writes = 0
++        let store = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in reads += 1; throw CocoaError(.fileReadNoSuchFile) },
++            createDirectory: { _ in directories += 1 }, writeData: { _, _ in writes += 1 },
++            validateCardPhotos: { _ in throw ProbeError.validation })
++        assertStorageIssue(.invalidState(.invalidCardPhoto)) {
++            try store.save(snapshot(CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo()])))
++        }
++        XCTAssertEqual(reads, 0)
++        XCTAssertEqual(directories, 0)
++        XCTAssertEqual(writes, 0)
++    }
++
++    // 깨짐 명명: 원본 이미지 실패를 후보 오류로 분류하거나 기존 데이터를 덮어쓰면 실패한다.
++    func testAC28_InvalidPhotoOriginal은_writeBlocked이며_바이트를_유지한다() throws {
++        let bytes = try rawV3(photoData: CardPhotoTestFixtures.damagedBody())
++        try withTemporaryFile { url in
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            var writes = 0; var directories = 0
++            let store = LocalSnapshotStore(fileURL: url, createDirectory: { _ in directories += 1 }, writeData: { _, _ in writes += 1 })
++            assertStorageIssue(.invalidState(.invalidCardPhoto)) { _ = try store.load() }
++            assertStorageIssue(.writeBlocked(.invalidState(.invalidCardPhoto))) { try store.save(snapshot(.standard)) }
++            XCTAssertEqual(writes, 0)
++            XCTAssertEqual(directories, 0)
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++        }
++    }
++
++    // 깨짐 명명: 실제 사진검증을 정상파일 판정에서 빼면 notRequired가 되어 복구가 실패한다.
++    func testAC28_InvalidPhotoOriginal은_원본을_그대로_백업한_후에만_제거한다() throws {
++        let bytes = try rawV3(photoData: CardPhotoTestFixtures.damagedBody())
++        try withTemporaryFile { url in
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            let backupID = UUID(uuidString: "99999999-2222-3333-4444-555555555555")!
++            let expectedBackup = url.deletingLastPathComponent().appendingPathComponent("app-state.recovery-\(backupID.uuidString).backup")
++            let store = LocalSnapshotStore(fileURL: url, backupID: { backupID }, removeData: { original in
++                XCTAssertEqual(try Data(contentsOf: expectedBackup), bytes)
++                XCTAssertEqual(try Data(contentsOf: original), bytes)
++                try FileManager.default.removeItem(at: original)
++            })
++            let backup = try store.backupAndClear(expectedSource: .bytes(bytes))
++            XCTAssertEqual(try Data(contentsOf: backup), bytes)
++            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
++        }
++    }
++
++    // 깨짐 명명: 손상사진 백업 실패 뒤 원본을 삭제하면 실패한다.
++    func testAC28_InvalidPhotoBackupFailure는_원본삭제를_하지않는다() throws {
++        let bytes = try rawV3(photoData: CardPhotoTestFixtures.damagedBody())
++        try withTemporaryFile { url in
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            var removals = 0
++            let store = LocalSnapshotStore(fileURL: url,
++                writeBackup: { _, _ in throw ProbeError.write }, removeData: { _ in removals += 1 })
++            XCTAssertThrowsError(try store.backupAndClear(expectedSource: .bytes(bytes))) {
++                XCTAssertEqual($0 as? StorageRecoveryIssue, .backupFailed)
++            }
++            XCTAssertEqual(removals, 0)
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++        }
++    }
++
++    // 깨짐 명명: 장당/전체 byte 경계를 잘못 판정하거나 실패 후보를 쓰면 실패한다.
++    // 구조 byte 경계 전용: actual image validator는 no-op이며 실제 이미지 성공 증거가 아니다.
++    func testAC27_PerPhotoLimit() throws {
++        let counts = [1048576]
++        let photos = counts.enumerated().map { index, count in
++            CardPhotoTestFixtures.photo(data: Data(repeating: 1, count: count),
++                id: index == 0 ? CardPhotoTestFixtures.photoID : UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!)
++        }
++        let candidate = snapshot(CardPhotoTestFixtures.style(photos))
++        try withTemporaryFile { url in
++            try LocalSnapshotStore(fileURL: url).save(snapshot(.standard))
++            let original = try Data(contentsOf: url)
++            var writes = 0; var directories = 0
++            let store = LocalSnapshotStore(fileURL: url,
++                createDirectory: { target in directories += 1; try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true) },
++                writeData: { data, target in writes += 1; try data.write(to: target, options: .atomic) },
++                validateCardPhotos: { _ in })
++            try store.save(candidate)
++            XCTAssertEqual(writes, 1)
++            let restarted = LocalSnapshotStore(fileURL: url, validateCardPhotos: { _ in })
++            XCTAssertEqual(try restarted.load(), candidate)
++        }
++    }
++
++    // 깨짐 명명: 장당/전체 byte 경계를 잘못 판정하거나 실패 후보를 쓰면 실패한다.
++    // 구조 byte 경계 전용: actual image validator는 no-op이며 실제 이미지 성공 증거가 아니다.
++    func testAC27_PerPhotoAboveLimit() throws {
++        let counts = [1048577]
++        let photos = counts.enumerated().map { index, count in
++            CardPhotoTestFixtures.photo(data: Data(repeating: 1, count: count),
++                id: index == 0 ? CardPhotoTestFixtures.photoID : UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!)
++        }
++        let candidate = snapshot(CardPhotoTestFixtures.style(photos))
++        try withTemporaryFile { url in
++            try LocalSnapshotStore(fileURL: url).save(snapshot(.standard))
++            let original = try Data(contentsOf: url)
++            var writes = 0; var directories = 0
++            let store = LocalSnapshotStore(fileURL: url,
++                createDirectory: { target in directories += 1; try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true) },
++                writeData: { data, target in writes += 1; try data.write(to: target, options: .atomic) },
++                validateCardPhotos: { _ in })
++            assertStorageIssue(.invalidState(.invalidCardStyle(.photoTooLarge(CardPhotoTestFixtures.photoID)))) { try store.save(candidate) }
++            XCTAssertEqual(writes, 0)
++            XCTAssertEqual(directories, 0)
++            XCTAssertEqual(try Data(contentsOf: url), original)
++            XCTAssertEqual(try LocalSnapshotStore(fileURL: url).load(), snapshot(.standard))
++        }
++    }
++
++    // 깨짐 명명: 장당/전체 byte 경계를 잘못 판정하거나 실패 후보를 쓰면 실패한다.
++    // 구조 byte 경계 전용: actual image validator는 no-op이며 실제 이미지 성공 증거가 아니다.
++    func testAC27_TotalLimit() throws {
++        let counts = [1048576, 1048576, 1048576, 1048576, 1048576, 1048576]
++        let photos = counts.enumerated().map { index, count in
++            CardPhotoTestFixtures.photo(data: Data(repeating: 1, count: count),
++                id: index == 0 ? CardPhotoTestFixtures.photoID : UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!)
++        }
++        let candidate = snapshot(CardPhotoTestFixtures.style(photos))
++        try withTemporaryFile { url in
++            try LocalSnapshotStore(fileURL: url).save(snapshot(.standard))
++            let original = try Data(contentsOf: url)
++            var writes = 0; var directories = 0
++            let store = LocalSnapshotStore(fileURL: url,
++                createDirectory: { target in directories += 1; try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true) },
++                writeData: { data, target in writes += 1; try data.write(to: target, options: .atomic) },
++                validateCardPhotos: { _ in })
++            try store.save(candidate)
++            XCTAssertEqual(writes, 1)
++            let restarted = LocalSnapshotStore(fileURL: url, validateCardPhotos: { _ in })
++            XCTAssertEqual(try restarted.load(), candidate)
++        }
++    }
++
++    // 깨짐 명명: 장당/전체 byte 경계를 잘못 판정하거나 실패 후보를 쓰면 실패한다.
++    // 구조 byte 경계 전용: actual image validator는 no-op이며 실제 이미지 성공 증거가 아니다.
++    func testAC27_TotalAboveLimit() throws {
++        let counts = [1048576, 1048576, 1048576, 1048576, 1048576, 1048577]
++        let photos = counts.enumerated().map { index, count in
++            CardPhotoTestFixtures.photo(data: Data(repeating: 1, count: count),
++                id: index == 0 ? CardPhotoTestFixtures.photoID : UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!)
++        }
++        let candidate = snapshot(CardPhotoTestFixtures.style(photos))
++        try withTemporaryFile { url in
++            try LocalSnapshotStore(fileURL: url).save(snapshot(.standard))
++            let original = try Data(contentsOf: url)
++            var writes = 0; var directories = 0
++            let store = LocalSnapshotStore(fileURL: url,
++                createDirectory: { target in directories += 1; try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true) },
++                writeData: { data, target in writes += 1; try data.write(to: target, options: .atomic) },
++                validateCardPhotos: { _ in })
++            assertStorageIssue(.invalidState(.invalidCardStyle(.totalPhotosTooLarge))) { try store.save(candidate) }
++            XCTAssertEqual(writes, 0)
++            XCTAssertEqual(directories, 0)
++            XCTAssertEqual(try Data(contentsOf: url), original)
++            XCTAssertEqual(try LocalSnapshotStore(fileURL: url).load(), snapshot(.standard))
++        }
++    }
++
++    // 깨짐 명명: 실제 손상 후보의 이미지 검증을 빼면 read/create/write가 발생한다.
++    func testAC28_DamagedCandidate_기존원본_읽기전에_거절한다() throws {
++        var reads = 0; var directories = 0; var writes = 0
++        let store = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in reads += 1; throw CocoaError(.fileReadNoSuchFile) },
++            createDirectory: { _ in directories += 1 }, writeData: { _, _ in writes += 1 })
++        let candidate = snapshot(CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(data: try CardPhotoTestFixtures.damagedBody())]))
++        assertStorageIssue(.invalidState(.invalidCardPhoto)) { try store.save(candidate) }
++        XCTAssertEqual(reads, 0)
++        XCTAssertEqual(directories, 0)
++        XCTAssertEqual(writes, 0)
++    }
++
++    // 깨짐 명명: load에서 actual/declared 치수 검사를 빼면 잘못된 배치를 성공으로 읽어 실패한다.
++    func testAC28_DeclaredDimensionMismatch_읽기실패는_원본을_유지한다() throws {
++        let bytes = try rawV3(photoData: CardPhotoTestFixtures.image(), width: 41)
++        try withTemporaryFile { url in
++            try CardPhotoTestFixtures.seed(bytes, at: url)
++            assertStorageIssue(.invalidState(.invalidCardPhoto)) { _ = try LocalSnapshotStore(fileURL: url).load() }
++            XCTAssertEqual(try Data(contentsOf: url), bytes)
++        }
++    }
++}
+diff --git a/ios/FocusMateTests/CardStyleTests.swift b/ios/FocusMateTests/CardStyleTests.swift
+new file mode 100644
+index 0000000..ad38bb4
+--- /dev/null
++++ b/ios/FocusMateTests/CardStyleTests.swift
+@@ -0,0 +1,319 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class CardStyleTests: XCTestCase {
++    private let id = CardPhotoTestFixtures.photoID
++    private func assertIssue(_ expected: CardStyleValidationIssue, _ style: CardStyle,
++                             file: StaticString = #filePath, line: UInt = #line) {
++        XCTAssertThrowsError(try style.validate(), file: file, line: line) {
++            XCTAssertEqual($0 as? CardStyleValidationIssue, expected, file: file, line: line)
++        }
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_red_NaN_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: .nan, green: 0.5, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_red_PositiveInfinity_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: .infinity, green: 0.5, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_red_NegativeInfinity_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: -.infinity, green: 0.5, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_red_BelowZero_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: -0.01, green: 0.5, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_red_AboveOne_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 1.01, green: 0.5, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: 색 경계를 열린 구간으로 바꾸면 실패한다.
++    func testRGB_red_Zero_허용() throws {
++        XCTAssertNoThrow(try CardStyle(background: CardColor(red: 0, green: 0.5, blue: 0.5), photos: []).validate())
++    }
++
++    // 깨짐 명명: 색 경계를 열린 구간으로 바꾸면 실패한다.
++    func testRGB_red_One_허용() throws {
++        XCTAssertNoThrow(try CardStyle(background: CardColor(red: 1, green: 0.5, blue: 0.5), photos: []).validate())
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_green_NaN_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: .nan, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_green_PositiveInfinity_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: .infinity, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_green_NegativeInfinity_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: -.infinity, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_green_BelowZero_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: -0.01, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_green_AboveOne_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: 1.01, blue: 0.5), photos: []))
++    }
++
++    // 깨짐 명명: 색 경계를 열린 구간으로 바꾸면 실패한다.
++    func testRGB_green_Zero_허용() throws {
++        XCTAssertNoThrow(try CardStyle(background: CardColor(red: 0.5, green: 0, blue: 0.5), photos: []).validate())
++    }
++
++    // 깨짐 명명: 색 경계를 열린 구간으로 바꾸면 실패한다.
++    func testRGB_green_One_허용() throws {
++        XCTAssertNoThrow(try CardStyle(background: CardColor(red: 0.5, green: 1, blue: 0.5), photos: []).validate())
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_blue_NaN_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: .nan), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_blue_PositiveInfinity_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: .infinity), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_blue_NegativeInfinity_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: -.infinity), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_blue_BelowZero_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: -0.01), photos: []))
++    }
++
++    // 깨짐 명명: RGB 유한값 또는 범위 검사를 빼면 실패한다.
++    func testRGB_blue_AboveOne_거절() throws {
++        assertIssue(.invalidColor, CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: 1.01), photos: []))
++    }
++
++    // 깨짐 명명: 색 경계를 열린 구간으로 바꾸면 실패한다.
++    func testRGB_blue_Zero_허용() throws {
++        XCTAssertNoThrow(try CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: 0), photos: []).validate())
++    }
++
++    // 깨짐 명명: 색 경계를 열린 구간으로 바꾸면 실패한다.
++    func testRGB_blue_One_허용() throws {
++        XCTAssertNoThrow(try CardStyle(background: CardColor(red: 0.5, green: 0.5, blue: 1), photos: []).validate())
++    }
++
++    // 깨짐 명명: 배치 경계를 열린 구간으로 바꾸면 실패한다.
++    func testAC12_CenterX_Lower_저장허용() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: -1)]).validate())
++    }
++
++    // 깨짐 명명: 배치 경계를 열린 구간으로 바꾸면 실패한다.
++    func testAC12_CenterX_Upper_저장허용() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: 2)]).validate())
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterX_Below_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: -1.01)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterX_Above_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: 2.01)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterX_NaN_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: .nan)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterX_Infinity_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: .infinity)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterX_NegativeInfinity_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(x: -.infinity)]))
++    }
++
++    // 깨짐 명명: 배치 경계를 열린 구간으로 바꾸면 실패한다.
++    func testAC12_CenterY_Lower_저장허용() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: -1)]).validate())
++    }
++
++    // 깨짐 명명: 배치 경계를 열린 구간으로 바꾸면 실패한다.
++    func testAC12_CenterY_Upper_저장허용() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: 2)]).validate())
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterY_Below_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: -1.01)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterY_Above_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: 2.01)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterY_NaN_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: .nan)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterY_Infinity_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: .infinity)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_CenterY_NegativeInfinity_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(y: -.infinity)]))
++    }
++
++    // 깨짐 명명: 배치 경계를 열린 구간으로 바꾸면 실패한다.
++    func testAC12_Width_Lower_저장허용() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: 0.15)]).validate())
++    }
++
++    // 깨짐 명명: 배치 경계를 열린 구간으로 바꾸면 실패한다.
++    func testAC12_Width_Upper_저장허용() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: 2.5)]).validate())
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_Width_Below_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: 0.14)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_Width_Above_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: 2.51)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_Width_NaN_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: .nan)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_Width_Infinity_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: .infinity)]))
++    }
++
++    // 깨짐 명명: 잘못된 저장 배치를 clamp하거나 통과시키면 실패한다.
++    func testAC12_Width_NegativeInfinity_저장거절() throws {
++        assertIssue(.invalidPlacement(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(fraction: -.infinity)]))
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_LowerRatio() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 10, height: 100)]).validate())
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_UpperRatio() throws {
++        XCTAssertNoThrow(try CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 100, height: 10)]).validate())
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_BelowRatio() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 9, height: 100)]))
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_AboveRatio() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 101, height: 10)]))
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_ZeroWidth() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 0, height: 20)]))
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_ZeroHeight() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 40, height: 0)]))
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_NegativeWidth() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: -1, height: 20)]))
++    }
++
++    // 깨짐 명명: 치수 또는 비율 경계를 잘못 판정하면 실패한다.
++    func testAC05_NegativeHeight() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 40, height: -1)]))
++    }
++
++    // 깨짐 명명: 빈 사진 데이터 검사를 빼면 실패한다.
++    func testEmptyData_거절() throws {
++        assertIssue(.emptyPhotoData(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(data: Data())]))
++    }
++
++    // 깨짐 명명: 사진 ID 중복 검사를 빼면 실패한다.
++    func testDuplicateID_거절() throws {
++        let photo = CardPhotoTestFixtures.photo()
++        assertIssue(.duplicatePhotoID, CardPhotoTestFixtures.style([photo, photo]))
++    }
++
++    // 깨짐 명명: 최대 장수를 7로 늘리면 실패한다.
++    func testSevenPhotos_거절() throws {
++        let photos = (0..<7).map { index in CardPhotoTestFixtures.photo(id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index + 1))!) }
++        assertIssue(.tooManyPhotos(7), CardPhotoTestFixtures.style(photos))
++    }
++
++    // 깨짐 명명: 검증 순서를 수량 우선으로 바꾸면 실패한다.
++    func testValidationOrder_RGBBeforeCount() throws {
++        let style = CardStyle(background: CardColor(red: .nan, green: 0, blue: 0), photos: Array(repeating: CardPhotoTestFixtures.photo(), count: 7))
++        assertIssue(.invalidColor, style)
++    }
++
++    // 깨짐 명명: 중복 ID보다 바이트 검사를 먼저 하면 실패한다.
++    func testValidationOrder_DuplicateBeforeBytes() throws {
++        let photo = CardPhotoTestFixtures.photo(data: Data(repeating: 1, count: 1_048_577))
++        assertIssue(.duplicatePhotoID, CardPhotoTestFixtures.style([photo, photo]))
++    }
++
++    // 깨짐 명명: style 갱신이 카드 ID/발급시각을 새로 생성하거나 입력 style을 버리면 실패한다.
++    func testCardStyleUpdate_카드정체성을_유지한다() throws {
++        let original = CardSnapshot(id: "FM-01234567", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
++        let style = CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo()])
++        let changed = original.updating(style: style)
++        XCTAssertEqual(changed.id, "FM-01234567")
++        XCTAssertEqual(changed.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
++        XCTAssertEqual(changed.style, style)
++        XCTAssertTrue(original.style.isStandard)
++        XCTAssertFalse(changed.style.isStandard)
++    }
++
++    // 깨짐 명명: 수량보다 중복ID를 먼저 검사하면 실패한다.
++    func testValidationOrder_CountBeforeDuplicate() throws {
++        assertIssue(.tooManyPhotos(7), CardPhotoTestFixtures.style(Array(repeating: CardPhotoTestFixtures.photo(), count: 7)))
++    }
++
++    // 깨짐 명명: 빈 데이터보다 치수를 먼저 검사하면 실패한다.
++    func testValidationOrder_EmptyBeforeDimensions() throws {
++        assertIssue(.emptyPhotoData(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(data: Data(), width: 0)]))
++    }
++
++    // 깨짐 명명: 치수보다 배치를 먼저 검사하면 실패한다.
++    func testValidationOrder_DimensionsBeforePlacement() throws {
++        assertIssue(.invalidDimensions(id), CardPhotoTestFixtures.style([CardPhotoTestFixtures.photo(width: 0, x: .nan)]))
++    }
++}
+diff --git a/ios/FocusMateTests/CardSupplementTests.swift b/ios/FocusMateTests/CardSupplementTests.swift
+index 73e2d54..21fa322 100644
+--- a/ios/FocusMateTests/CardSupplementTests.swift
++++ b/ios/FocusMateTests/CardSupplementTests.swift
+@@ -30,7 +30,7 @@ final class CardSupplementTests: XCTestCase {
+ 
+         let saved = try decode(fake.bytes())
+         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(fake.bytes())) as? [String: Any])
+-        XCTAssertEqual(root["version"] as? Int, 2)
++        XCTAssertEqual(root["version"] as? Int, 3)
+         XCTAssertEqual(saved.cards.items.count, 1)
+         assertCardID(saved.currentCard?.id)
+         XCTAssertEqual(saved.initialStation, Self.seongsu)
+diff --git a/ios/FocusMateTests/RecordStorageTests.swift b/ios/FocusMateTests/RecordStorageTests.swift
+index 947ee35..d5d6937 100644
+--- a/ios/FocusMateTests/RecordStorageTests.swift
++++ b/ios/FocusMateTests/RecordStorageTests.swift
+@@ -66,20 +66,20 @@ final class RecordStorageTests: XCTestCase {
+         try assertProtected(bytes, loadIssue: issue, saveIssue: .writeBlocked(issue))
+     }
+ 
+-    // 깨짐 명명: 미지원 v3에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
++    // 깨짐 명명: 미지원 v4에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
+     @MainActor
+     func testAC12_미지원버전_AppModel은_완료와_메모저장을_차단하고_원본을_보존한다() throws {
+-        let bytes = Data(#"{"version":3,"state":null}"#.utf8)
++        let bytes = Data(#"{"version":4,"state":null}"#.utf8)
+         try withTemporaryFile { fileURL in
+             try seed(fileURL, bytes)
+             let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
+             model.loadIfNeeded()
+-            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(3)))
++            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(4)))
+ 
+             XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
+-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(3)))
++            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(4)))
+             XCTAssertFalse(model.saveRecordMemo("메모", forJourneyID: "journey-001"))
+-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(3)))
++            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(4)))
+             XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
+         }
+     }
+@@ -94,7 +94,7 @@ final class RecordStorageTests: XCTestCase {
+             XCTAssertTrue(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 2)
++            XCTAssertEqual(root["version"] as? Int, 3)
+             let state = try XCTUnwrap(root["state"] as? [String: Any])
+             XCTAssertEqual(state["cardIssued"] as? Bool, true)
+             XCTAssertEqual(((state["cards"] as? [String: Any])?["items"] as? [Any])?.count, 0)
+diff --git a/ios/FocusMateTests/SnapshotCodecTests.swift b/ios/FocusMateTests/SnapshotCodecTests.swift
+index 97b3e1c..c8f449c 100644
+--- a/ios/FocusMateTests/SnapshotCodecTests.swift
++++ b/ios/FocusMateTests/SnapshotCodecTests.swift
+@@ -34,7 +34,7 @@ final class SnapshotCodecTests: XCTestCase {
+         let out = try SnapshotCodec.encode(AppSnapshot.empty)
+         XCTAssertEqual(
+             String(decoding: out, as: UTF8.self),
+-            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":2}"#
++            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":3}"#
+         )
+     }
+ 
+@@ -43,7 +43,7 @@ final class SnapshotCodecTests: XCTestCase {
+         let out = try SnapshotCodec.encode(try SnapshotCodec.decode(data(Self.v1Issued)))
+         XCTAssertEqual(
+             String(decoding: out, as: UTF8.self),
+-            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":2}"#
++            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":3}"#
+         )
+     }
+ 
+@@ -65,9 +65,9 @@ final class SnapshotCodecTests: XCTestCase {
+         XCTAssertEqual(first, second)
+     }
+ 
+-    func testCurrentVersionIsTwo() {
+-        // 깨짐 명명: currentVersion이 2가 아니면 실패한다.
+-        XCTAssertEqual(SnapshotCodec.currentVersion, 2)
++    func testCurrentVersionIsThree() {
++        // 깨짐 명명: currentVersion이 3이 아니면 실패한다.
++        XCTAssertEqual(SnapshotCodec.currentVersion, 3)
+     }
+ 
+     // 깨짐 명명: 헤더/버전 검사 순서나 분류가 틀리면 해당 입력에서 실패한다.
+@@ -81,7 +81,7 @@ final class SnapshotCodecTests: XCTestCase {
+             (#"{"state":{}}"#, .corrupt),
+             (#"{"version":0,"state":{}}"#, .unsupportedVersion(0)),
+             (#"{"version":-1,"state":{}}"#, .unsupportedVersion(-1)),
+-            (#"{"version":3,"state":{}}"#, .unsupportedVersion(3)),
++            (#"{"version":4,"state":{}}"#, .unsupportedVersion(4)),
+             (#"{"version":999}"#, .unsupportedVersion(999)),
+         ]
+         for (input, issue) in cases {
+diff --git a/ios/FocusMateTests/StorageRecoveryTests.swift b/ios/FocusMateTests/StorageRecoveryTests.swift
+index 98f032e..a45f7fb 100644
+--- a/ios/FocusMateTests/StorageRecoveryTests.swift
++++ b/ios/FocusMateTests/StorageRecoveryTests.swift
+@@ -397,7 +397,7 @@ final class StorageRecoveryTests: XCTestCase {
+     func testAC8_오류버전은_원본바이트_그대로_백업에_보존된다() throws {
+         let cases: [(name: String, bytes: Data)] = [
+             ("version 0", Data(#"{"version":0,"state":null}"#.utf8)),
+-            ("version 3", Data(#"{"version":3,"state":null}"#.utf8)),
++            ("version 4", Data(#"{"version":4,"state":null}"#.utf8)),
+             ("string version", Data(#"{"version":"2","state":null}"#.utf8)),
+         ]
+ 
+diff --git a/ios/FocusMateTests/StorageV2Tests.swift b/ios/FocusMateTests/StorageV2Tests.swift
+index e8be7fa..4bdc7c3 100644
+--- a/ios/FocusMateTests/StorageV2Tests.swift
++++ b/ios/FocusMateTests/StorageV2Tests.swift
+@@ -56,14 +56,14 @@ final class StorageV2Tests: XCTestCase {
+     }
+ 
+     // 깨짐 명명: save가 version 1로 쓰거나 새 영역 키를 빠뜨리면 실패.
+-    func testAC2a_파일없음에서_저장하면_v2형식이고_재로드와_재저장이_동일하다() throws {
++    func testAC2a_파일없음에서_저장하면_v3형식이고_재로드와_재저장이_동일하다() throws {
+         try withTemporaryFile { fileURL in
+             let snapshot = Self.stage(true, Self.seongsu, Self.seoulForest)
+             try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
+             let firstBytes = try Data(contentsOf: fileURL)
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 2)
++            XCTAssertEqual(root["version"] as? Int, 3)
+             let state = try XCTUnwrap(root["state"] as? [String: Any])
+             XCTAssertEqual(
+                 Set(state.keys),
+@@ -77,8 +77,8 @@ final class StorageV2Tests: XCTestCase {
+         }
+     }
+ 
+-    // 깨짐 명명: v1 로드 실패 또는 저장 바이트가 G2와 다르면(키 누락·version 1·정류장 값 손실) 실패.
+-    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v2바이트가_기록된다() throws {
++    // 깨짐 명명: v1 로드 실패 또는 저장 바이트가 v3 기대값과 다르면(키 누락·version 1/2·정류장 값 손실) 실패.
++    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v3바이트가_기록된다() throws {
+         try withTemporaryFile { fileURL in
+             try seed(fileURL, Self.v1Seongsu)
+             let store = LocalSnapshotStore(fileURL: fileURL)
+@@ -86,7 +86,7 @@ final class StorageV2Tests: XCTestCase {
+ 
+             try store.save(loaded)
+ 
+-            XCTAssertEqual(try Data(contentsOf: fileURL), Self.g2Seongsu)
++            XCTAssertEqual(try Data(contentsOf: fileURL), Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":3}"#.utf8))
+             let reloaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
+             XCTAssertEqual(reloaded, Self.stage(true, Self.seongsu, Self.seongsu))
+         }
+@@ -164,7 +164,7 @@ final class StorageV2Tests: XCTestCase {
+     }
+ 
+     private static let protectedCases: [(name: String, bytes: Data, issue: StorageIssue)] = [
+-        ("버전 3", Data(#"{"version":3,"state":null}"#.utf8), .unsupportedVersion(3)),
++        ("버전 4", Data(#"{"version":4,"state":null}"#.utf8), .unsupportedVersion(4)),
+         ("버전 999", Data(#"{"version":999,"state":null}"#.utf8), .unsupportedVersion(999)),
+         ("버전 0", Data(#"{"version":0,"state":null}"#.utf8), .unsupportedVersion(0)),
+         ("빈 파일", Data(), .corrupt),

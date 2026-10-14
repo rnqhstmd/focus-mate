@@ -1,0 +1,142 @@
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index 6979adf..42670a0 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -26,6 +26,48 @@ final class AppModel {
+     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
+     private var isHoldingIssuedCard = false
+     var journeyPlan = JourneyPlanDraft()
++    var preparation = PreparationDraft()
++    private var storedConfirmedPreparation: PreparedJourneyDetails?
++    private var storedPreparationRequest: PreparedJourneyDetails?
++    private var currentPreparationDetails: PreparedJourneyDetails? {
++        guard launchState == .ready(.main), let journey = preparedJourney,
++              preparation.isComplete, let tag = preparation.selectedTag else { return nil }
++        return PreparedJourneyDetails(journey: journey, tag: tag,
++                                      task: preparation.trimmedTask, sound: preparation.sound)
++    }
++    var confirmedPreparation: PreparedJourneyDetails? {
++        storedConfirmedPreparation == currentPreparationDetails ? storedConfirmedPreparation : nil
++    }
++    var preparationRequest: PreparedJourneyDetails? {
++        storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
++    }
++    var canConfirmPreparation: Bool { currentPreparationDetails != nil }
++    @discardableResult func confirmPreparation() -> Bool {
++        guard let details = currentPreparationDetails else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return false
++        }
++        storedConfirmedPreparation = details
++        storedPreparationRequest = details
++        return true
++    }
++    func consumePreparationRequest() -> PreparedJourneyDetails? {
++        guard let current = currentPreparationDetails,
++              storedConfirmedPreparation == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        guard let request = storedPreparationRequest else { return nil }
++        guard request == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        storedPreparationRequest = nil
++        return request
++    }
+     private(set) var recoveryFailure: StorageRecoveryIssue?
+     private(set) var isRecovering = false
+     private(set) var hasAttemptedCleanup = false
+@@ -33,11 +75,15 @@ final class AppModel {
+     var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
+     private let store: LocalSnapshotStore
+     private let cardFactory: CardSnapshotFactory
++    let soundPreview: SoundPreviewController
+     @ObservationIgnored private var hasLoaded = false
+     @ObservationIgnored private var hasAttemptedSupplement = false
+-    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init()) {
++    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
++         soundPreview: SoundPreviewController? = nil) {
+         self.store = store
+         self.cardFactory = cardFactory
++        self.soundPreview = soundPreview ?? SoundPreviewController(sound: .bus,
++            makePlayer: { try await AVSoundPreviewPlayer.make(sound: $0) })
+     }
+ 
+     /// 화면 분기는 이 값만 쓴다. `launchState`는 로딩·실패 판단과 모델 내부 가드용이다.
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index a92f64d..487f176 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -20,6 +20,8 @@ struct DestinationScreen: View {
+         Group {
+             if destination == .time {
+                 TimeSelectionView(model: model)
++            } else if destination == .preparation {
++                PreparationView(model: model)
+             } else {
+                 VStack(alignment: .leading, spacing: 16) {
+                     Text(destination.title).font(.largeTitle.bold())
+@@ -29,8 +31,8 @@ struct DestinationScreen: View {
+                 }
+             }
+         }
+-        .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+-        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
++        .padding(destination == .preparation ? 0 : 24).frame(maxWidth: .infinity, alignment: .leading)
++        .navigationTitle(destination == .preparation ? "" : destination.title).navigationBarTitleDisplayMode(.inline)
+         #if DEBUG
+         .overlay(alignment: .bottomLeading) {
+             if destination == .preparation {
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+index f6c47c6..02950ae 100644
+--- a/ios/FocusMate/FocusMateApp.swift
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -21,7 +21,8 @@ struct FocusMateApp: App {
+             #if DEBUG
+             let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
+             testBootstrap = bootstrap
+-            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL))
++            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL),
++                                 soundPreview: bootstrap?.makeSoundPreview())
+             _model = State(initialValue: model)
+             if let bootstrap {
+                 let recorder = bootstrap.makeFeedbackRecorder()
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index ce9571a..ab0709a 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -9,6 +9,7 @@ struct UITestBootstrap {
+     let cardSaveFailure: UITestCardSaveFailure
+     let fileURL: URL
+     let seed: String?
++    let shouldFailSound: Bool
+     let shouldFailSave: Bool
+     let issueHold: IssueHold
+     enum IssueHold { case standard, manual }
+@@ -41,6 +42,9 @@ struct UITestBootstrap {
+         let save = try argument("--fm-ui-save")
+         guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
+         shouldFailSave = save == "fail"
++        let sound = try argument("--fm-ui-sound")
++        guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
++        shouldFailSound = sound == "fail"
+         let hold = try argument("--fm-ui-issue-hold")
+         guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
+         issueHold = hold == "manual" ? .manual : .standard
+@@ -140,6 +144,11 @@ struct UITestBootstrap {
+                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+     }
+ 
++    @MainActor func makeSoundPreview() -> SoundPreviewController? {
++        guard shouldFailSound else { return nil }
++        return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
++    }
++
+     @MainActor func makeFeedbackRecorder() -> UITestFeedbackRecorder { UITestFeedbackRecorder() }
+     @MainActor func makeGate() -> UITestIssuanceGate? { issueHold == .manual ? UITestIssuanceGate() : nil }
+ 

@@ -130,25 +130,48 @@ final class ProfileModelTests: XCTestCase {
 
     // MARK: AC-24/25 카드 꾸미기 진입
 
-    // 깨짐 명명: customize가 cardStudio가 아닌 곳으로 가거나 path에 쌓지 않으면 실패.
-    func testAC24_프로필에서_카드꾸미기를_열면_true와_함께_cardStudio가_쌓인다() throws {
-        let model = try readyModel()
+    // 깨짐 명명: 실제 편집 factory 조회가 프로필 경로/저장 외형을 바꾸거나 쓰기를 만들면 실패.
+    func testAC24_프로필에서_실제편집_factory는_경로와저장외형을_보존한다() throws {
+        let probe = Probe()
+        let original = Self.stage(true, Self.seongsu, Self.seongsu).issuingCard(
+            CardSnapshot(id: "FM-01234567", issuedAt: Date(timeIntervalSince1970: 1_791_882_000)))
+        let bytes = try SnapshotCodec.encode(original)
+        let model = AppModel(store: LocalSnapshotStore(
+            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
+            readData: { _ in bytes }, createDirectory: { _ in },
+            writeData: { _, _ in probe.writeCalls += 1 }))
+        model.loadIfNeeded()
         model.open(.profile)
 
-        XCTAssertTrue(model.openFromProfile(.customize))
+        let controller = try XCTUnwrap(model.beginCardCustomization())
 
-        XCTAssertEqual(model.path, [.profile, .cardStudio])
+        XCTAssertEqual(controller.draft, model.currentCardStyle)
+        XCTAssertEqual(model.path, [.profile])
+        XCTAssertEqual(model.snapshot, original)
+        XCTAssertEqual(probe.writeCalls, 0)
     }
 
-    // 깨짐 명명: 이미 cardStudio가 열린 상태에서 중복 push를 허용하면 실패.
-    func testAC25_카드꾸미기가_이미_열려_있으면_false이고_경로는_그대로다() throws {
-        let model = try readyModel()
+    // 깨짐 명명: factory 재조회가 경로를 쌓거나 원본을 변경하면 실패.
+    func testAC25_편집_factory를_다시조회해도_프로필경로와원본을_보존한다() throws {
+        let probe = Probe()
+        let original = Self.stage(true, Self.seongsu, Self.seongsu).issuingCard(
+            CardSnapshot(id: "FM-01234567", issuedAt: Date(timeIntervalSince1970: 1_791_882_000)))
+        let bytes = try SnapshotCodec.encode(original)
+        let model = AppModel(store: LocalSnapshotStore(
+            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
+            readData: { _ in bytes }, createDirectory: { _ in },
+            writeData: { _, _ in probe.writeCalls += 1 }))
+        model.loadIfNeeded()
         model.open(.profile)
-        XCTAssertTrue(model.openFromProfile(.customize))
 
-        XCTAssertFalse(model.openFromProfile(.customize))
+        let first = try XCTUnwrap(model.beginCardCustomization())
+        let second = try XCTUnwrap(model.beginCardCustomization())
 
-        XCTAssertEqual(model.path, [.profile, .cardStudio])
+        XCTAssertEqual(first.draft, model.currentCardStyle)
+        XCTAssertEqual(second.draft, model.currentCardStyle)
+        XCTAssertEqual(model.path, [.profile])
+        XCTAssertEqual(model.snapshot, original)
+        XCTAssertEqual(probe.writeCalls, 0)
     }
 
     // MARK: AC-26/27 설정 진입
@@ -164,24 +187,23 @@ final class ProfileModelTests: XCTestCase {
     }
 
     // 깨짐 명명: 프로필이 최상단이 아닐 때(빈 경로)도 push를 허용하면 실패.
-    func testAC24_26_경로_마지막이_프로필이_아니면_false이고_경로는_불변이다() throws {
+    func testAC26_경로_마지막이_프로필이_아니면_설정은_false이고_경로는_불변이다() throws {
         let model = try readyModel()
         XCTAssertEqual(model.path, [])
 
         XCTAssertFalse(model.openFromProfile(.settings))
-        XCTAssertFalse(model.openFromProfile(.customize))
 
         XCTAssertEqual(model.path, [])
     }
 
-    // 깨짐 명명: 경로가 비어있지 않아도 마지막이 .profile이 아닌데(.settings) push를 허용하면 실패.
-    func testAC24_경로_마지막이_설정이면_카드꾸미기는_false이고_경로는_불변이다() throws {
+    // 깨짐 명명: 이미 설정이 최상단인데 settings 중복 push를 허용하면 실패.
+    func testAC27_설정이_최상단이면_설정중복push는_false이고_경로는_불변이다() throws {
         let model = try readyModel()
         model.open(.profile)
         XCTAssertTrue(model.openFromProfile(.settings))
         XCTAssertEqual(model.path, [.profile, .settings])
 
-        XCTAssertFalse(model.openFromProfile(.customize))
+        XCTAssertFalse(model.openFromProfile(.settings))
 
         XCTAssertEqual(model.path, [.profile, .settings])
     }
@@ -191,7 +213,7 @@ final class ProfileModelTests: XCTestCase {
     // 깨짐 명명: mainMenu에 cardStudio를 넣거나 순서·profile 누락이 생기면 실패.
     func testAC28_메인_메뉴는_네_항목이며_카드꾸미기를_포함하지_않는다() {
         XCTAssertEqual(Destination.mainMenu, [.preparation, .records, .settings, .profile])
-        XCTAssertFalse(Destination.mainMenu.contains(.cardStudio))
+        XCTAssertFalse(Destination.mainMenu.map(\.rawValue).contains("cardStudio"))
     }
 
     // MARK: AC-29/30 통계 파생
@@ -227,15 +249,13 @@ final class ProfileModelTests: XCTestCase {
 
     // MARK: AC-33 카드 꾸미기 목적지와 메뉴 매핑
 
-    // 깨짐 명명: rawValue 또는 한글 제목이 바뀌면 실패.
-    func testAC33_cardStudio의_rawValue와_제목이_고정이다() {
-        XCTAssertEqual(Destination.cardStudio.rawValue, "cardStudio")
-        XCTAssertEqual(Destination.cardStudio.title, "카드 꾸미기")
+    // 깨짐 명명: W10 합류 뒤에도 cardStudio placeholder enum이 남으면 실패.
+    func testAC33_실제편집합류후_cardStudio_자리표시목적지가_없다() {
+        XCTAssertFalse(Destination.allCases.map(\.rawValue).contains("cardStudio"))
     }
 
     // 깨짐 명명: 메뉴 항목이 잘못된 목적지로 매핑되면 실패.
-    func testAC33_프로필_메뉴_항목은_각각의_목적지로_이어진다() {
-        XCTAssertEqual(ProfileMenuItem.customize.destination, .cardStudio)
+    func testAC33_프로필_설정_메뉴는_기존설정목적지로_이어진다() {
         XCTAssertEqual(ProfileMenuItem.settings.destination, .settings)
     }
 }

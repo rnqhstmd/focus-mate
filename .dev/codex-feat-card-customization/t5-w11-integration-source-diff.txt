@@ -1,0 +1,130 @@
+--- RootView.swift before
++++ RootView.swift after
+@@ -34,7 +34,17 @@
+             .padding(24)
+             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
+-            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model) }
++            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization) }
++        }
++        .safeAreaInset(edge: .bottom) {
++            if savedCardNotice {
++                Text("카드 외형을 저장했어요.")
++                    .accessibilityIdentifier("cardCustomization.savedNotice")
++                    .accessibilityFocused($cardFocus)
++                    .frame(maxWidth: .infinity, alignment: .leading)
++                    .padding(.horizontal, 24).padding(.vertical, 12)
++                    .background(.black)
++            }
+         }
+         .fullScreenCover(isPresented: $showsCustomization, onDismiss: {
+             endCustomization()
+@@ -145,16 +155,8 @@
+                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
+             }
+             PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
+-            Button("카드 꾸미기") {
+-                guard let session = model.beginCardCustomization() else { return }
+-                savedCardNotice = false
+-                customization = session
+-                showsCustomization = true
+-            }.buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
+-            if savedCardNotice {
+-                Text("카드 외형을 저장했어요.").accessibilityIdentifier("cardCustomization.savedNotice")
+-                    .accessibilityFocused($cardFocus)
+-            }
++            Button("카드 꾸미기", action: startCardCustomization)
++                .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
+             ForEach(Destination.mainMenu, id: \.self) { destination in
+                 Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
+                     .accessibilityIdentifier("open.\(destination.rawValue)")
+@@ -162,6 +164,13 @@
+         case nil:
+             EmptyView()
+         }
++    }
++
++    private func startCardCustomization() {
++        guard let session = model.beginCardCustomization() else { return }
++        savedCardNotice = false
++        customization = session
++        showsCustomization = true
+     }
+ 
+     private func endCustomization() {
+--- DestinationScreen.swift before
++++ DestinationScreen.swift after
+@@ -5,11 +5,12 @@
+ struct DestinationScreen: View {
+     let destination: Destination
+     @Bindable var model: AppModel
++    let onCardCustomization: () -> Void
+ 
+     var body: some View {
+         // 마이페이지는 시안대로 자체 여백·좌측 제목을 쓰므로 공통 자리표시 체인 밖에서 그린다.
+         if destination == .profile {
+-            ProfileView(model: model, onCustomize: { model.openFromProfile(.customize) })
++            ProfileView(model: model, onCustomize: onCardCustomization)
+         } else {
+             placeholderOrTime
+         }
+--- ProfileView.swift before
++++ ProfileView.swift after
+@@ -60,14 +60,14 @@
+                     .accessibilityIdentifier("profile.headline")
+                 Text(ProfileCopy.subhead).font(.subheadline).foregroundStyle(.secondary)
+                     .padding(.top, 8).accessibilityIdentifier("profile.subhead")
+-                PassFace().frame(maxWidth: .infinity)
++                PassFace(style: model.currentCardStyle).frame(maxWidth: .infinity)
+                     .padding(.top, 32).accessibilityIdentifier("profile.card")
+                 Text(PassIdentity.displayName).font(.title3.bold())
+                     .padding(.top, 16).accessibilityIdentifier("profile.cardName")
+                 Text(ProfileCopy.cardTagline).font(.subheadline).foregroundStyle(.secondary)
+                     .padding(.top, 4).accessibilityIdentifier("profile.cardTagline")
+                 Divider().padding(.top, 28)
+-                ProfileMenuRow(systemImage: "pencil", title: Destination.cardStudio.title,
++                ProfileMenuRow(systemImage: "pencil", title: "카드 꾸미기",
+                                identifier: "profile.customize", action: onCustomize)
+                 statsSection(stats).padding(.top, 20)
+                 Divider().padding(.top, 32)
+--- AppModel+Profile.swift before
++++ AppModel+Profile.swift after
+@@ -1,18 +1,9 @@
+ import Foundation
+ 
+ // 마이페이지 읽기·이동. 통계는 records 집계만 읽고 저장하지 않는다.
+-// W10 합류 절차(두 번째로 머지하는 브랜치가 수행 — design.md "W10 합류 절차"):
+-// 꾸미기 행을 W10 진입(beginCardCustomization)으로 연결하고 cardStudio 자리표시·ProfileMenuItem.customize를 제거하며,
+-// 마이페이지 카드를 PassFace(style:)로 바꾼다.
+-
+ enum ProfileMenuItem {
+-    case customize, settings
+-    var destination: Destination {
+-        switch self {
+-        case .customize: .cardStudio
+-        case .settings: .settings
+-        }
+-    }
++    case settings
++    var destination: Destination { .settings }
+ }
+ 
+ enum ProfileStats: Equatable {
+--- AppModel.swift before
++++ AppModel.swift after
+@@ -4,7 +4,6 @@
+ enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
+ enum Destination: String, Hashable, CaseIterable {
+     case preparation, records, settings, profile, time
+-    case cardStudio
+     var title: String {
+         switch self {
+         case .time: "시간 선택"
+@@ -12,7 +11,6 @@
+         case .records: "기록"
+         case .settings: "설정"
+         case .profile: "마이페이지"
+-        case .cardStudio: "카드 꾸미기"
+         }
+     }
+ }

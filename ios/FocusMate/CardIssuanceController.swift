@@ -23,7 +23,7 @@ final class CardIssuanceController {
 
     static let issuingAnnouncement = "카드를 발급하고 있어요."
     static let issuedAnnouncement = "카드가 발급됐어요. 출발지를 선택해보세요."
-    static let failedAnnouncement = "카드를 발급하지 못했어요. 다시 시도해 주세요."
+    nonisolated static let failedAnnouncement = "카드를 발급하지 못했어요. 다시 시도해 주세요."
 
     private(set) var phase: Phase = .ready
     private(set) var focusTarget: FocusTarget?

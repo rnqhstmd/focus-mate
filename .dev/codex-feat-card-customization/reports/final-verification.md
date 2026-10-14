@@ -37,3 +37,6 @@
 경고: 단위 실행에는 main에서 그대로 가져온 AudioResourceTests23의 AVAudioSession main-thread runtime 진단이 출력됐다. 해당 파일은 origin/main과 동일하며 테스트는 PASS. 신규 W10 Swift compiler 경고를 확인하지 않았고 SDK 메타데이터 알림과 기존 unused 경고를 모든 경고0으로 표현하지 않는다.
 
 코드 지문: `8bf0b92:9e9701f3045a`(helper exit0/형식 확인). 사용자 지시로 중단한 전체UI108 미완료 제한을 수용한 완료 게이트이며, 전체 회귀 PASS가 아니다.
+
+## 완료 문서 반영
+PR #15 생성 후 plan·card context·CURRENT-STATE를 완료 상태로 갱신했다. 승인된 iOS 소스112개 SHA256은 모두 동일하다. 문서만 변경하여 테스트를 반복하지 않았으며 문서 반영 지문은 `223a883:4d988c4964bd`다. 원 검증 지문과 실행 근거는 위와 같다.

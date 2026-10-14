@@ -1,0 +1,36 @@
+{
+  "verdict": "PASS",
+  "native_unit": 366,
+  "native_ui": 99,
+  "native_total": 465,
+  "native_fail": 0,
+  "web_test": 31,
+  "web_fail": 0,
+  "edge_qa": "PASS",
+  "builds": "PASS",
+  "warnings": 0,
+  "warnings_baseline": 0,
+  "fingerprint": "8ac11c3:35c701670524",
+  "executions": [
+    {
+      "step": "verify-web-test",
+      "exit": 0,
+      "seconds": 8.7
+    },
+    {
+      "step": "verify-web-build",
+      "exit": 0,
+      "seconds": 0.2
+    },
+    {
+      "step": "verify-ios-test",
+      "exit": 0,
+      "seconds": 1574.6
+    },
+    {
+      "step": "verify-ios-build",
+      "exit": 0,
+      "seconds": 2.4
+    }
+  ]
+}

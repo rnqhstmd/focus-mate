@@ -1,0 +1,4 @@
+{"step": "integrated-web-build", "exit": 0, "seconds": 0.5}
+{"step": "integrated-web-test", "exit": 0, "seconds": 8.7}
+{"step": "integrated-ios-build", "exit": 0, "seconds": 6.6}
+{"step": "integrated-ios-test", "exit": 0, "seconds": 1632.9}

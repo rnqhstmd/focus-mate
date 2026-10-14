@@ -28,6 +28,48 @@ final class AppModel {
     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
     private var isHoldingIssuedCard = false
     var journeyPlan = JourneyPlanDraft()
+    var preparation = PreparationDraft()
+    private var storedConfirmedPreparation: PreparedJourneyDetails?
+    private var storedPreparationRequest: PreparedJourneyDetails?
+    private var currentPreparationDetails: PreparedJourneyDetails? {
+        guard launchState == .ready(.main), let journey = preparedJourney,
+              preparation.isComplete, let tag = preparation.selectedTag else { return nil }
+        return PreparedJourneyDetails(journey: journey, tag: tag,
+                                      task: preparation.trimmedTask, sound: preparation.sound)
+    }
+    var confirmedPreparation: PreparedJourneyDetails? {
+        storedConfirmedPreparation == currentPreparationDetails ? storedConfirmedPreparation : nil
+    }
+    var preparationRequest: PreparedJourneyDetails? {
+        storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
+    }
+    var canConfirmPreparation: Bool { currentPreparationDetails != nil }
+    @discardableResult func confirmPreparation() -> Bool {
+        guard let details = currentPreparationDetails else {
+            storedConfirmedPreparation = nil
+            storedPreparationRequest = nil
+            return false
+        }
+        storedConfirmedPreparation = details
+        storedPreparationRequest = details
+        return true
+    }
+    func consumePreparationRequest() -> PreparedJourneyDetails? {
+        guard let current = currentPreparationDetails,
+              storedConfirmedPreparation == current else {
+            storedConfirmedPreparation = nil
+            storedPreparationRequest = nil
+            return nil
+        }
+        guard let request = storedPreparationRequest else { return nil }
+        guard request == current else {
+            storedConfirmedPreparation = nil
+            storedPreparationRequest = nil
+            return nil
+        }
+        storedPreparationRequest = nil
+        return request
+    }
     private(set) var recoveryFailure: StorageRecoveryIssue?
     private(set) var isRecovering = false
     private(set) var hasAttemptedCleanup = false
@@ -35,11 +77,15 @@ final class AppModel {
     var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
     private let store: LocalSnapshotStore
     private let cardFactory: CardSnapshotFactory
+    let soundPreview: SoundPreviewController
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var hasAttemptedSupplement = false
-    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init()) {
+    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
+         soundPreview: SoundPreviewController? = nil) {
         self.store = store
         self.cardFactory = cardFactory
+        self.soundPreview = soundPreview ?? SoundPreviewController(sound: .bus,
+            makePlayer: { try await AVSoundPreviewPlayer.make(sound: $0) })
     }
 
     /// 화면 분기는 이 값만 쓴다. `launchState`는 로딩·실패 판단과 모델 내부 가드용이다.

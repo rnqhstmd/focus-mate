@@ -79,6 +79,7 @@ struct TimeSelectionView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(candidate.accessibilityLabel)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)

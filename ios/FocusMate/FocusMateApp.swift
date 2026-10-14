@@ -20,7 +20,8 @@ struct FocusMateApp: App {
             #if DEBUG
             let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
             testBootstrap = bootstrap
-            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL))
+            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL),
+                                 soundPreview: bootstrap?.makeSoundPreview())
             _model = State(initialValue: model)
             if let bootstrap {
                 let recorder = bootstrap.makeFeedbackRecorder()

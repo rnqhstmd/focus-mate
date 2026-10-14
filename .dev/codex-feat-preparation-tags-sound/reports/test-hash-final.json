@@ -1,0 +1,37 @@
+[
+  {
+    "file": "ios/FocusMateTests/PreparationDraftTests.swift",
+    "git_blob_hash": "dd4fd2f1514dd5b0413e1e302ea10f0704fcedb0",
+    "match": true
+  },
+  {
+    "file": "ios/FocusMateTests/PreparationModelTests.swift",
+    "git_blob_hash": "b5b246a187b7e9df585a31892bf8d5a76d994594",
+    "match": true
+  },
+  {
+    "file": "ios/FocusMateTests/PreparationDetailsTests.swift",
+    "git_blob_hash": "f2cd09ad7ae5308eb0aaa6df42660bf9d0d117cf",
+    "match": true
+  },
+  {
+    "file": "ios/FocusMateTests/SoundPreviewControllerTests.swift",
+    "git_blob_hash": "fd1a0b5f6eb2a57510d650663d484f4f47b1f904",
+    "match": true
+  },
+  {
+    "file": "ios/FocusMateTests/AudioResourceTests.swift",
+    "git_blob_hash": "f6ed15689af3b242dda8a54cac83ff280355bc75",
+    "match": true
+  },
+  {
+    "file": "ios/FocusMateUITests/PreparationEditorUITests.swift",
+    "git_blob_hash": "d52dad5e51e5d16a1510c2ba738c0dee3f7ab40c",
+    "match": true
+  },
+  {
+    "file": "ios/FocusMateUITests/PreparationFlowUITests.swift",
+    "git_blob_hash": "758e36d9414ed542fa0e8e7bae81c1bff7443468",
+    "match": true
+  }
+]

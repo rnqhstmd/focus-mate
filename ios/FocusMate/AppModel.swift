@@ -4,6 +4,7 @@ import Observation
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
     case preparation, records, settings, profile, time
+    case cardStudio
     var title: String {
         switch self {
         case .time: "시간 선택"
@@ -11,6 +12,7 @@ enum Destination: String, Hashable, CaseIterable {
         case .records: "기록"
         case .settings: "설정"
         case .profile: "마이페이지"
+        case .cardStudio: "카드 꾸미기"
         }
     }
 }

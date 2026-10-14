@@ -12,7 +12,7 @@
 
 ## iOS W08 완료·메모 저장 모델
 
-`ios/FocusMate/RecordSection.swift`의 `RecordSnapshot`은 완료 당시의 여행 정보와 연결 메모를 보관한다. `RecordSection`은 하차 성공(`alighted`)만 기록하고 진행·포기·예시 입력을 제외한다. 같은 여행 ID의 재요청은 기존 기록을 유지한다. 완료 시각은 UTC로 저장하고, 일별 집계에 쓸 `date`는 완료 당시 전달된 시간대로 생성한다. 복원할 때 날짜를 다시 계산하지 않는다. 기록은 완료 시각의 최신순으로 정렬하며 일별 횟수·분 합계를 제공한다.
+`ios/FocusMate/RecordSection.swift`의 `RecordSnapshot`은 완료 당시의 여행 정보와 연결 메모를 보관한다. `RecordSection`은 하차 성공(`alighted`)만 기록하고 진행·포기·예시 입력을 제외한다. 같은 여행 ID의 재요청은 기존 기록을 유지한다. 완료 시각은 UTC로 저장하고, 일별 집계에 쓸 `date`는 완료 당시 전달된 시간대로 생성한다. 복원할 때 날짜를 다시 계산하지 않는다. 기록은 완료 시각의 최신순으로 정렬하며 일별 횟수·분 합계와 전체 누적 횟수·분 합계(`lifetimeSummary`, W11 마이페이지가 읽음)를 제공한다. 누적 집계도 기록이 하나라도 유효하지 않으면 일부만 합산하지 않고 실패한다.
 
 `AppModel.recordCompletion`과 `AppModel.saveRecordMemo`는 기존 `LocalSnapshotStore`를 통해 저장한다. 메모는 앞뒤 공백·개행을 제거하고 Unicode scalar를 분할하지 않는 범위에서 UTF-16 200단위까지 저장한다. 빈 메모로 수정하면 메모를 삭제한다. 파일 저장에 성공한 뒤에만 메모리 상태를 갱신하므로 쓰기 실패 시 기존 기록·메모·화면 경로와 파일 원본을 유지한다.
 

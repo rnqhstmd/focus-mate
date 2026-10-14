@@ -165,7 +165,6 @@ final class Phase1FlowTests: XCTestCase {
         let destinations = [
             (button: "기록", screen: "screen.records"),
             (button: "설정", screen: "screen.settings"),
-            (button: "마이페이지", screen: "screen.profile"),
         ]
 
         for destination in destinations {

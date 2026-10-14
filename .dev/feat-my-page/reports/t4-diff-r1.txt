@@ -1,0 +1,15 @@
++    func testAC27_경로_마지막이_설정이면_카드꾸미기는_false이고_경로는_불변이다() throws {
++        let model = try readyModel()
++        model.open(.profile)
++        XCTAssertTrue(model.openFromProfile(.settings))
++        XCTAssertEqual(model.path, [.profile, .settings])
++
++        XCTAssertFalse(model.openFromProfile(.customize))
++
++        XCTAssertEqual(model.path, [.profile, .settings])
++    }
++
++    // MARK: AC-28 메인 메뉴
++
++    // 깨짐 명명: mainMenu에 cardStudio를 넣거나 순서·profile 누락이 생기면 실패.
++    func testAC28_메인_메뉴는_네_항목이며_카드꾸미기를_포함하지_않는다() {

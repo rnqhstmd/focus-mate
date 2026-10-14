@@ -19,7 +19,7 @@
 | FR-3 | [iOS·P2] 카드 발급·접촉 카드 | AC-4: 공통 SwiftUI 카드 뷰로 1회 발급하고 카드 ID를 저장하며 기존 사용자를 보존한다. 승하차 카드와 LCD에 같은 이름을 표시하고(카드 번호는 어떤 화면에도 표시하지 않음) 지원 기기에서만 발급 햅틱을 낸다. 사진 입력은 FR-4로 분리했다. | 🟡 | W01 [#12](https://github.com/rnqhstmd/focus-mate/pull/12) |
 | NFR-2 | [iOS·P5] 카드·사진 보존 | AC-5: 로컬 카드·사진 저장과 복원·용량 제한을 실제 저장소에서 검증한다. | ⬜ | - |
 | FR-4 | [iOS·P5] 카드 꾸미기 | AC-6: 배경색과 플랫폼 사진 입력으로 최대 6장을 넣고 위치·크기·겹침·삭제·되돌리기를 제공한다. IC 칩과 비접촉 표시만 고정이고(브랜드·이름·문구는 꾸미면 사라짐) 사진은 카드 경계에서 잘린다. 기본 카드는 서울 점묘 배경이며 카드 번호를 카드에 표시하지 않는다. 편집 취소는 확인한다. | ⬜ | - |
-| FR-5 | [iOS·P5] 마이페이지 | AC-7: 같은 카드와 records가 집계한 완료 여정 수·시간을 표시한다. card는 집계를 계산하지 않고 읽기만 한다. | ⬜ | - |
+| FR-5 | [iOS·P5] 마이페이지 | AC-7: 같은 카드와 records가 집계한 완료 여정 수·시간을 표시한다. card는 집계를 계산하지 않고 읽기만 한다. | 🟡 | W11 [#13](https://github.com/rnqhstmd/focus-mate/pull/13) |
 
 ## 근거와 개발 연결
 
@@ -28,7 +28,8 @@
 - NFR-1 / AC-3: saveCardStyle / cardStyleStorageOK.
 - FR-3 / AC-4: W01에서 발급 화면(CardIssuanceView)·1회 발급과 카드 저장(CardSnapshot `FM-`+8자리·발급 시각)·기존 사용자 보충(AppModel.start)·공통 카드 뷰(PassFace)·이름/번호 단일 출처(PassIdentity)·발급 그라데이션 햅틱을 구현했다(PRD AC-1~21). 승하차 카드 배치와 LCD 이름·체크 표시는 W04에서 구현한다. VoiceOver 장식 비노출·완료 후 포커스·실기기 진동 체감은 수동 확인 전.
 - NFR-2 / AC-5: 네이티브 구현 전.
-- FR-4·FR-5 / AC-6·AC-7: 네이티브 구현 전. W01부터 카드 ID·발급 시각을 저장하고 기본 외형 카드(PassFace)를 쓴다. 꾸민 외형은 아직 없다.
+- FR-4 / AC-6: 네이티브 구현 전(W10 진행 중). W01부터 카드 ID·발급 시각을 저장하고 기본 외형 카드(PassFace)를 쓴다.
+- FR-5 / AC-7: W11에서 마이페이지(ProfileView, 시안 EPnQQ 구성)를 구현했다. 통계는 records의 RecordSection.lifetimeSummary를 ProfileStats로 읽기만 하고(card 모델에 집계 없음), 화면은 "3"·"1 h 5 min", VoiceOver는 "완료한 여정, 3회"·"함께한 시간, 1시간 5분". 유효하지 않은 기록이면 "-"와 안내. 카드 꾸미기 행은 W10 합류 전까지 자리표시 목적지 cardStudio. 남은 것: W10 합류 시 꾸미기 행을 W10 진입으로 연결, 카드를 PassFace(style:)로, 카드 내부 시안 일치(PRD AC-5) 검증. VoiceOver 실제 낭독·동작 줄이기는 실기기 미검증(W14).
 
 [현재 동작](../../docs/CURRENT-STATE.md) · [화면 계약](../../docs/FLOWS.md) · [개발 단계](../../docs/DEVELOPMENT-PHASES.md). 현재 요구사항 원장은 코드와 마지막 직접 VM 검사로 작성했으며 자동 git 동기화는 아직 실행하지 않았습니다.
 

@@ -5,7 +5,7 @@
 | W00 | 도메인 저장 구조 확장(버전 1→2) | 공통 | Phase 1 `app-state.json` 확장 | - | feat/domain-storage-schema-v2 | 완료 |
 | W01 | [P2] 카드 발급·접촉 카드 | card | card FR-3 | W00 | feat/card-issuance-contact-card | 완료 |
 | W02 | [P2] 첫 출발지·시간·버스·도착지 선택 | journey | journey FR-7, FR-8 | W00 | feat/first-station-time-bus-destination | 완료 |
-| W03 | [P2] 준비 허브·태그·소리 | journey | journey FR-9, FR-10 | W02 | - | 대기 |
+| W03 | [P2] 준비 허브·태그·소리 | journey | journey FR-9, FR-10 | W02 | codex/feat-preparation-tags-sound | 완료 |
 | W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | - | 대기 |
 | W05 | [P3] 실제 분 타이머·일시정지 | journey | journey FR-5 | W04 | - | 대기 |
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | - | 대기 |
@@ -59,3 +59,5 @@
   - W03: 메인 "여행 준비"(`open.preparation`)는 시간 선택을 거쳐 준비 진입점으로 간다. 여정 선택은 `AppModel.preparedJourney` 하나에서 읽는다. 준비 화면 "완료 버튼 없음" 검증은 `PreparationFlowUITests`에 있으니 버튼을 추가하면 함께 고친다.
   - W04: 카탈로그 밖 정류장 id(시간 선택이 막힘)와 실행 중 현재 정류장이 바뀔 때 `journeyPlan` 선택 무효화를 다시 본다.
   - W14: VoiceOver 휠 1칸=1분, 동작 줄이기 상태는 실기기 미검증으로 남겼다.
+
+- W03(2026-10-14): 사용자 지시로 Phase0 브라우저 선확인 보류. 실제 웹 화면 미검증, 네이티브 기능 검증 별도 수행.

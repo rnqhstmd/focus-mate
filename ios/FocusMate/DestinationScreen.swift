@@ -19,6 +19,8 @@ struct DestinationScreen: View {
         Group {
             if destination == .time {
                 TimeSelectionView(model: model)
+            } else if destination == .preparation {
+                PreparationView(model: model)
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(destination.title).font(.largeTitle.bold())
@@ -28,8 +30,8 @@ struct DestinationScreen: View {
                 }
             }
         }
-        .padding(24).frame(maxWidth: .infinity, alignment: .leading)
-        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
+        .padding(destination == .preparation ? 0 : 24).frame(maxWidth: .infinity, alignment: .leading)
+        .navigationTitle(destination == .preparation ? "" : destination.title).navigationBarTitleDisplayMode(.inline)
         #if DEBUG
         .overlay(alignment: .bottomLeading) {
             if destination == .preparation {

@@ -1,0 +1,2325 @@
+diff --git a/ios/FocusMate/AVSoundPreviewPlayer.swift b/ios/FocusMate/AVSoundPreviewPlayer.swift
+new file mode 100644
+index 0000000..bece3c8
+--- /dev/null
++++ b/ios/FocusMate/AVSoundPreviewPlayer.swift
+@@ -0,0 +1,29 @@
++import Foundation
++import AVFoundation
++
++@MainActor final class AVSoundPreviewPlayer: SoundPreviewPlaying {
++    private enum ResourceIssue: Error { case missingResource }
++    private let player: AVAudioPlayer
++    var volume: Float {
++        get { player.volume }
++        set { player.volume = newValue }
++    }
++    var numberOfLoops: Int {
++        get { player.numberOfLoops }
++        set { player.numberOfLoops = newValue }
++    }
++    init(url: URL) throws { player = try AVAudioPlayer(contentsOf: url) }
++    func prepareToPlay() -> Bool { player.prepareToPlay() }
++    func play() -> Bool { player.play() }
++    func setVolume(_ volume: Float, fadeDuration: TimeInterval) {
++        player.setVolume(volume, fadeDuration: fadeDuration)
++    }
++    func stop() { player.stop() }
++    static func make(sound: JourneySound, bundle: Bundle = .main) async throws -> any SoundPreviewPlaying {
++        guard let name = sound.resourceName,
++              let url = bundle.url(forResource: name, withExtension: "wav") else {
++            throw ResourceIssue.missingResource
++        }
++        return try AVSoundPreviewPlayer(url: url)
++    }
++}
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index c00d42b..8a9e4d8 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -28,6 +28,48 @@ final class AppModel {
+     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
+     private var isHoldingIssuedCard = false
+     var journeyPlan = JourneyPlanDraft()
++    var preparation = PreparationDraft()
++    private var storedConfirmedPreparation: PreparedJourneyDetails?
++    private var storedPreparationRequest: PreparedJourneyDetails?
++    private var currentPreparationDetails: PreparedJourneyDetails? {
++        guard launchState == .ready(.main), let journey = preparedJourney,
++              preparation.isComplete, let tag = preparation.selectedTag else { return nil }
++        return PreparedJourneyDetails(journey: journey, tag: tag,
++                                      task: preparation.trimmedTask, sound: preparation.sound)
++    }
++    var confirmedPreparation: PreparedJourneyDetails? {
++        storedConfirmedPreparation == currentPreparationDetails ? storedConfirmedPreparation : nil
++    }
++    var preparationRequest: PreparedJourneyDetails? {
++        storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
++    }
++    var canConfirmPreparation: Bool { currentPreparationDetails != nil }
++    @discardableResult func confirmPreparation() -> Bool {
++        guard let details = currentPreparationDetails else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return false
++        }
++        storedConfirmedPreparation = details
++        storedPreparationRequest = details
++        return true
++    }
++    func consumePreparationRequest() -> PreparedJourneyDetails? {
++        guard let current = currentPreparationDetails,
++              storedConfirmedPreparation == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        guard let request = storedPreparationRequest else { return nil }
++        guard request == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        storedPreparationRequest = nil
++        return request
++    }
+     private(set) var recoveryFailure: StorageRecoveryIssue?
+     private(set) var isRecovering = false
+     private(set) var hasAttemptedCleanup = false
+@@ -35,11 +77,15 @@ final class AppModel {
+     var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
+     private let store: LocalSnapshotStore
+     private let cardFactory: CardSnapshotFactory
++    let soundPreview: SoundPreviewController
+     @ObservationIgnored private var hasLoaded = false
+     @ObservationIgnored private var hasAttemptedSupplement = false
+-    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init()) {
++    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
++         soundPreview: SoundPreviewController? = nil) {
+         self.store = store
+         self.cardFactory = cardFactory
++        self.soundPreview = soundPreview ?? SoundPreviewController(sound: .bus,
++            makePlayer: { try await AVSoundPreviewPlayer.make(sound: $0) })
+     }
+ 
+     /// 화면 분기는 이 값만 쓴다. `launchState`는 로딩·실패 판단과 모델 내부 가드용이다.
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index 44ed1a7..ebdb8f1 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -19,6 +19,8 @@ struct DestinationScreen: View {
+         Group {
+             if destination == .time {
+                 TimeSelectionView(model: model)
++            } else if destination == .preparation {
++                PreparationView(model: model)
+             } else {
+                 VStack(alignment: .leading, spacing: 16) {
+                     Text(destination.title).font(.largeTitle.bold())
+@@ -28,8 +30,8 @@ struct DestinationScreen: View {
+                 }
+             }
+         }
+-        .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+-        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
++        .padding(destination == .preparation ? 0 : 24).frame(maxWidth: .infinity, alignment: .leading)
++        .navigationTitle(destination == .preparation ? "" : destination.title).navigationBarTitleDisplayMode(.inline)
+         #if DEBUG
+         .overlay(alignment: .bottomLeading) {
+             if destination == .preparation {
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+index c8475fe..cdac565 100644
+--- a/ios/FocusMate/FocusMateApp.swift
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -20,7 +20,8 @@ struct FocusMateApp: App {
+             #if DEBUG
+             let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
+             testBootstrap = bootstrap
+-            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL))
++            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL),
++                                 soundPreview: bootstrap?.makeSoundPreview())
+             _model = State(initialValue: model)
+             if let bootstrap {
+                 let recorder = bootstrap.makeFeedbackRecorder()
+diff --git a/ios/FocusMate/PreparationDraft.swift b/ios/FocusMate/PreparationDraft.swift
+new file mode 100644
+index 0000000..f27c3b4
+--- /dev/null
++++ b/ios/FocusMate/PreparationDraft.swift
+@@ -0,0 +1,142 @@
++import Foundation
++
++enum PreparationTagIcon: String, CaseIterable, Equatable {
++    case reading, work, study, development, writing
++    var title: String {
++        switch self {
++        case .reading: "독서"
++        case .work: "업무"
++        case .study: "공부"
++        case .development: "개발"
++        case .writing: "쓰기"
++        }
++    }
++    var systemImage: String {
++        switch self {
++        case .reading: "book"
++        case .work: "briefcase"
++        case .study: "graduationcap"
++        case .development: "chevron.left.forwardslash.chevron.right"
++        case .writing: "pencil"
++        }
++    }
++}
++enum PreparationTagColor: String, CaseIterable, Equatable {
++    case sand, blue, purple, green, pink
++    var title: String {
++        switch self {
++        case .sand: "모래빛"
++        case .blue: "파랑"
++        case .purple: "보라"
++        case .green: "초록"
++        case .pink: "분홍"
++        }
++    }
++}
++struct PreparationTag: Identifiable, Equatable {
++    let id: String
++    let name: String
++    let icon: PreparationTagIcon
++    let color: PreparationTagColor
++    static let defaults = [
++        PreparationTag(id: "reading", name: "독서", icon: .reading, color: .sand),
++        PreparationTag(id: "study", name: "공부", icon: .study, color: .purple),
++        PreparationTag(id: "work", name: "업무", icon: .work, color: .blue),
++        PreparationTag(id: "rest", name: "휴식", icon: .writing, color: .green),
++    ]
++}
++struct TagEditorDraft: Equatable {
++    var name: String = ""
++    var icon: PreparationTagIcon = .reading
++    var color: PreparationTagColor = .sand
++}
++enum TagNameIssue: Error, Equatable {
++    case empty, tooLong, duplicate
++    var message: String {
++        switch self {
++        case .empty: "태그 이름을 입력해주세요."
++        case .tooLong: "태그 이름은 20자 이내로 입력해주세요."
++        case .duplicate: "이미 있는 태그 이름이에요."
++        }
++    }
++}
++enum JourneySound: String, CaseIterable, Equatable {
++    case bus, rainBus, subway, forest, none
++    var title: String {
++        switch self {
++        case .bus: "버스"
++        case .rainBus: "비 오는 버스"
++        case .subway: "지하철"
++        case .forest: "숲속"
++        case .none: "소리 없음"
++        }
++    }
++    var systemImage: String {
++        switch self {
++        case .bus: "bus"
++        case .rainBus: "cloud.rain"
++        case .subway: "tram"
++        case .forest: "tree"
++        case .none: "speaker.slash"
++        }
++    }
++    var resourceName: String? {
++        switch self {
++        case .bus: "travel-bus-v2"
++        case .rainBus: "travel-bus-rain-v2"
++        case .subway: "travel-subway-v2"
++        case .forest: "travel-forest-v2"
++        case .none: nil
++        }
++    }
++}
++struct PreparationDraft: Equatable {
++    private(set) var tags = PreparationTag.defaults
++    private(set) var selectedTagID: String?
++    private(set) var task = ""
++    private(set) var sound: JourneySound = .bus
++    var selectedTag: PreparationTag? { tags.first { $0.id == selectedTagID } }
++    var trimmedTask: String { task.trimmingCharacters(in: .whitespacesAndNewlines) }
++    var isComplete: Bool { selectedTag != nil && !trimmedTask.isEmpty }
++    @discardableResult mutating func chooseTag(id: String) -> Bool {
++        guard tags.contains(where: { $0.id == id }) else { return false }
++        selectedTagID = id
++        return true
++    }
++    mutating func setTask(_ value: String) {
++        var result = String.UnicodeScalarView()
++        var units = 0
++        for scalar in value.unicodeScalars {
++            let width = scalar.value > 0xFFFF ? 2 : 1
++            guard units + width <= 80 else { break }
++            result.append(scalar)
++            units += width
++        }
++        task = String(result)
++    }
++    mutating func setSound(_ value: JourneySound) { sound = value }
++    @discardableResult mutating func saveTag(_ editor: TagEditorDraft) -> Result<PreparationTag, TagNameIssue> {
++        let name = editor.name.trimmingCharacters(in: .whitespacesAndNewlines)
++        guard !name.isEmpty else { return .failure(.empty) }
++        guard name.utf16.count <= 20 else { return .failure(.tooLong) }
++        let normalized = name.precomposedStringWithCompatibilityMapping.lowercased()
++        guard !tags.contains(where: {
++            $0.name.precomposedStringWithCompatibilityMapping.lowercased() == normalized
++        }) else { return .failure(.duplicate) }
++        let tag = PreparationTag(id: UUID().uuidString,
++                                 name: name,
++                                 icon: editor.icon, color: editor.color)
++        tags.append(tag)
++        selectedTagID = tag.id
++        return .success(tag)
++    }
++}
++struct PreparedJourneyDetails: Equatable {
++    let journey: JourneySelection
++    let tag: PreparationTag
++    let task: String
++    let sound: JourneySound
++    var originName: String { RouteStops.name(at: journey.origin.index) }
++    var boundLabel: String { RouteStops.boundLabel(from: journey.origin) }
++    var distanceText: String { JourneyPlanner.distanceText(stops: journey.stops) }
++}
+diff --git a/ios/FocusMate/PreparationView.swift b/ios/FocusMate/PreparationView.swift
+new file mode 100644
+index 0000000..91564d5
+--- /dev/null
++++ b/ios/FocusMate/PreparationView.swift
+@@ -0,0 +1,475 @@
++import CoreText
++import SwiftUI
++
++@MainActor
++struct PreparationView: View {
++  @Bindable var model: AppModel
++  @Environment(\.dynamicTypeSize) private var typeSize
++  @State private var taskInput: String
++  @State private var showTagEditor = false
++  @State private var showSoundSelection = false
++  @FocusState private var taskEditing: Bool
++  @AccessibilityFocusState private var soundFocused: Bool
++  @AccessibilityFocusState private var addTagFocused: Bool
++  @ScaledMetric(relativeTo: .body) private var tagHeight = 46.0
++
++  init(model: AppModel) {
++    self.model = model
++    _taskInput = State(initialValue: model.preparation.task)
++    _ = PreparationTypography.registered
++  }
++
++  var body: some View {
++    GeometryReader { geometry in
++      VStack(spacing: 0) {
++        if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
++        VStack(spacing: 0) {
++          ScrollViewReader { proxy in
++            ScrollView {
++              VStack(alignment: .leading, spacing: 22) {
++                Text("무엇을 할까요?").font(PreparationTypography.bold(22, relativeTo: .title2))
++                  .accessibilityIdentifier("screen.preparation")
++                ScrollView(.horizontal, showsIndicators: false) {
++                  LazyHGrid(
++                    rows: [GridItem(.fixed(tagHeight)), GridItem(.fixed(tagHeight))], spacing: 10
++                  ) {
++                    ForEach(model.preparation.tags) { tag in
++                      let selected = model.preparation.selectedTagID == tag.id
++                      Button {
++                        model.preparation.chooseTag(id: tag.id)
++                      } label: {
++                        Label(tag.name, systemImage: tag.icon.systemImage)
++                          .font(PreparationTypography.bold(17, relativeTo: .body)).fixedSize()
++                          .padding(.horizontal, 14).frame(height: tagHeight)
++                          .foregroundStyle(selected ? .white : tag.color.tint)
++                          .background(tag.color.tint.opacity(selected ? 0.35 : 0.2), in: Capsule())
++                          .overlay(
++                            Capsule().stroke(
++                              tag.color.tint.opacity(selected ? 1 : 0.45), lineWidth: 1))
++                      }
++                      .buttonStyle(.plain).accessibilityLabel(tag.name)
++                      .accessibilityIdentifier("preparation.tag.\(tag.id)")
++                      .accessibilityAddTraits(selected ? .isSelected : [])
++                    }
++                    Button {
++                      taskEditing = false
++                      showTagEditor = true
++                    } label: {
++                      Image(systemName: "plus").font(.title2)
++                        .frame(width: tagHeight, height: tagHeight)
++                        .background(.white.opacity(0.06), in: Circle())
++                        .overlay(Circle().stroke(.white.opacity(0.16)))
++                    }
++                    .buttonStyle(.plain).accessibilityLabel("태그 추가")
++                    .accessibilityIdentifier("preparation.addTag")
++                    .accessibilityFocused($addTagFocused)
++                  }.padding(.horizontal, 18)
++                }
++                .frame(height: tagHeight * 2 + 10)
++                .accessibilityIdentifier("preparation.tags")
++                .padding(.horizontal, -18)
++                if let tag = model.preparation.selectedTag {
++                  TextField("할 일 한 줄", text: $taskInput)
++                    .onChange(of: taskInput) { _, value in
++                      model.preparation.setTask(value)
++                      taskInput = model.preparation.task
++                    }
++                    .font(PreparationTypography.medium(17, relativeTo: .body)).padding(16)
++                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
++                    .overlay(
++                      RoundedRectangle(cornerRadius: 16).stroke(
++                        taskEditing ? tag.color.tint : .white.opacity(0.15))
++                    )
++                    .focused($taskEditing).autocorrectionDisabled().textInputAutocapitalization(
++                      .never
++                    )
++                    .submitLabel(.done).onSubmit { taskEditing = false }
++                    .accessibilityLabel("할 일 한 줄")
++                    .accessibilityIdentifier("preparation.task")
++                    .id("preparation.input")
++                }
++              }
++              .padding(.horizontal, 18).padding(.top, 18)
++            }
++            .scrollDismissesKeyboard(.interactively)
++            .onChange(of: model.preparation.selectedTagID) { _, id in
++              if id != nil { proxy.scrollTo("preparation.input", anchor: .bottom) }
++            }
++            .onChange(of: taskEditing) { _, editing in
++              if editing { proxy.scrollTo("preparation.input", anchor: .bottom) }
++            }
++            .onChange(of: geometry.size.height) { _, _ in
++              if taskEditing { proxy.scrollTo("preparation.input", anchor: .bottom) }
++            }
++          }
++          Group {
++            if typeSize.isAccessibilitySize {
++              VStack(spacing: 12) {
++                soundButton
++                confirmButton
++              }
++            } else {
++              HStack(spacing: 10) {
++                soundButton
++                confirmButton
++              }
++            }
++          }.padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 18)
++        }
++        .frame(
++          maxHeight: typeSize.isAccessibilitySize
++            ? geometry.size.height : (model.preparation.selectedTag == nil ? 270 : 350)
++        )
++        .background(Color(white: 0.035), in: RoundedRectangle(cornerRadius: 24))
++        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.12)))
++        .padding(.horizontal, 12).padding(.bottom, 12)
++      }
++    }
++    .sheet(isPresented: $showTagEditor, onDismiss: { addTagFocused = true }) {
++      TagEditorView(model: model, onSaved: { taskEditing = true })
++        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(410), .large])
++        .presentationCornerRadius(24).presentationDragIndicator(.hidden).preferredColorScheme(.dark)
++    }
++    .sheet(
++      isPresented: $showSoundSelection,
++      onDismiss: {
++        model.soundPreview.setActive(false)
++        soundFocused = true
++      }
++    ) {
++      SoundSelectionView(model: model)
++        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(440), .large])
++        .presentationCornerRadius(24).presentationDragIndicator(.hidden)
++        .preferredColorScheme(.dark)
++    }
++    .onDisappear { model.soundPreview.setActive(false) }
++    #if DEBUG
++      .overlay(alignment: .topLeading) {
++        VStack {
++          preparationDiagnostic
++          if !showSoundSelection { SoundPreviewDiagnostic(controller: model.soundPreview) }
++        }
++      }
++    #endif
++  }
++
++  private var soundButton: some View {
++    Button {
++      taskEditing = false
++      model.soundPreview.beginSelection(sound: model.preparation.sound)
++      showSoundSelection = true
++    } label: {
++      Label(
++        model.preparation.sound.title,
++        systemImage: model.preparation.sound == .none ? "speaker.slash" : "speaker.wave.2"
++      )
++      .font(PreparationTypography.bold(17, relativeTo: .body)).padding(14)
++      .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : nil)
++      .background(.white.opacity(0.06), in: Capsule())
++      .overlay(Capsule().stroke(.white.opacity(0.16)))
++    }
++    .buttonStyle(.plain).accessibilityLabel("소리 선택")
++    .accessibilityValue(model.preparation.sound.title)
++    .accessibilityIdentifier("preparation.sound").accessibilityFocused($soundFocused)
++  }
++  private var confirmButton: some View {
++    Button {
++      taskEditing = false
++      model.confirmPreparation()
++    } label: {
++      Text("승차권 보기").font(PreparationTypography.bold(17, relativeTo: .body)).padding(16)
++        .frame(maxWidth: .infinity)
++        .foregroundStyle(model.canConfirmPreparation ? .black : .white.opacity(0.45))
++        .background(model.canConfirmPreparation ? .white : .white.opacity(0.08), in: Capsule())
++        .overlay(Capsule().stroke(.white.opacity(0.15)))
++    }.buttonStyle(.plain).disabled(!model.canConfirmPreparation)
++      .accessibilityIdentifier("preparation.confirm")
++  }
++
++  #if DEBUG
++    private var preparationDiagnostic: some View {
++      let details = model.confirmedPreparation
++      let object: [String: Any]? = details.map {
++        [
++          "journey": [
++            "minutes": $0.journey.minutes, "busID": $0.journey.busID,
++            "busNumber": $0.journey.busNumber,
++            "destination": $0.journey.destination, "stops": $0.journey.stops,
++          ],
++          "tag": [
++            "id": $0.tag.id, "name": $0.tag.name, "icon": $0.tag.icon.rawValue,
++            "color": $0.tag.color.rawValue,
++          ],
++          "task": $0.task, "sound": $0.sound.rawValue,
++        ]
++      }
++      return Text("준비 확정 진단").font(.system(size: 1)).foregroundStyle(.clear)
++        .accessibilityValue(diagnosticJSON(object)).accessibilityIdentifier(
++          "test.preparedPreparation")
++    }
++  #endif
++}
++
++@MainActor
++private struct TagEditorView: View {
++  @Bindable var model: AppModel
++  let onSaved: () -> Void
++  @Environment(\.dismiss) private var dismiss
++  @State private var draft = TagEditorDraft()
++  @State private var issue: TagNameIssue?
++  @FocusState private var nameEditing: Bool
++
++  var body: some View {
++    VStack(spacing: 0) {
++      HStack {
++        Text("태그 만들기").font(PreparationTypography.bold(20, relativeTo: .title3))
++        Spacer()
++        Button {
++          dismiss()
++        } label: {
++          Image(systemName: "xmark").font(.system(size: 20)).padding(4)
++        }.buttonStyle(.plain).accessibilityLabel("취소").accessibilityIdentifier("tagEditor.cancel")
++      }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 12)
++      ScrollView {
++        VStack(alignment: .leading, spacing: 8) {
++          Label(previewName, systemImage: draft.icon.systemImage)
++            .font(PreparationTypography.medium(17, relativeTo: .body))
++            .foregroundStyle(draft.color.tint).padding(14).frame(maxWidth: .infinity, minHeight: 56)
++            .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.16)))
++            .accessibilityHidden(true)
++          VStack(alignment: .leading, spacing: 4) {
++            Text("이름").font(PreparationTypography.medium(12, relativeTo: .caption))
++            TextField("태그 이름", text: $draft.name)
++              .font(PreparationTypography.medium(17, relativeTo: .body)).padding(12)
++              .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
++              .overlay(RoundedRectangle(cornerRadius: 14).stroke(draft.color.tint))
++              .focused($nameEditing).autocorrectionDisabled().textInputAutocapitalization(.never)
++              .accessibilityLabel("태그 이름").accessibilityIdentifier("tagEditor.name")
++            if let issue {
++              Text(issue.message).font(.body).foregroundStyle(.red).accessibilityIdentifier(
++                "tagEditor.error")
++            }
++          }
++          VStack(alignment: .leading, spacing: 4) {
++            Text("아이콘").font(PreparationTypography.medium(12, relativeTo: .caption))
++            LazyVGrid(
++              columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6
++            ) {
++              ForEach(PreparationTagIcon.allCases, id: \.self) { icon in
++                Button {
++                  draft.icon = icon
++                  nameEditing = false
++                } label: {
++                  Image(systemName: icon.systemImage).font(.system(size: 22))
++                    .frame(maxWidth: .infinity, minHeight: 44)
++                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
++                    .overlay(
++                      RoundedRectangle(cornerRadius: 12).stroke(
++                        draft.icon == icon ? .white : .white.opacity(0.15)))
++                }.buttonStyle(.plain).accessibilityLabel(icon.title)
++                  .accessibilityIdentifier("tagEditor.icon.\(icon.rawValue)")
++                  .accessibilityAddTraits(draft.icon == icon ? .isSelected : [])
++              }
++            }
++          }
++          VStack(alignment: .leading, spacing: 4) {
++            Text("색").font(PreparationTypography.medium(12, relativeTo: .caption))
++            LazyVGrid(
++              columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6
++            ) {
++              ForEach(PreparationTagColor.allCases, id: \.self) { color in
++                Button {
++                  draft.color = color
++                  nameEditing = false
++                } label: {
++                  Circle().fill(color.tint).frame(width: 24, height: 24)
++                    .frame(maxWidth: .infinity, minHeight: 44)
++                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
++                    .overlay(
++                      RoundedRectangle(cornerRadius: 12).stroke(
++                        draft.color == color ? .white : .white.opacity(0.15)))
++                }.buttonStyle(.plain).accessibilityLabel(color.title)
++                  .accessibilityIdentifier("tagEditor.color.\(color.rawValue)")
++                  .accessibilityAddTraits(draft.color == color ? .isSelected : [])
++              }
++            }
++          }
++        }.padding(.horizontal, 20)
++      }.accessibilityIdentifier("tagEditor.fields").scrollDismissesKeyboard(.immediately)
++      Button {
++        switch model.preparation.saveTag(draft) {
++        case .success:
++          dismiss()
++          onSaved()
++        case .failure(let failure):
++          issue = failure
++          nameEditing = true
++        }
++      } label: {
++        Text("태그 저장").font(PreparationTypography.bold(17, relativeTo: .body))
++          .padding(16).frame(maxWidth: .infinity).foregroundStyle(.black).background(
++            .white, in: Capsule())
++      }.buttonStyle(.plain).accessibilityIdentifier("tagEditor.save")
++        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 16)
++    }.background(Color(white: 0.035))
++  }
++
++  private var previewName: String {
++    let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
++    return name.isEmpty ? "새 태그" : name
++  }
++}
++
++@MainActor
++private struct SoundSelectionView: View {
++  @Bindable var model: AppModel
++  @Environment(\.dismiss) private var dismiss
++  @Environment(\.scenePhase) private var scenePhase
++  @Environment(\.dynamicTypeSize) private var typeSize
++  @State private var previewTask: Task<Void, Never>?
++
++  var body: some View {
++    ScrollView {
++      VStack(alignment: .leading, spacing: 16) {
++        HStack {
++          Text("소리 선택").font(PreparationTypography.bold(22, relativeTo: .title2))
++          Spacer()
++          Button {
++            close()
++          } label: {
++            Image(systemName: "xmark").font(.title2).padding(8)
++          }
++          .buttonStyle(.plain).accessibilityLabel("취소").accessibilityIdentifier("sound.cancel")
++        }
++        LazyVGrid(
++          columns: Array(
++            repeating: GridItem(.flexible(), spacing: 10),
++            count: typeSize.isAccessibilitySize ? 1 : 3), spacing: 10
++        ) {
++          ForEach(JourneySound.allCases, id: \.self) { sound in
++            let selected = model.soundPreview.selectedSound == sound
++            Button {
++              previewTask?.cancel()
++              model.soundPreview.chooseSound(sound)
++            } label: {
++              VStack(spacing: 10) {
++                Image(systemName: sound.systemImage).font(.title2).accessibilityHidden(true)
++                Text(sound.title).font(PreparationTypography.medium(15, relativeTo: .subheadline))
++              }.frame(maxWidth: .infinity).padding(.vertical, 16)
++                .foregroundStyle(selected ? .white : .white.opacity(0.8))
++                .background(
++                  .white.opacity(selected ? 0.1 : 0.035), in: RoundedRectangle(cornerRadius: 20)
++                )
++                .overlay(
++                  RoundedRectangle(cornerRadius: 20).stroke(
++                    selected ? .white : .white.opacity(0.12)))
++            }.buttonStyle(.plain).accessibilityLabel(sound.title)
++              .accessibilityIdentifier("sound.option.\(sound.rawValue)")
++              .accessibilityAddTraits(selected ? .isSelected : [])
++          }
++        }
++        if let error = model.soundPreview.errorMessage {
++          Text(error).font(PreparationTypography.medium(17, relativeTo: .body)).foregroundStyle(
++            .red
++          ).accessibilityIdentifier("sound.error")
++        }
++        VStack(spacing: 3) {
++          Button {
++            previewTask?.cancel()
++            previewTask = Task { await model.soundPreview.togglePreview() }
++          } label: {
++            Text(model.soundPreview.phase == .stopped ? "선택한 소리 미리 듣기" : "미리 듣기 중지")
++              .font(PreparationTypography.bold(17, relativeTo: .body)).padding(16).frame(
++                maxWidth: .infinity
++              )
++              .overlay(Capsule().stroke(.white.opacity(0.2)))
++          }.buttonStyle(.plain).disabled(model.soundPreview.selectedSound == .none)
++            .accessibilityIdentifier("sound.preview").accessibilityValue(
++              phaseName(model.soundPreview.phase))
++          Button {
++            model.preparation.setSound(model.soundPreview.selectedSound)
++            close()
++          } label: {
++            Text("소리 저장").font(PreparationTypography.bold(17, relativeTo: .body)).padding(16).frame(
++              maxWidth: .infinity
++            )
++            .foregroundStyle(.black).background(.white, in: Capsule())
++          }.buttonStyle(.plain).accessibilityIdentifier("sound.save")
++        }
++      }.padding(20)
++    }.background(Color(white: 0.035))
++      .onChange(of: scenePhase) { _, phase in model.soundPreview.setActive(phase == .active) }
++      .onDisappear {
++        previewTask?.cancel()
++        model.soundPreview.setActive(false)
++      }
++      #if DEBUG
++        .overlay(alignment: .topLeading) { SoundPreviewDiagnostic(controller: model.soundPreview) }
++      #endif
++  }
++  private func close() {
++    previewTask?.cancel()
++    model.soundPreview.setActive(false)
++    dismiss()
++  }
++}
++
++extension PreparationTagColor {
++  fileprivate var tint: Color {
++    switch self {
++    case .sand: Color(red: 0.84, green: 0.70, blue: 0.47)
++    case .blue: Color(red: 0.53, green: 0.67, blue: 0.96)
++    case .purple: Color(red: 0.71, green: 0.60, blue: 0.87)
++    case .green: Color(red: 0.55, green: 0.73, blue: 0.67)
++    case .pink: Color(red: 0.90, green: 0.66, blue: 0.77)
++    }
++  }
++}
++
++private func phaseName(_ phase: SoundPreviewController.Phase) -> String {
++  switch phase {
++  case .stopped: "stopped"
++  case .loading: "loading"
++  case .playing: "playing"
++  }
++}
++
++#if DEBUG
++  @MainActor
++  private struct SoundPreviewDiagnostic: View {
++    let controller: SoundPreviewController
++    var body: some View {
++      let object: [String: Any] = [
++        "selectedSound": controller.selectedSound.rawValue,
++        "phase": phaseName(controller.phase),
++        "errorMessage": controller.errorMessage as Any? ?? NSNull(),
++      ]
++      Text("소리 미리듣기 진단")
++        .font(.system(size: 1)).foregroundStyle(.clear)
++        .accessibilityValue(diagnosticJSON(object)).accessibilityIdentifier("test.soundPreview")
++    }
++  }
++  private func diagnosticJSON(_ object: [String: Any]?) -> String {
++    guard let object,
++      let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
++    else { return "null" }
++    return String(decoding: data, as: UTF8.self)
++  }
++#endif
++
++@MainActor
++private enum PreparationTypography {
++  static let registered: Void = {
++    for name in ["SeoulAlrim-Bold", "SeoulAlrim-Medium"] {
++      if let url = Bundle.main.url(forResource: name, withExtension: "ttf") {
++        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
++      }
++    }
++  }()
++  static func bold(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
++    .custom("SeoulAlrimTTF-Bold", size: size, relativeTo: style)
++  }
++  static func medium(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
++    .custom("SeoulAlrimTTF-Medium", size: size, relativeTo: style)
++  }
++}
+diff --git a/ios/FocusMate/Resources/Audio/travel-bus-rain-v2.wav b/ios/FocusMate/Resources/Audio/travel-bus-rain-v2.wav
+new file mode 100644
+index 0000000..51267ce
+Binary files /dev/null and b/ios/FocusMate/Resources/Audio/travel-bus-rain-v2.wav differ
+diff --git a/ios/FocusMate/Resources/Audio/travel-bus-v2.wav b/ios/FocusMate/Resources/Audio/travel-bus-v2.wav
+new file mode 100644
+index 0000000..9a4235f
+Binary files /dev/null and b/ios/FocusMate/Resources/Audio/travel-bus-v2.wav differ
+diff --git a/ios/FocusMate/Resources/Audio/travel-forest-v2.wav b/ios/FocusMate/Resources/Audio/travel-forest-v2.wav
+new file mode 100644
+index 0000000..3461aa4
+Binary files /dev/null and b/ios/FocusMate/Resources/Audio/travel-forest-v2.wav differ
+diff --git a/ios/FocusMate/Resources/Audio/travel-subway-v2.wav b/ios/FocusMate/Resources/Audio/travel-subway-v2.wav
+new file mode 100644
+index 0000000..6f23036
+Binary files /dev/null and b/ios/FocusMate/Resources/Audio/travel-subway-v2.wav differ
+diff --git a/ios/FocusMate/Resources/Fonts/SOURCE.md b/ios/FocusMate/Resources/Fonts/SOURCE.md
+new file mode 100644
+index 0000000..2422e1b
+--- /dev/null
++++ b/ios/FocusMate/Resources/Fonts/SOURCE.md
+@@ -0,0 +1,12 @@
++# 서울알림체 출처
++
++제작·제공: 서울특별시.
++공식 소개·이용 안내: https://www.seoul.go.kr/seoul/font.do
++공식 수동 설치 원본: https://www.seoul.go.kr/upload/seoul/font/seoul_font3.zip
++다운로드일: 2026-10-11.
++
++원본 ZIP의 서울알림/TTF/SeoulAlrimTTF-Medium.ttf와 SeoulAlrimTTF-Bold.ttf를 이름만 정리해 로컬 프로토타입에서 사용한다. 폰트 파일은 수정하지 않았다.
++
++서울시 안내: 누구나 무료로 다운로드해 자유롭게 사용 가능. 서체 판매·유상양도·무단배포는 허용하지 않는다. 공식 안내 페이지에는 공공누리 제1유형(출처표시)이 표기되어 있다. 외부 배포 시 공식 이용 조건을 함께 유지한다.
++
++서울알림체는 서울시가 공공안내에 최적화된 기능 서체로 소개한 글꼴이다. 모든 버스 정류장에 실제로 같은 서체가 쓰였다고 확인한 것은 아니다.
+diff --git a/ios/FocusMate/Resources/Fonts/SeoulAlrim-Bold.ttf b/ios/FocusMate/Resources/Fonts/SeoulAlrim-Bold.ttf
+new file mode 100644
+index 0000000..2518e66
+Binary files /dev/null and b/ios/FocusMate/Resources/Fonts/SeoulAlrim-Bold.ttf differ
+diff --git a/ios/FocusMate/Resources/Fonts/SeoulAlrim-Medium.ttf b/ios/FocusMate/Resources/Fonts/SeoulAlrim-Medium.ttf
+new file mode 100644
+index 0000000..bed00a5
+Binary files /dev/null and b/ios/FocusMate/Resources/Fonts/SeoulAlrim-Medium.ttf differ
+diff --git a/ios/FocusMate/SoundPreviewController.swift b/ios/FocusMate/SoundPreviewController.swift
+new file mode 100644
+index 0000000..f65c92a
+--- /dev/null
++++ b/ios/FocusMate/SoundPreviewController.swift
+@@ -0,0 +1,104 @@
++import Foundation
++import Observation
++
++@MainActor protocol SoundPreviewPlaying: AnyObject {
++    var volume: Float { get set }
++    var numberOfLoops: Int { get set }
++    func prepareToPlay() -> Bool
++    func play() -> Bool
++    func setVolume(_ volume: Float, fadeDuration: TimeInterval)
++    func stop()
++}
++
++@MainActor @Observable final class SoundPreviewController {
++    enum Phase: Equatable { case stopped, loading, playing }
++    private(set) var selectedSound: JourneySound
++    private(set) var phase: Phase = .stopped
++    private(set) var errorMessage: String?
++    private let makePlayer: @MainActor (JourneySound) async throws -> any SoundPreviewPlaying
++    private let sleep: @MainActor (Duration) async -> Void
++    private var player: (any SoundPreviewPlaying)?
++    private var stopTask: Task<Void, Never>?
++    private var generation = 0
++    private var active = true
++    init(sound: JourneySound,
++         makePlayer: @escaping @MainActor (JourneySound) async throws -> any SoundPreviewPlaying,
++         sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
++        selectedSound = sound
++        self.makePlayer = makePlayer
++        self.sleep = sleep
++    }
++    func chooseSound(_ sound: JourneySound) {
++        stopPreview()
++        selectedSound = sound
++        errorMessage = nil
++    }
++    func togglePreview() async {
++        guard phase == .stopped else { stopPreview(); return }
++        guard active, selectedSound != .none, !Task.isCancelled else { return }
++        generation += 1
++        let token = generation
++        let sound = selectedSound
++        phase = .loading
++        errorMessage = nil
++        do {
++            let candidate = try await makePlayer(sound)
++            guard isCurrent(token, sound: sound) else {
++                candidate.stop()
++                if generation == token { phase = .stopped }
++                return
++            }
++            if let stopTask { await stopTask.value }
++            guard isCurrent(token, sound: sound) else {
++                candidate.stop()
++                if generation == token { phase = .stopped }
++                return
++            }
++            candidate.volume = 0
++            candidate.numberOfLoops = -1
++            guard candidate.prepareToPlay(), candidate.play() else {
++                candidate.stop()
++                phase = .stopped
++                errorMessage = "소리를 재생하지 못했어요. 선택은 그대로 저장할 수 있어요."
++                return
++            }
++            candidate.setVolume(1, fadeDuration: 0.12)
++            player = candidate
++            phase = .playing
++        } catch {
++            guard isCurrent(token, sound: sound) else {
++                if generation == token { phase = .stopped }
++                return
++            }
++            phase = .stopped
++            errorMessage = "소리를 재생하지 못했어요. 선택은 그대로 저장할 수 있어요."
++        }
++    }
++    func stopPreview() {
++        generation += 1
++        phase = .stopped
++        guard let player else { return }
++        self.player = nil
++        player.setVolume(0, fadeDuration: 0.06)
++        let sleep = self.sleep
++        stopTask = Task {
++            await sleep(.milliseconds(60))
++            player.stop()
++        }
++    }
++    func setActive(_ active: Bool) {
++        self.active = active
++        if !active { stopPreview() }
++    }
++    func beginSelection(sound: JourneySound) {
++        stopPreview()
++        active = true
++        selectedSound = sound
++        phase = .stopped
++        errorMessage = nil
++    }
++
++    private func isCurrent(_ token: Int, sound: JourneySound) -> Bool {
++        token == generation && active && selectedSound == sound && !Task.isCancelled
++    }
++}
+diff --git a/ios/FocusMate/TimeSelectionView.swift b/ios/FocusMate/TimeSelectionView.swift
+index c9150bb..f0ce44c 100644
+--- a/ios/FocusMate/TimeSelectionView.swift
++++ b/ios/FocusMate/TimeSelectionView.swift
+@@ -79,6 +79,7 @@ struct TimeSelectionView: View {
+             .frame(maxWidth: .infinity, alignment: .leading)
+         }
+         .buttonStyle(.bordered)
++        .buttonBorderShape(.roundedRectangle)
+         .accessibilityElement(children: .ignore)
+         .accessibilityLabel(candidate.accessibilityLabel)
+         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index dd079b5..567afed 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -5,6 +5,7 @@ import Observation
+ struct UITestBootstrap {
+     let fileURL: URL
+     let seed: String?
++    let shouldFailSound: Bool
+     let shouldFailSave: Bool
+     let issueHold: IssueHold
+     enum IssueHold { case standard, manual }
+@@ -24,6 +25,9 @@ struct UITestBootstrap {
+         let save = try argument("--fm-ui-save")
+         guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
+         shouldFailSave = save == "fail"
++        let sound = try argument("--fm-ui-sound")
++        guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
++        shouldFailSound = sound == "fail"
+         let hold = try argument("--fm-ui-issue-hold")
+         guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
+         issueHold = hold == "manual" ? .manual : .standard
+@@ -85,6 +89,11 @@ struct UITestBootstrap {
+                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+     }
+ 
++    @MainActor func makeSoundPreview() -> SoundPreviewController? {
++        guard shouldFailSound else { return nil }
++        return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
++    }
++
+     @MainActor func makeFeedbackRecorder() -> UITestFeedbackRecorder { UITestFeedbackRecorder() }
+     @MainActor func makeGate() -> UITestIssuanceGate? { issueHold == .manual ? UITestIssuanceGate() : nil }
+ 
+diff --git a/ios/FocusMateTests/AudioResourceTests.swift b/ios/FocusMateTests/AudioResourceTests.swift
+new file mode 100644
+index 0000000..f6ed156
+--- /dev/null
++++ b/ios/FocusMateTests/AudioResourceTests.swift
+@@ -0,0 +1,49 @@
++import AVFoundation
++import CryptoKit
++import Foundation
++import XCTest
++@testable import FocusMate
++
++@MainActor
++final class AudioResourceTests: XCTestCase {
++    // 깨짐: 앱 번들 리소스 누락, WAV 대신 다른 bytes 포함, 손상된 WAV, adapter의 URL 매핑 오류.
++    func testAC17_네_샘플은_실제앱번들의_goldenWAV이며_decode와_adapter준비가_성공한다() async throws {
++        let samples: [(JourneySound, String)] = [
++            (.bus, "eb580967c70cb86d709ecb0122d45c771343e37d834b45201be315ff9d5fb1be"),
++            (.rainBus, "6efc8b0c2e2f16fbc491eac7cad5ad1da80ef138f20d1349150ef2bfbb45b8bb"),
++            (.subway, "f938cfb97a5d0ae7a9cb91df9c4ff2d3e54ddd0dab4802ccb2452aaa31d235f1"),
++            (.forest, "9391f1d2024588f505ccefc4f53907dde3aaabdc76115dcef53c3af5090a5cc8")
++        ]
++        for (sound, golden) in samples {
++            let name = try XCTUnwrap(sound.resourceName, "\(sound) resource name")
++            let url = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "wav"), "\(sound) bundled WAV")
++            let actual = SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined()
++            XCTAssertEqual(actual, golden, "\(sound) actual bundle bytes")
++            let decoder = try AVAudioPlayer(contentsOf: url)
++            XCTAssertTrue(decoder.prepareToPlay(), "\(sound) actual WAV decode")
++            decoder.stop()
++            let adapter = try await AVSoundPreviewPlayer.make(sound: sound)
++            XCTAssertTrue(adapter.prepareToPlay(), "\(sound) actual adapter")
++            adapter.stop()
++        }
++    }
++    // 깨짐: none을 직접 factory에 넘겼는데 player를 반환한다.
++    func testAC19_none을_adapterfactory에_직접_넘기면_throw한다() async {
++        do {
++            let unexpected = try await AVSoundPreviewPlayer.make(sound: .none)
++            unexpected.stop()
++            XCTFail("none factory must throw")
++        } catch { }
++    }
++    // 깨짐: 리소스 없는 주입 bundle을 무시하고 main/sourcepath로 fallback한다.
++    func testAC20_리소스없는_테스트번들을_주입하면_네_샘플_각각_throw한다() async {
++        let emptyBundle = Bundle(for: AudioResourceTests.self)
++        for sound in [JourneySound.bus, .rainBus, .subway, .forest] {
++            do {
++                let unexpected = try await AVSoundPreviewPlayer.make(sound: sound, bundle: emptyBundle)
++                unexpected.stop()
++                XCTFail("\(sound): missing bundle resource must throw")
++            } catch { }
++        }
++    }
++}
+diff --git a/ios/FocusMateTests/PreparationDetailsTests.swift b/ios/FocusMateTests/PreparationDetailsTests.swift
+new file mode 100644
+index 0000000..f2cd09a
+--- /dev/null
++++ b/ios/FocusMateTests/PreparationDetailsTests.swift
+@@ -0,0 +1,18 @@
++import XCTest
++@testable import FocusMate
++
++final class PreparationDetailsTests: XCTestCase {
++    // Break: W04 payload derives the wrong origin/direction or drops the journey distance.
++    func testW04_전달값은_성수_정방향_12정류장의_이름_방면_거리를_제공한다() {
++        let journey = JourneySelection(
++            origin: StopPosition(index: 0, direction: 1), minutes: 60,
++            busID: "2014", busNumber: "2014", destination: "성동구민체육센터", stops: 12
++        )
++        let tag = PreparationTag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand)
++        let payload = PreparedJourneyDetails(journey: journey, tag: tag, task: "책 읽기", sound: .bus)
++
++        XCTAssertEqual(payload.originName, "성수역")
++        XCTAssertEqual(payload.boundLabel, "성수동 방면")
++        XCTAssertEqual(payload.distanceText, "6.6km")
++    }
++}
+diff --git a/ios/FocusMateTests/PreparationDraftTests.swift b/ios/FocusMateTests/PreparationDraftTests.swift
+new file mode 100644
+index 0000000..dd4fd2f
+--- /dev/null
++++ b/ios/FocusMateTests/PreparationDraftTests.swift
+@@ -0,0 +1,188 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class PreparationDraftTests: XCTestCase {
++    // Break: initialization selects a tag, supplies a task, or changes the default sound.
++    func test새_준비는_태그와_할_일이_없고_bus이며_불완전하다() {
++        let draft = PreparationDraft()
++        XCTAssertNil(draft.selectedTag)
++        XCTAssertNil(draft.selectedTagID)
++        XCTAssertEqual(draft.task, "")
++        XCTAssertEqual(draft.sound, .bus)
++        XCTAssertFalse(draft.isComplete)
++    }
++
++    // Break: choosing an existing tag is ignored or fills a suggested task.
++    func test독서_선택은_단일_태그를_선택하고_할_일은_자동_생성하지_않는다() {
++        var draft = PreparationDraft()
++        XCTAssertTrue(draft.chooseTag(id: "reading"))
++        XCTAssertEqual(draft.selectedTagID, "reading")
++        XCTAssertEqual(draft.selectedTag?.name, "독서")
++        XCTAssertEqual(draft.task, "")
++        XCTAssertFalse(draft.isComplete)
++    }
++
++    // Break: an unknown ID destroys the valid selected tag or other draft fields.
++    func test없는_태그_ID_선택은_초안_전체를_유지한다() {
++        var draft = validDraft()
++        draft.setSound(.forest)
++        let before = draft
++        XCTAssertFalse(draft.chooseTag(id: "missing"))
++        XCTAssertEqual(draft, before)
++    }
++
++    // Break: an empty task is treated as complete after a valid task was entered.
++    func test빈_할_일로_바꾸면_준비가_불완전해진다() {
++        var draft = validDraft()
++        draft.setTask("")
++        XCTAssertFalse(draft.isComplete)
++        XCTAssertEqual(draft.trimmedTask, "")
++    }
++
++    // Break: whitespace is accepted as a meaningful task.
++    func test공백과_줄바꿈_할_일은_준비가_불완전하다() {
++        var draft = validDraft()
++        draft.setTask(" \n\t ")
++        XCTAssertFalse(draft.isComplete)
++        XCTAssertEqual(draft.trimmedTask, "")
++    }
++
++    // Break: the task cap rejects the valid 80-unit boundary.
++    func test80_UTF16_할_일은_그대로_유지되어_확정_가능하다() {
++        var draft = validDraft()
++        draft.setTask(String(repeating: "가", count: 80))
++        XCTAssertEqual(draft.task, String(repeating: "가", count: 80))
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    // Break: the input cap admits the 81st UTF-16 unit.
++    func test81_UTF16_붙여넣기는_80단위까지만_보존한다() {
++        var draft = validDraft()
++        draft.setTask(String(repeating: "가", count: 81))
++        XCTAssertEqual(draft.task, String(repeating: "가", count: 80))
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    // Break: truncation splits a surrogate pair at the 80-unit boundary.
++    func test경계의_이모지는_surrogate_pair를_자르지_않는다() {
++        var draft = validDraft()
++        draft.setTask(String(repeating: "가", count: 79) + "😀끝")
++        XCTAssertEqual(draft.task, String(repeating: "가", count: 79))
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    // Break: the cap counts Unicode scalars rather than UTF-16 units.
++    func test40개_이모지는_80_UTF16이며_41번째는_저장되지_않는다() {
++        var draft = validDraft()
++        draft.setTask(String(repeating: "😀", count: 41))
++        XCTAssertEqual(draft.task, String(repeating: "😀", count: 40))
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    // Break: editing prematurely trims the input or confirmation fails to trim it.
++    func test할_일은_입력_공백을_보존하고_확정용_값만_trim한다() {
++        var draft = validDraft()
++        draft.setTask(" \n책 읽기 \t")
++        XCTAssertEqual(draft.task, " \n책 읽기 \t")
++        XCTAssertEqual(draft.trimmedTask, "책 읽기")
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    // Break: opening a fresh editor inherits previous values or mutates preparation.
++    func test새_태그_편집_기본값은_빈_이름_독서_모래빛이고_초안은_유지된다() {
++        let draft = validDraft()
++        let before = draft
++        let editor = TagEditorDraft()
++        XCTAssertEqual(editor.name, "")
++        XCTAssertEqual(editor.icon, .reading)
++        XCTAssertEqual(editor.color, .sand)
++        XCTAssertEqual(draft, before)
++    }
++
++    // Break: an empty name appends/selects a tag or alters any draft value.
++    func test빈_태그_이름_저장은_empty와_초안_전체_불변을_반환한다() {
++        assertRejectedName("", issue: .empty)
++    }
++
++    // Break: whitespace-only names bypass trim validation.
++    func test공백_태그_이름_저장은_empty와_초안_전체_불변을_반환한다() {
++        assertRejectedName(" \n\t ", issue: .empty)
++    }
++
++    // Break: duplicate comparison ignores case normalization.
++    func test대소문자만_다른_태그는_중복으로_추가되지_않는다() throws {
++        var draft = validDraft()
++        _ = try draft.saveTag(TagEditorDraft(name: "Focus", icon: .study, color: .blue)).get()
++        let before = draft
++        XCTAssertEqual(draft.saveTag(TagEditorDraft(name: "fOcUs")), .failure(.duplicate))
++        XCTAssertEqual(draft, before)
++    }
++
++    // Break: duplicate comparison ignores NFKC full-width normalization.
++    func test전각과_반각_이름은_NFKC_중복으로_추가되지_않는다() throws {
++        var draft = validDraft()
++        _ = try draft.saveTag(TagEditorDraft(name: "Focus", icon: .study, color: .blue)).get()
++        let before = draft
++        XCTAssertEqual(draft.saveTag(TagEditorDraft(name: "Ｆｏｃｕｓ")), .failure(.duplicate))
++        XCTAssertEqual(draft, before)
++    }
++
++    // Break: trimming occurs after the length check instead of before it.
++    func testtrim한_20_UTF16_태그_이름은_저장_가능하다() throws {
++        var draft = validDraft()
++        let tag = try draft.saveTag(TagEditorDraft(name: " \n" + String(repeating: "가", count: 20) + " \n")).get()
++        XCTAssertEqual(tag.name, String(repeating: "가", count: 20))
++        XCTAssertEqual(draft.tags.count, 5)
++        XCTAssertEqual(draft.selectedTag, tag)
++    }
++
++    // Break: 21-unit tag names bypass the maximum.
++    func test21_UTF16_태그_이름은_tooLong과_초안_전체_불변을_반환한다() {
++        assertRejectedName(String(repeating: "가", count: 21), issue: .tooLong)
++    }
++
++    // Break: tag validation counts characters instead of UTF-16 units.
++    func test11개_이모지_태그는_22_UTF16이므로_거부한다() {
++        assertRejectedName(String(repeating: "😀", count: 11), issue: .tooLong)
++    }
++
++    // Break: saving discards metadata, fails to select the new tag, or erases task/sound.
++    func test유효_태그_저장은_정리한_표시이름과_메타데이터를_추가하고_선택한다() throws {
++        var draft = validDraft()
++        draft.setSound(.rainBus)
++        let tag = try draft.saveTag(TagEditorDraft(name: " \nMy Focus \t", icon: .development, color: .purple)).get()
++        XCTAssertEqual(tag.name, "My Focus")
++        XCTAssertEqual(tag.icon, .development)
++        XCTAssertEqual(tag.color, .purple)
++        XCTAssertEqual(draft.tags.count, 5)
++        XCTAssertEqual(draft.tags.last, tag)
++        XCTAssertEqual(draft.selectedTag, tag)
++        XCTAssertEqual(draft.task, "책 읽기")
++        XCTAssertEqual(draft.sound, .rainBus)
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    // Break: no sound incorrectly blocks a valid preparation.
++    func test소리_없음도_유효한_태그와_할_일이면_확정_가능하다() {
++        var draft = validDraft()
++        draft.setSound(.none)
++        XCTAssertEqual(draft.sound, .none)
++        XCTAssertTrue(draft.isComplete)
++    }
++
++    private func validDraft() -> PreparationDraft {
++        var draft = PreparationDraft()
++        XCTAssertTrue(draft.chooseTag(id: "reading"))
++        draft.setTask("책 읽기")
++        return draft
++    }
++
++    private func assertRejectedName(_ name: String, issue: TagNameIssue, file: StaticString = #filePath, line: UInt = #line) {
++        var draft = validDraft()
++        draft.setSound(.forest)
++        let before = draft
++        XCTAssertEqual(draft.saveTag(TagEditorDraft(name: name, icon: .writing, color: .pink)), .failure(issue), file: file, line: line)
++        XCTAssertEqual(draft, before, file: file, line: line)
++    }
++}
+diff --git a/ios/FocusMateTests/PreparationModelTests.swift b/ios/FocusMateTests/PreparationModelTests.swift
+new file mode 100644
+index 0000000..b5b246a
+--- /dev/null
++++ b/ios/FocusMateTests/PreparationModelTests.swift
+@@ -0,0 +1,403 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class PreparationModelTests: XCTestCase {
++    private enum ProbeError: Error { case expected }
++    private final class Probe {
++        var writes = 0
++        var shouldFail = false
++    }
++    private static let station = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
++    private static let expectedJourney = JourneySelection(
++        origin: StopPosition(index: 0, direction: 1), minutes: 60,
++        busID: "2014", busNumber: "2014", destination: "성동구민체육센터", stops: 12
++    )
++
++    // Break: a fresh model inherits preparation values or enables an incomplete preparation.
++    @MainActor
++    func test유효_W02로_처음_진입한_준비는_초기값이고_확정할_수_없다() throws {
++        try withReadyModel { model, probe, _, _ in
++            try enterPreparation(model)
++            XCTAssertEqual(model.path, [.time, .preparation])
++            XCTAssertNil(model.preparation.selectedTag)
++            XCTAssertEqual(model.preparation.task, "")
++            XCTAssertEqual(model.preparation.sound, .bus)
++            XCTAssertFalse(model.canConfirmPreparation)
++            XCTAssertFalse(model.confirmPreparation())
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertEqual(probe.writes, 0)
++        }
++    }
++
++    // Break: choosing a tag generates a task or enables confirmation without user input.
++    @MainActor
++    func test독서만_선택하면_할_일은_비어있고_확정_요청은_생성되지_않는다() throws {
++        try withReadyModel { model, _, _, _ in
++            try enterPreparation(model)
++            XCTAssertTrue(model.preparation.chooseTag(id: "reading"))
++            XCTAssertEqual(model.preparation.selectedTag?.name, "독서")
++            XCTAssertEqual(model.preparation.task, "")
++            XCTAssertFalse(model.canConfirmPreparation)
++            XCTAssertFalse(model.confirmPreparation())
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: empty input leaves an old confirmed request usable.
++    @MainActor
++    func test빈_할_일로_변경한_후_직접_확정해도_전달은_0이다() throws {
++        try assertInvalidTask("")
++    }
++
++    // Break: whitespace input is accepted by the AppModel confirmation boundary.
++    @MainActor
++    func test공백과_줄바꿈_할_일로_변경한_후_직접_확정해도_전달은_0이다() throws {
++        try assertInvalidTask(" \n\t ")
++    }
++
++    // Break: the AppModel guard rejects a capped valid 80-unit task.
++    @MainActor
++    func test81단위_입력은_80단위로_확정되어_한번_전달된다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            model.preparation.setTask(String(repeating: "가", count: 81))
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertEqual(try XCTUnwrap(model.consumePreparationRequest()).task, String(repeating: "가", count: 80))
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: successful custom-tag save loses the W02 journey or task.
++    @MainActor
++    func test새_태그_저장은_기존_할_일과_W02_여정을_유지한다() throws {
++        try withReadyModel { model, probe, _, _ in
++            try configureValidPreparation(model)
++            let tag = try model.preparation.saveTag(TagEditorDraft(name: " \n개발 메모 \t", icon: .development, color: .green)).get()
++            XCTAssertEqual(model.preparation.selectedTag, tag)
++            XCTAssertEqual(tag.name, "개발 메모")
++            XCTAssertEqual(model.preparation.task, "책 읽기")
++            XCTAssertEqual(model.preparedJourney, Self.expectedJourney)
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertEqual(probe.writes, 0)
++        }
++    }
++
++    // Break: returning to preparation resets the existing session draft.
++    @MainActor
++    func test시간_화면_왕복은_세션_태그_할_일_확정_소리를_보존한다() throws {
++        try withReadyModel { model, probe, _, _ in
++            try configureValidPreparation(model)
++            _ = try model.preparation.saveTag(TagEditorDraft(name: "개발", icon: .development, color: .blue)).get()
++            model.preparation.setSound(.rainBus)
++            let before = model.preparation
++            model.goBack()
++            XCTAssertEqual(model.path, [.time])
++            XCTAssertTrue(model.proceedToPreparation())
++            XCTAssertEqual(model.preparation, before)
++            XCTAssertEqual(model.preparedJourney, Self.expectedJourney)
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertEqual(probe.writes, 0)
++        }
++    }
++
++    // Break: changing time keeps the old W02 selection/request usable.
++    @MainActor
++    func test시간_변경으로_후보가_해제되면_getter와_소비_전달은_0이다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            model.goBack()
++            model.journeyPlan.setMinutes(25)
++            XCTAssertNil(model.journeyPlan.selectedBusID)
++            XCTAssertFalse(model.canConfirmPreparation)
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertFalse(model.confirmPreparation())
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: confirmation omits/changes journey, tag, trimmed task, or sound; persists a journey.
++    @MainActor
++    func test준비_확정은_전체_payload를_전달하고_진행_여정과_기록을_생성하지_않는다() throws {
++        try withReadyModel { model, probe, fileURL, bytes in
++            try configureValidPreparation(model)
++            let tag = try model.preparation.saveTag(TagEditorDraft(name: " \nMy Focus \t", icon: .writing, color: .pink)).get()
++            model.preparation.setTask("  책 읽기  ")
++            model.preparation.setSound(.subway)
++            let expected = PreparedJourneyDetails(journey: Self.expectedJourney, tag: tag, task: "책 읽기", sound: .subway)
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertEqual(model.confirmedPreparation, expected)
++            XCTAssertEqual(model.preparationRequest, expected)
++            XCTAssertEqual(model.consumePreparationRequest(), expected)
++            XCTAssertEqual(model.confirmedPreparation, expected)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.snapshot?.journey.active)
++            XCTAssertEqual(model.snapshot?.records.items.count, 0)
++            XCTAssertEqual(probe.writes, 0)
++            XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
++        }
++    }
++
++    // Break: repeated confirm enqueues multiple identical requests or consume replays one.
++    @MainActor
++    func test같은_payload_확정_연타의_요청은_한번만_소비된다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertNotNil(model.consumePreparationRequest())
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertNotNil(model.confirmedPreparation)
++        }
++    }
++
++    // Break: consume permanently prevents a new explicit confirmation request.
++    @MainActor
++    func test소비한_뒤_다시_확정하면_새_요청을_한번_전달한다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            let first = try XCTUnwrap(model.consumePreparationRequest())
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertEqual(model.consumePreparationRequest(), first)
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertEqual(model.confirmedPreparation, first)
++        }
++    }
++
++    // Break: selecting a different tag allows the old tag payload to be consumed.
++    @MainActor
++    func test태그_변경은_이전_확정값과_요청을_숨기고_소비를_차단한다() throws {
++        try assertStaleMutation { model in
++            XCTAssertTrue(model.preparation.chooseTag(id: "study"))
++            XCTAssertEqual(model.preparation.selectedTagID, "study")
++        }
++    }
++
++    // Break: entering a different nonempty task allows the old task payload to be consumed.
++    @MainActor
++    func test할_일_변경은_이전_확정값과_요청을_숨기고_소비를_차단한다() throws {
++        try assertStaleMutation { model in
++            model.preparation.setTask("새 할 일")
++            XCTAssertEqual(model.preparation.task, "새 할 일")
++        }
++    }
++
++    // Break: saving a different sound allows the old sound payload to be consumed.
++    @MainActor
++    func test확정_소리_변경은_이전_확정값과_요청을_숨기고_소비를_차단한다() throws {
++        try assertStaleMutation { model in
++            model.preparation.setSound(.forest)
++            XCTAssertEqual(model.preparation.sound, .forest)
++        }
++    }
++
++    // Break: invalid consume only hides a request and resurrects it when input is restored.
++    @MainActor
++    func test무효_상태에서_소비한_요청은_입력을_복원해도_되살아나지_않는다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            model.preparation.setTask(" \n ")
++            XCTAssertNil(model.consumePreparationRequest())
++            model.preparation.setTask("책 읽기")
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertNotNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: merely reading an invalid getter destroys an otherwise unconsumed request.
++    @MainActor
++    func test무효_getter_읽기는_부작용없이_숨기며_소비전_입력복원은_기존요청을_유지한다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            let expected = try XCTUnwrap(model.preparationRequest)
++            model.preparation.setTask("다른 할 일")
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            model.preparation.setTask("책 읽기")
++            XCTAssertEqual(model.confirmedPreparation, expected)
++            XCTAssertEqual(model.preparationRequest, expected)
++            XCTAssertEqual(model.consumePreparationRequest(), expected)
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: invalid W02 input bypasses the direct-call confirmation guard.
++    @MainActor
++    func test여정이_없는_직접_확정은_준비값과_요청을_생성하지_않는다() throws {
++        try withReadyModel { model, _, _, _ in
++            XCTAssertTrue(model.preparation.chooseTag(id: "reading"))
++            model.preparation.setTask("책 읽기")
++            XCTAssertTrue(model.preparation.isComplete)
++            XCTAssertFalse(model.canConfirmPreparation)
++            XCTAssertFalse(model.confirmPreparation())
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: a nonempty task bypasses the missing-tag confirmation guard.
++    @MainActor
++    func test태그가_없는_직접_확정은_준비값과_요청을_생성하지_않는다() throws {
++        try withReadyModel { model, _, _, _ in
++            try enterPreparation(model)
++            model.preparation.setTask("책 읽기")
++            XCTAssertEqual(model.preparation.task, "책 읽기")
++            XCTAssertNil(model.preparation.selectedTag)
++            XCTAssertFalse(model.canConfirmPreparation)
++            XCTAssertFalse(model.confirmPreparation())
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    // Break: no sound blocks confirmation or substitutes the bus identifier.
++    @MainActor
++    func test소리_없음은_유효한_준비를_차단하지_않고_none으로_전달된다() throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            model.preparation.setSound(.none)
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertEqual(try XCTUnwrap(model.consumePreparationRequest()).sound, .none)
++        }
++    }
++
++    // Break: W03 accidentally writes session input or restores it in a new AppModel.
++    @MainActor
++    func test정상_저장_환경에서도_W03_쓰기0_원본동일_새모델_초안초기화다() throws {
++        try assertSessionOnly(shouldFail: false)
++    }
++
++    // Break: a write-failing store is touched by W03 or session input leaks into new models.
++    @MainActor
++    func test쓰기_실패_환경에서도_W03_쓰기시도0_원본동일_새모델_초안초기화다() throws {
++        try assertSessionOnly(shouldFail: true)
++    }
++
++    @MainActor
++    private func enterPreparation(_ model: AppModel) throws {
++        model.open(.time)
++        model.journeyPlan.setMinutes(60)
++        _ = model.journeyPlan.choose(busID: "2014", from: StopPosition(index: 0, direction: 1))
++        XCTAssertTrue(model.proceedToPreparation())
++        XCTAssertEqual(model.preparedJourney, Self.expectedJourney)
++    }
++
++    @MainActor
++    private func configureValidPreparation(_ model: AppModel) throws {
++        try enterPreparation(model)
++        XCTAssertTrue(model.preparation.chooseTag(id: "reading"))
++        model.preparation.setTask("책 읽기")
++        XCTAssertTrue(model.canConfirmPreparation)
++    }
++
++    @MainActor
++    private func assertInvalidTask(_ task: String) throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            model.preparation.setTask(task)
++            XCTAssertFalse(model.canConfirmPreparation)
++            XCTAssertFalse(model.confirmPreparation())
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    @MainActor
++    private func assertStaleMutation(_ mutate: (AppModel) -> Void) throws {
++        try withReadyModel { model, _, _, _ in
++            try configureValidPreparation(model)
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertNotNil(model.preparationRequest)
++            mutate(model)
++            XCTAssertTrue(model.canConfirmPreparation)
++            XCTAssertNil(model.confirmedPreparation)
++            XCTAssertNil(model.preparationRequest)
++            XCTAssertNil(model.consumePreparationRequest())
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertNotNil(model.consumePreparationRequest())
++            XCTAssertNil(model.consumePreparationRequest())
++        }
++    }
++
++    @MainActor
++    private func assertSessionOnly(shouldFail: Bool) throws {
++        try withReadyModel(shouldFail: shouldFail) { model, probe, fileURL, bytes in
++            try configureValidPreparation(model)
++            _ = try model.preparation.saveTag(TagEditorDraft(name: "세션 태그", icon: .development, color: .purple)).get()
++            model.preparation.setTask("세션 할 일")
++            model.preparation.setSound(.rainBus)
++            XCTAssertTrue(model.confirmPreparation())
++            XCTAssertNotNil(model.consumePreparationRequest())
++            XCTAssertEqual(probe.writes, 0)
++            XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
++            XCTAssertEqual(try SnapshotCodec.encode(try XCTUnwrap(model.snapshot)), bytes)
++            let relaunched = makeModel(fileURL: fileURL, probe: probe)
++            try enterPreparation(relaunched)
++            XCTAssertEqual(relaunched.preparation.tags.count, 4)
++            XCTAssertFalse(relaunched.preparation.tags.contains { $0.name == "세션 태그" })
++            XCTAssertNil(relaunched.preparation.selectedTag)
++            XCTAssertEqual(relaunched.preparation.task, "")
++            XCTAssertEqual(relaunched.preparation.sound, .bus)
++            XCTAssertFalse(relaunched.canConfirmPreparation)
++            XCTAssertNil(relaunched.confirmedPreparation)
++            XCTAssertNil(relaunched.preparationRequest)
++            XCTAssertNil(relaunched.snapshot?.journey.active)
++            XCTAssertEqual(relaunched.snapshot?.records.items.count, 0)
++            XCTAssertEqual(probe.writes, 0)
++            XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
++        }
++    }
++
++    @MainActor
++    private func withReadyModel(shouldFail: Bool = false, _ body: (AppModel, Probe, URL, Data) throws -> Void) throws {
++        try withTemporaryFile { fileURL in
++            let bytes = try SnapshotCodec.encode(Self.stage(true, Self.station, Self.station))
++            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
++            try bytes.write(to: fileURL, options: .atomic)
++            let probe = Probe()
++            probe.shouldFail = shouldFail
++            let model = makeModel(fileURL: fileURL, probe: probe)
++            XCTAssertEqual(model.launchState, .ready(.main))
++            XCTAssertEqual(probe.writes, 0, "Fixture loading must not write; counting starts before W03 mutations.")
++            try body(model, probe, fileURL, bytes)
++        }
++    }
++
++    @MainActor
++    private func makeModel(fileURL: URL, probe: Probe) -> AppModel {
++        let store = LocalSnapshotStore(
++            fileURL: fileURL,
++            readData: { try Data(contentsOf: $0) },
++            createDirectory: { try FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true) },
++            writeData: { data, url in
++                probe.writes += 1
++                if probe.shouldFail { throw ProbeError.expected }
++                try data.write(to: url, options: .atomic)
++            }
++        )
++        let model = AppModel(store: store)
++        model.loadIfNeeded()
++        return model
++    }
++}
+diff --git a/ios/FocusMateTests/SoundPreviewControllerTests.swift b/ios/FocusMateTests/SoundPreviewControllerTests.swift
+new file mode 100644
+index 0000000..fd1a0b5
+--- /dev/null
++++ b/ios/FocusMateTests/SoundPreviewControllerTests.swift
+@@ -0,0 +1,322 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++@MainActor
++final class SoundPreviewControllerTests: XCTestCase {
++    private struct Rig {
++        let controller: SoundPreviewController
++        let factory: PreviewFactoryGate
++        let sleeper: PreviewSleepGate
++        let log: PreviewEventLog
++    }
++    private func rig(sound: JourneySound = .bus) -> Rig {
++        let log = PreviewEventLog()
++        let factory = PreviewFactoryGate()
++        let sleeper = PreviewSleepGate()
++        return Rig(controller: SoundPreviewController(sound: sound,
++            makePlayer: { try await factory.make($0) }, sleep: { await sleeper.sleep($0) }),
++            factory: factory, sleeper: sleeper, log: log)
++    }
++    private func start(_ r: Rig, player: PreviewPlayer, index: Int = 0) async -> Task<Void, Never> {
++        let task = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(index)], timeout: 1)
++        r.factory.resolve(index, .success(player))
++        await task.value
++        return task
++    }
++    private func finishStop(_ r: Rig, player: PreviewPlayer) async {
++        await fulfillment(of: [r.sleeper.arrival], timeout: 1)
++        r.sleeper.releaseAll()
++        await fulfillment(of: [player.stopped], timeout: 1)
++    }
++
++    // 깨짐: 시트 진입이 player를 만들거나 임시 선택을 확정값으로 초기화하지 않는다.
++    func testAC14_beginSelection은_확정소리로_열고_재생을_시작하지_않는다() {
++        let r = rig()
++        let model = AppModel(store: memoryStore(initial: nil).store, soundPreview: r.controller)
++        XCTAssertTrue(model.soundPreview === r.controller)
++        r.controller.beginSelection(sound: .rainBus)
++        XCTAssertEqual(r.controller.selectedSound, .rainBus)
++        XCTAssertEqual(r.controller.phase, .stopped)
++        XCTAssertNil(r.controller.errorMessage)
++        XCTAssertEqual(r.factory.sounds, [])
++    }
++    // 깨짐: 선택 이벤트가 factory를 호출하여 자동 재생한다.
++    func testAC14_소리_선택만으로는_factory를_호출하지_않는다() {
++        let r = rig()
++        r.controller.chooseSound(.forest)
++        XCTAssertEqual(r.controller.selectedSound, .forest)
++        XCTAssertEqual(r.factory.sounds, [])
++    }
++    // 깨짐: 취소한 임시 선택이 다음 시트의 선택으로 남는다.
++    func testAC15_취소후_재진입은_이전_확정소리로_임시선택을_되돌린다() {
++        let r = rig()
++        r.controller.chooseSound(.forest)
++        r.controller.stopPreview()
++        r.controller.beginSelection(sound: .bus)
++        XCTAssertEqual(r.controller.selectedSound, .bus)
++        XCTAssertEqual(r.factory.sounds, [])
++    }
++    // 깨짐: 저장한 선택이 PreparationDraft에 반영되지 않거나 재진입에 초기값이 사용된다.
++    func testAC16_저장한_임시소리가_초안과_다음_선택에_반영된다() {
++        let r = rig()
++        var draft = PreparationDraft()
++        r.controller.chooseSound(.rainBus)
++        draft.setSound(r.controller.selectedSound)
++        r.controller.stopPreview()
++        r.controller.beginSelection(sound: draft.sound)
++        XCTAssertEqual(draft.sound, .rainBus)
++        XCTAssertEqual(r.controller.selectedSound, .rainBus)
++        XCTAssertEqual(r.factory.sounds, [])
++    }
++    // 깨짐: 샘플 분기가 누락되거나 volume/loop/prepare/play/fade 순서와 시작 fade가 틀린다.
++    func testAC17_네_샘플은_무음준비후_반복재생과_120ms페이드를_요청한다() async {
++        for sound in [JourneySound.bus, .rainBus, .subway, .forest] {
++            let r = rig(sound: sound)
++            let p = PreviewPlayer("A", log: r.log)
++            _ = await start(r, player: p)
++            XCTAssertEqual(r.factory.sounds, [sound], "\(sound)")
++            XCTAssertEqual(r.controller.phase, .playing, "\(sound)")
++            XCTAssertEqual(r.log.events, ["A.volume=0.0", "A.loops=-1", "A.prepare", "A.play", "A.fade=1.0:0.12"], "\(sound)")
++            r.controller.stopPreview()
++            await finishStop(r, player: p)
++        }
++    }
++    // 깨짐: loading이 누락되거나 factory 완료 전에 playing으로 바뀐다.
++    func testAC17_factory_완료전에는_loading이다() async {
++        let r = rig(); let p = PreviewPlayer("A", log: r.log)
++        let task = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(0)], timeout: 1)
++        XCTAssertEqual(r.controller.phase, .loading)
++        XCTAssertEqual(p.playCalls, 0)
++        r.factory.resolve(0, .success(p)); await task.value
++        r.controller.stopPreview(); await finishStop(r, player: p)
++    }
++    // 깨짐: 중지 fade가 생략되거나 60ms가 지나기 전에 stop한다.
++    func testAC18_다시누르면_60ms페이드_완료후_중지한다() async {
++        let r = rig(); let p = PreviewPlayer("A", log: r.log)
++        _ = await start(r, player: p)
++        await r.controller.togglePreview()
++        await fulfillment(of: [r.sleeper.arrival], timeout: 1)
++        XCTAssertEqual(r.controller.phase, .stopped)
++        XCTAssertEqual(r.sleeper.durations, [.milliseconds(60)])
++        XCTAssertEqual(r.log.events.last, "A.fade=0.0:0.06")
++        XCTAssertEqual(p.stopCalls, 0)
++        r.sleeper.releaseAll(); await fulfillment(of: [p.stopped], timeout: 1)
++        XCTAssertEqual(p.stopCalls, 1)
++    }
++    // 깨짐: 선택 변경이 기존 재생을 끄지 않거나 새 소리를 자동 재생한다.
++    func testAC18_재생중_선택변경은_중지하고_새소리를_자동재생하지_않는다() async {
++        let r = rig(); let p = PreviewPlayer("A", log: r.log)
++        _ = await start(r, player: p)
++        r.controller.chooseSound(.forest)
++        XCTAssertEqual(r.controller.selectedSound, .forest)
++        XCTAssertEqual(r.controller.phase, .stopped)
++        await finishStop(r, player: p)
++        XCTAssertEqual(r.factory.sounds, [.bus])
++        XCTAssertEqual(p.playCalls, 1)
++    }
++    // 깨짐: 여러 stop이 같은 player의 종료 task를 취소하거나 fade/stop을 중복한다.
++    func testAC18_연속중지는_페이드와_stop을_각각_한번만_한다() async {
++        let r = rig(); let p = PreviewPlayer("A", log: r.log)
++        _ = await start(r, player: p)
++        r.controller.stopPreview(); r.controller.stopPreview(); r.controller.stopPreview()
++        await finishStop(r, player: p)
++        XCTAssertEqual(r.log.events.filter { $0 == "A.fade=0.0:0.06" }.count, 1)
++        XCTAssertEqual(p.stopCalls, 1)
++        XCTAssertEqual(r.sleeper.durations, [.milliseconds(60)])
++    }
++    // 깨짐: 새 preview가 이전 player.stop보다 먼저 play하여 소리가 겹친다.
++    func testAC18_이전player가_완전히_중지된_뒤에만_새player를_재생한다() async {
++        await assertNoOverlap(reopen: false)
++    }
++    // 깨짐: close/reopen의 beginSelection이 종료 task를 잃어버려 소리가 겹친다.
++    func testAC22_같은controller로_닫고_재열어도_종료중인_소리와_겹치지_않는다() async {
++        await assertNoOverlap(reopen: true)
++    }
++    private func assertNoOverlap(reopen: Bool) async {
++        let r = rig(); let a = PreviewPlayer("A", log: r.log); let b = PreviewPlayer("B", log: r.log)
++        _ = await start(r, player: a)
++        r.controller.stopPreview()
++        await fulfillment(of: [r.sleeper.arrival], timeout: 1)
++        if reopen { r.controller.beginSelection(sound: .forest) } else { r.controller.chooseSound(.forest) }
++        let prematurePlay = expectation(description: "B must not play while A stop gate is held")
++        prematurePlay.isInverted = true
++        b.playObservation = prematurePlay
++        let task = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(1)], timeout: 1)
++        r.factory.resolve(1, .success(b))
++        await fulfillment(of: [prematurePlay], timeout: 0.1)
++        XCTAssertEqual(a.stopCalls, 0); XCTAssertEqual(b.playCalls, 0)
++        b.playObservation = nil
++        r.sleeper.releaseAll()
++        await fulfillment(of: [a.stopped], timeout: 1)
++        await task.value
++        XCTAssertEqual(r.controller.phase, .playing)
++        let events = r.log.events
++        XCTAssertLessThan(events.firstIndex(of: "A.stop") ?? Int.max, events.firstIndex(of: "B.play") ?? -1)
++        r.controller.stopPreview(); await finishStop(r, player: b)
++    }
++    // 깨짐: none 요청이 factory를 호출하거나 저장값을 bus로 돌린다.
++    func testAC19_none은_재생요청이_없고_초안에_저장된다() async {
++        let r = rig(sound: .none)
++        await r.controller.togglePreview()
++        var draft = PreparationDraft(); draft.setSound(r.controller.selectedSound)
++        XCTAssertEqual(r.factory.sounds, [])
++        XCTAssertEqual(r.controller.phase, .stopped)
++        XCTAssertEqual(draft.sound, JourneySound.none)
++    }
++    // 깨짐: factory throw를 성공으로 처리하거나 선택을 none으로 바꾼다.
++    func testAC20_factorythrow는_선택을_유지하고_무음과_오류를_제공한다() async {
++        let r = rig(sound: .rainBus)
++        let task = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(0)], timeout: 1)
++        r.factory.resolve(0, .failure(PreviewFailure.unavailable)); await task.value
++        XCTAssertEqual(r.controller.phase, .stopped); XCTAssertNotNil(r.controller.errorMessage)
++        XCTAssertEqual(r.controller.selectedSound, .rainBus)
++        var draft = PreparationDraft(); draft.setSound(r.controller.selectedSound)
++        XCTAssertEqual(draft.sound, .rainBus)
++    }
++    // 깨짐: prepare false 뒤 play를 호출한다.
++    func testAC20_preparefalse는_play없이_오류와_선택유지를_제공한다() async {
++        await assertPlayerFailure(prepare: false, play: true)
++    }
++    // 깨짐: play false 뒤 playing/fade-in으로 전이한다.
++    func testAC20_playfalse는_무음상태와_오류_선택유지를_제공한다() async {
++        await assertPlayerFailure(prepare: true, play: false)
++    }
++    private func assertPlayerFailure(prepare: Bool, play: Bool) async {
++        let r = rig(sound: .subway); let p = PreviewPlayer("A", log: r.log, prepare: prepare, play: play)
++        _ = await start(r, player: p)
++        XCTAssertEqual(r.controller.phase, .stopped); XCTAssertNotNil(r.controller.errorMessage)
++        XCTAssertEqual(r.controller.selectedSound, .subway)
++        XCTAssertEqual(p.playCalls, prepare ? 1 : 0)
++        XCTAssertFalse(r.log.events.contains("A.fade=1.0:0.12"))
++        XCTAssertEqual(p.stopCalls, 1)
++    }
++    // 깨짐: loading 중 재입력이 취소가 아니라 두번째 요청/재생이 된다.
++    func testAC21_loading중_재입력은_기존요청을_취소한다() async {
++        await assertLateSuccess(action: "toggle")
++    }
++    // 깨짐: 선택 변경 후 늦은 factory 결과가 이전 소리를 재생한다.
++    func testAC21_선택변경후_늦은성공은_재생하지_않는다() async {
++        await assertLateSuccess(action: "selection")
++    }
++    // 깨짐: 저장·취소·이탈의 stop 경계가 늦은 factory 결과를 무효화하지 않는다.
++    func testAC21_저장_취소_이탈의_stop후_늦은성공은_재생하지_않는다() async {
++        for boundary in ["save", "cancel", "disappear"] { await assertLateSuccess(action: boundary) }
++    }
++    // 깨짐: inactive 이후 늦은 성공이 재생되거나 복귀가 자동 재생한다.
++    func testAC21_비활성화후_늦은성공과_복귀는_재생하지_않는다() async {
++        await assertLateSuccess(action: "inactive")
++    }
++    private func assertLateSuccess(action: String) async {
++        let r = rig(); let p = PreviewPlayer("old", log: r.log)
++        let task = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(0)], timeout: 1)
++        switch action {
++        case "toggle": await r.controller.togglePreview()
++        case "selection": r.controller.chooseSound(.forest)
++        case "inactive": r.controller.setActive(false); r.controller.setActive(true)
++        default: r.controller.stopPreview()
++        }
++        r.factory.resolve(0, .success(p)); await task.value
++        XCTAssertEqual(p.playCalls, 0, action); XCTAssertEqual(p.stopCalls, 1, action)
++        XCTAssertEqual(r.controller.phase, .stopped, action)
++        XCTAssertNil(r.controller.errorMessage, action)
++        XCTAssertEqual(r.controller.selectedSound, action == "selection" ? .forest : .bus, action)
++        XCTAssertEqual(r.factory.sounds.count, 1, action)
++    }
++    // 깨짐: old success/throw가 새 요청의 phase/error/player를 덮는다.
++    func testAC21_새재생후_old성공과_throw는_새상태를_덮지_않는다() async {
++        for succeeds in [true, false] { await assertStaleResult(succeeds: succeeds, reopen: false) }
++    }
++    // 깨짐: 동일 controller 재진입 후 이전 throw가 새 세션에 오류를 표시한다.
++    func testAC21_닫고_재열어_재생한뒤_oldthrow는_새상태를_덮지_않는다() async {
++        await assertStaleResult(succeeds: false, reopen: true)
++    }
++    private func assertStaleResult(succeeds: Bool, reopen: Bool) async {
++        let r = rig(); let old = PreviewPlayer("old", log: r.log); let fresh = PreviewPlayer("new", log: r.log)
++        let oldTask = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(0)], timeout: 1)
++        if reopen { r.controller.stopPreview(); r.controller.beginSelection(sound: .forest) }
++        else { r.controller.chooseSound(.forest) }
++        _ = await start(r, player: fresh, index: 1)
++        r.factory.resolve(0, succeeds ? .success(old) : .failure(PreviewFailure.unavailable))
++        await oldTask.value
++        XCTAssertEqual(r.controller.phase, .playing); XCTAssertNil(r.controller.errorMessage)
++        XCTAssertEqual(r.controller.selectedSound, .forest)
++        XCTAssertEqual(fresh.playCalls, 1); XCTAssertEqual(fresh.stopCalls, 0); XCTAssertEqual(old.playCalls, 0)
++        if succeeds { XCTAssertEqual(old.stopCalls, 1) }
++        r.controller.stopPreview(); await finishStop(r, player: fresh)
++    }
++    // 깨짐: setActive(true)/beginSelection이 재생을 자동 재개한다.
++    func testAC22_재생중_이탈과_비활성화후_복귀는_자동재생하지_않는다() async {
++        for inactive in [false, true] {
++            let r = rig(); let p = PreviewPlayer("A", log: r.log)
++            _ = await start(r, player: p)
++            if inactive { r.controller.setActive(false) } else { r.controller.stopPreview() }
++            await finishStop(r, player: p)
++            if inactive { r.controller.setActive(true) } else { r.controller.beginSelection(sound: .bus) }
++            XCTAssertEqual(r.controller.phase, .stopped, "inactive=\(inactive)")
++            XCTAssertEqual(r.factory.sounds, [.bus]); XCTAssertEqual(p.playCalls, 1)
++        }
++    }
++}
++
++@MainActor private final class PreviewEventLog { var events: [String] = [] }
++private enum PreviewFailure: Error { case unavailable }
++@MainActor private final class PreviewPlayer: SoundPreviewPlaying {
++    let name: String; let log: PreviewEventLog; let prepareResult: Bool; let playResult: Bool
++    let stopped = XCTestExpectation(description: "player stopped")
++    private(set) var playCalls = 0; private(set) var stopCalls = 0
++    var playObservation: XCTestExpectation?
++    var volume: Float = 1 { didSet { log.events.append("\(name).volume=\(volume)") } }
++    var numberOfLoops: Int = 0 { didSet { log.events.append("\(name).loops=\(numberOfLoops)") } }
++    init(_ name: String, log: PreviewEventLog, prepare: Bool = true, play: Bool = true) {
++        self.name = name; self.log = log; prepareResult = prepare; playResult = play
++    }
++    func prepareToPlay() -> Bool { log.events.append("\(name).prepare"); return prepareResult }
++    func play() -> Bool {
++        playCalls += 1; log.events.append("\(name).play"); playObservation?.fulfill()
++        return playResult
++    }
++    func setVolume(_ volume: Float, fadeDuration: TimeInterval) { log.events.append("\(name).fade=\(volume):\(fadeDuration)") }
++    func stop() { stopCalls += 1; log.events.append("\(name).stop"); if stopCalls == 1 { stopped.fulfill() } }
++}
++@MainActor private final class PreviewFactoryGate {
++    private(set) var sounds: [JourneySound] = []
++    private var pending: [Int: CheckedContinuation<any SoundPreviewPlaying, Error>] = [:]
++    private var arrivals: [Int: XCTestExpectation] = [:]
++    func arrival(_ index: Int) -> XCTestExpectation {
++        if let e = arrivals[index] { return e }
++        let e = XCTestExpectation(description: "factory request \(index)"); arrivals[index] = e
++        if sounds.count > index { e.fulfill() }
++        return e
++    }
++    func make(_ sound: JourneySound) async throws -> any SoundPreviewPlaying {
++        let index = sounds.count; let entered = arrival(index); sounds.append(sound)
++        return try await withCheckedThrowingContinuation { c in
++            pending[index] = c; entered.fulfill()
++        }
++    }
++    func resolve(_ index: Int, _ result: Result<any SoundPreviewPlaying, Error>) {
++        guard let c = pending.removeValue(forKey: index) else { XCTFail("factory continuation absent: \(index)"); return }
++        c.resume(with: result)
++    }
++}
++@MainActor private final class PreviewSleepGate {
++    private(set) var durations: [Duration] = []
++    var arrival = XCTestExpectation(description: "fade sleep entered")
++    private var pending: [CheckedContinuation<Void, Never>] = []
++    func sleep(_ duration: Duration) async {
++        durations.append(duration)
++        await withCheckedContinuation { c in pending.append(c); arrival.fulfill() }
++    }
++    func releaseAll() {
++        let continuations = pending; pending.removeAll()
++        arrival = XCTestExpectation(description: "next fade sleep entered")
++        continuations.forEach { $0.resume() }
++    }
++}
+diff --git a/ios/FocusMateUITests/PreparationEditorUITests.swift b/ios/FocusMateUITests/PreparationEditorUITests.swift
+new file mode 100644
+index 0000000..d52dad5
+--- /dev/null
++++ b/ios/FocusMateUITests/PreparationEditorUITests.swift
+@@ -0,0 +1,308 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class PreparationEditorUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    override func setUp() { super.setUp(); continueAfterFailure = false }
++
++    // 깨짐: 최초 준비가 태그를 자동 선택하거나 숨겨야 할 입력/활성 confirm을 노출한다.
++    func testAC1_InitialHubHasNoTagOrTaskAndBusSound() throws {
++        let h = try openPreparation()
++        XCTAssertTrue(h.app.staticTexts["무엇을 할까요?"].exists)
++        for id in ["reading", "study", "work", "rest"] { XCTAssertFalse(h.element("preparation.tag.\(id)").isSelected, id) }
++        XCTAssertFalse(h.element("preparation.task").exists)
++        XCTAssertFalse(h.element("preparation.confirm").isEnabled)
++        XCTAssertEqual(try h.diagnostic("test.preparedPreparation"), "null")
++        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
++        attachScreen(h.app, named: "w03-preparation-empty")
++    }
++    // 깨짐: 태그 선택이 할 일을 자동 입력하거나 공백 할 일을 확정한다.
++    func testAC2_AC3_SelectingTagShowsEmptyTaskAndWhitespaceCannotConfirm() throws {
++        let h = try openPreparation()
++        tap(h.element("preparation.tag.reading"), in: h.app)
++        XCTAssertTrue(h.element("preparation.tag.reading").isSelected)
++        XCTAssertFalse(h.element("preparation.tag.study").isSelected)
++        let field = h.element("preparation.task")
++        XCTAssertTrue(field.waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("preparation.confirm").isEnabled)
++        replaceText(field, in: h.app, with: "   ")
++        XCTAssertFalse(h.element("preparation.confirm").isEnabled)
++        XCTAssertEqual(try h.diagnostic("test.preparedPreparation"), "null")
++        replaceText(field, in: h.app, with: "책 읽기")
++        wait(h.element("preparation.confirm"), key: "enabled", equals: true)
++    }
++    // 깨짐: 81단위 입력을 허용하거나 전달 task trim/W02/태그/소리가 틀리거나 실제 여행을 만든다.
++    func testAC4_AC12_TaskLimitAndTrimmedPreparationRequestPreserveJourney() throws {
++        let h = try openPreparation(); try selectTask(h, text: String(repeating: "a", count: 81))
++        wait(h.element("preparation.task"), key: "value", equals: String(repeating: "a", count: 80))
++        tap(h.element("preparation.confirm"), in: h.app)
++        XCTAssertEqual(try preparation(h)["task"] as? String, String(repeating: "a", count: 80))
++        replaceText(h.element("preparation.task"), in: h.app, with: "  책 읽기  ")
++        tap(h.element("preparation.confirm"), in: h.app)
++        let payload = try preparation(h)
++        XCTAssertEqual(payload["task"] as? String, "책 읽기")
++        XCTAssertEqual(payload["sound"] as? String, "bus")
++        let journey = try XCTUnwrap(payload["journey"] as? [String: Any])
++        XCTAssertEqual(journey["minutes"] as? Int, 60); XCTAssertEqual(journey["busID"] as? String, "2014")
++        XCTAssertEqual(journey["busNumber"] as? String, "2014")
++        XCTAssertEqual(journey["destination"] as? String, "성수동"); XCTAssertEqual(journey["stops"] as? Int, 12)
++        let tag = try XCTUnwrap(payload["tag"] as? [String: Any])
++        XCTAssertEqual(tag["id"] as? String, "reading"); XCTAssertEqual(tag["name"] as? String, "독서")
++        XCTAssertTrue(h.element("screen.preparation").exists)
++        let snapshotJourney = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
++        XCTAssertTrue(snapshotJourney["active"] is NSNull)
++        attachScreen(h.app, named: "w03-preparation-filled")
++    }
++    // 깨짐: 빈/중복/21단위 이름이 저장되거나 오류인데 시트가 닫힌다.
++    func testAC5_AC6_AC7_AC8_TagEditorDefaultsAndInvalidNamesKeepEditorOpen() throws {
++        let h = try openPreparation(); tap(h.element("preparation.addTag"), in: h.app)
++        let name = h.element("tagEditor.name")
++        XCTAssertTrue(name.waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("tagEditor.icon.reading").isSelected)
++        XCTAssertTrue(h.element("tagEditor.color.sand").isSelected)
++        for invalid in ["   ", "독서", String(repeating: "x", count: 21)] {
++            replaceText(name, in: h.app, with: invalid); tap(h.element("tagEditor.save"), in: h.app)
++            XCTAssertTrue(h.element("tagEditor.error").waitForExistence(timeout: timeout), invalid)
++            XCTAssertTrue(name.exists, invalid)
++            XCTAssertFalse(h.element("preparation.task").exists, invalid)
++        }
++        tap(h.element("tagEditor.cancel"), in: h.app)
++        wait(name, key: "exists", equals: false)
++        XCTAssertFalse(h.element("preparation.task").exists)
++    }
++    // 깨짐: 유효 태그 저장이 추가/선택하지 않거나 아이콘/색/이름/할 일을 잃는다.
++    func testAC9_NewTagPreservesTaskAndDeliversDevelopmentGreenDefinition() throws {
++        let h = try openPreparation(); try selectTask(h, text: "구현하기")
++        tap(h.element("preparation.addTag"), in: h.app)
++        replaceText(h.element("tagEditor.name"), in: h.app, with: "  개발 시간  ")
++        tap(h.element("tagEditor.icon.development"), in: h.app)
++        tap(h.element("tagEditor.color.green"), in: h.app)
++        XCTAssertEqual(try stringValue(h.element("tagEditor.name")), "  개발 시간  ")
++        XCTAssertTrue(h.element("tagEditor.icon.development").isSelected)
++        XCTAssertTrue(h.element("tagEditor.color.green").isSelected)
++        attachScreen(h.app, named: "w03-tag-editor")
++        tap(h.element("tagEditor.save"), in: h.app)
++        wait(h.element("tagEditor.name"), key: "exists", equals: false)
++        XCTAssertEqual(try stringValue(h.element("preparation.task")), "구현하기")
++        let newTag = h.app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "preparation.tag.", "개발 시간")).firstMatch
++        XCTAssertTrue(newTag.exists); XCTAssertTrue(newTag.isSelected)
++        tap(h.element("preparation.confirm"), in: h.app)
++        let tag = try XCTUnwrap(try preparation(h)["tag"] as? [String: Any])
++        XCTAssertEqual(tag["name"] as? String, "개발 시간"); XCTAssertEqual(tag["icon"] as? String, "development")
++        XCTAssertEqual(tag["color"] as? String, "green")
++    }
++    // 깨짐: 태그 취소가 추가/선택/할 일을 바꾸거나 시간 왕복이 초안을 reset한다.
++    func testAC10_AC11_TagCancelAndTimeRoundTripKeepDraft() throws {
++        let h = try openPreparation(); try selectTask(h, text: "유지할 일")
++        let before = try h.diagnostic("test.journeySelection")
++        let tags = h.app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "preparation.tag.")).count
++        tap(h.element("preparation.addTag"), in: h.app)
++        replaceText(h.element("tagEditor.name"), in: h.app, with: "버릴 태그")
++        tap(h.element("tagEditor.cancel"), in: h.app)
++        wait(h.element("tagEditor.name"), key: "exists", equals: false)
++        XCTAssertEqual(h.app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "preparation.tag.")).count, tags)
++        XCTAssertTrue(h.element("preparation.tag.reading").isSelected)
++        h.app.navigationBars.buttons.firstMatch.tap()
++        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
++        tap(h.element("time.proceed"), in: h.app)
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try stringValue(h.element("preparation.task")), "유지할 일")
++        XCTAssertTrue(h.element("preparation.tag.reading").isSelected)
++        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
++        XCTAssertEqual(try h.diagnostic("test.journeySelection"), before)
++    }
++    // 깨짐: 소리 선택만으로 재생하거나 취소가 확정값을 변경하거나 저장이 전달되지 않는다.
++    func testAC14_AC15_AC16_FiveSoundOptionsCancelAndSaveUseSeparateValues() throws {
++        let h = try openPreparation(); try selectTask(h, text: "읽기")
++        tap(h.element("preparation.sound"), in: h.app)
++        let titles = ["bus": "버스", "rainBus": "비 오는 버스", "subway": "지하철", "forest": "숲속", "none": "소리 없음"]
++        for (id, title) in titles {
++            let option = h.element("sound.option.\(id)")
++            XCTAssertTrue(option.exists, id); XCTAssertEqual(option.label, title, id)
++        }
++        XCTAssertTrue(h.element("sound.option.bus").isSelected)
++        XCTAssertEqual(h.element("sound.preview").label, "선택한 소리 미리 듣기")
++        attachScreen(h.app, named: "w03-sound-options")
++        tap(h.element("sound.option.forest"), in: h.app)
++        waitPreview(h, phase: "stopped")
++        tap(h.element("sound.cancel"), in: h.app)
++        wait(h.element("sound.save"), key: "exists", equals: false)
++        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
++        XCTAssertEqual(try stringValue(h.element("preparation.task")), "읽기")
++        tap(h.element("preparation.sound"), in: h.app)
++        tap(h.element("sound.option.rainBus"), in: h.app)
++        XCTAssertEqual(h.element("sound.save").label, "소리 저장")
++        tap(h.element("sound.save"), in: h.app)
++        wait(h.element("sound.preview"), key: "exists", equals: false)
++        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "비 오는 버스")
++        tap(h.element("preparation.confirm"), in: h.app)
++        XCTAssertEqual(try preparation(h)["sound"] as? String, "rainBus")
++    }
++    // 깨짐: none 미리듣기가 loading/playing으로 전이하거나 none이 준비 완료를 막는다.
++    func testAC19_NoneStaysSilentAndCanConfirm() throws {
++        let h = try openPreparation(); try selectTask(h, text: "조용히 읽기")
++        tap(h.element("preparation.sound"), in: h.app); tap(h.element("sound.option.none"), in: h.app)
++        let preview = h.element("sound.preview")
++        if preview.isEnabled { tap(preview, in: h.app) }
++        waitPreview(h, phase: "stopped")
++        XCTAssertEqual(try soundState(h)["selectedSound"] as? String, "none")
++        tap(h.element("sound.save"), in: h.app)
++        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "소리 없음")
++        tap(h.element("preparation.confirm"), in: h.app)
++        XCTAssertEqual(try preparation(h)["sound"] as? String, "none")
++    }
++    // 깨짐: 오디오 실패가 안내/무음/선택유지를 제공하지 않거나 저장/준비를 막는다.
++    func testAC20_AudioFailureStillAllowsSaveAndConfirm() throws {
++        let h = try openPreparation(extra: ["--fm-ui-sound", "fail"]); try selectTask(h, text: "오류에도 읽기")
++        tap(h.element("preparation.sound"), in: h.app); tap(h.element("sound.option.subway"), in: h.app)
++        tap(h.element("sound.preview"), in: h.app)
++        XCTAssertTrue(h.element("sound.error").waitForExistence(timeout: timeout))
++        waitPreview(h, phase: "stopped")
++        XCTAssertTrue(h.element("sound.option.subway").isSelected)
++        XCTAssertFalse(h.element("sound.error").label.isEmpty)
++        XCTAssertTrue(h.element("sound.save").isEnabled)
++        attachScreen(h.app, named: "w03-sound-error")
++        tap(h.element("sound.save"), in: h.app)
++        wait(h.element("sound.error"), key: "exists", equals: false)
++        tap(h.element("preparation.confirm"), in: h.app)
++        XCTAssertEqual(try preparation(h)["sound"] as? String, "subway")
++    }
++    // 깨짐: 실제 preview 토글/시트 dismiss가 stop하지 않거나 재열기가 자동 재생한다.
++    func testAC17_AC18_AC22_RealPreviewStartStopAndDismissReopenStayStopped() throws {
++        let h = try openPreparation(); tap(h.element("preparation.sound"), in: h.app)
++        tap(h.element("sound.preview"), in: h.app); waitPreview(h, phase: "playing")
++        XCTAssertEqual(h.element("sound.preview").label, "미리 듣기 중지")
++        XCTAssertEqual(try stringValue(h.element("sound.preview")), "playing")
++        tap(h.element("sound.preview"), in: h.app); waitPreview(h, phase: "stopped")
++        tap(h.element("sound.preview"), in: h.app); waitPreview(h, phase: "playing")
++        tap(h.element("sound.cancel"), in: h.app)
++        wait(h.element("sound.preview"), key: "exists", equals: false); waitPreview(h, phase: "stopped")
++        tap(h.element("preparation.sound"), in: h.app); waitPreview(h, phase: "stopped")
++        XCTAssertEqual(h.element("sound.preview").label, "선택한 소리 미리 듣기")
++        XCTAssertEqual(try stringValue(h.element("sound.preview")), "stopped")
++    }
++    // 깨짐: 실제 최대 글자 설정을 반영하지 않거나 마지막태그/+·입력·소리저장·confirm에 닿지 못한다.
++    func testAC24_AC25_MaximumTextHasNamedReachableControlsAndClosedEditorsDisappear() throws {
++        let h = try openPreparation(extra: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
++        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
++        XCTAssertFalse(h.element("preparation.task").exists)
++        let rest = h.element("preparation.tag.rest"); tap(rest, in: h.app)
++        XCTAssertEqual(rest.label, "휴식"); XCTAssertTrue(rest.isSelected)
++        tap(h.element("preparation.addTag"), in: h.app)
++        XCTAssertFalse(h.element("tagEditor.name").label.isEmpty)
++        tap(h.element("tagEditor.cancel"), in: h.app)
++        wait(h.element("tagEditor.name"), key: "exists", equals: false)
++        let field = h.element("preparation.task")
++        XCTAssertEqual(field.label, "할 일 한 줄"); replaceText(field, in: h.app, with: "쉬기")
++        tap(h.element("preparation.sound"), in: h.app)
++        tap(h.element("sound.option.forest"), in: h.app); tap(h.element("sound.save"), in: h.app)
++        wait(h.element("sound.save"), key: "exists", equals: false)
++        XCTAssertFalse(h.element("sound.option.forest").exists)
++        let confirm = h.element("preparation.confirm")
++        XCTAssertEqual(confirm.label, "승차권 보기"); XCTAssertTrue(confirm.isEnabled)
++        tap(confirm, in: h.app); XCTAssertEqual(try preparation(h)["task"] as? String, "쉬기")
++        attachScreen(h.app, named: "w03-preparation-largest")
++    }
++    // 깨짐: W03 편집/확정이 저장 bytes를 바꾸거나 세션 초안/추가태그를 재실행에 복원한다.
++    func testAC23_RelaunchClearsSessionDraftAndPreservesOriginalBytes() throws {
++        let h = try openPreparation(); let original = try h.diagnostic("test.persistedBytes")
++        try selectTask(h, text: "세션 할 일")
++        tap(h.element("preparation.addTag"), in: h.app)
++        replaceText(h.element("tagEditor.name"), in: h.app, with: "세션 태그")
++        tap(h.element("tagEditor.save"), in: h.app); wait(h.element("tagEditor.name"), key: "exists", equals: false)
++        tap(h.element("preparation.sound"), in: h.app); tap(h.element("sound.option.forest"), in: h.app)
++        tap(h.element("sound.save"), in: h.app); tap(h.element("preparation.confirm"), in: h.app)
++        _ = try preparation(h)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), original)
++        h.relaunch(); try enterPreparation(h)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), original)
++        XCTAssertFalse(h.element("preparation.task").exists)
++        XCTAssertFalse(h.element("preparation.tag.reading").isSelected)
++        XCTAssertEqual(h.app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "preparation.tag.")).count, 4)
++        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
++        XCTAssertEqual(try h.diagnostic("test.preparedPreparation"), "null")
++    }
++
++    private func attachScreen(_ app: XCUIApplication, named name: String) {
++        let attachment = XCTAttachment(screenshot: app.screenshot())
++        attachment.name = name
++        attachment.lifetime = .keepAlways
++        add(attachment)
++    }
++
++    private func openPreparation(extra: [String] = []) throws -> FocusMateUIHarness {
++        let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: extra)
++        try enterPreparation(h); return h
++    }
++    private func enterPreparation(_ h: FocusMateUIHarness) throws {
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        h.app.buttons["여행 준비"].tap()
++        let wheel = h.app.pickerWheels.firstMatch
++        XCTAssertTrue(wheel.waitForExistence(timeout: timeout)); wheel.adjust(toPickerWheelValue: "60분")
++        tap(h.element("time.candidate.2014"), in: h.app); tap(h.element("time.proceed"), in: h.app)
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++    }
++    private func selectTask(_ h: FocusMateUIHarness, text: String) throws {
++        tap(h.element("preparation.tag.reading"), in: h.app)
++        replaceText(h.element("preparation.task"), in: h.app, with: text)
++    }
++    private func tap(_ target: XCUIElement, in app: XCUIApplication) {
++        XCTAssertTrue(target.waitForExistence(timeout: timeout), target.identifier)
++        var attempts = 0
++        while !target.isHittable && attempts < 6 {
++            if target.identifier.hasPrefix("preparation.tag.") || target.identifier == "preparation.addTag" {
++                let tags = app.scrollViews["preparation.tags"]
++                XCTAssertTrue(tags.waitForExistence(timeout: timeout)); tags.swipeLeft()
++            } else if target.identifier.hasPrefix("tagEditor.icon.") || target.identifier.hasPrefix("tagEditor.color.") {
++                let fields = app.scrollViews["tagEditor.fields"]
++                XCTAssertTrue(fields.waitForExistence(timeout: timeout)); fields.swipeUp()
++            } else { app.swipeUp() }
++            attempts += 1
++        }
++        XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)"); target.tap()
++    }
++    private func replaceText(_ field: XCUIElement, in app: XCUIApplication, with text: String) {
++        tap(field, in: app)
++        let old = field.value as? String ?? ""
++        // 빈 TextField의 value가 placeholder인 경우 실제 입력을 지우지 않아도 delete는 무해하다.
++        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count) + text)
++    }
++    private func stringValue(_ element: XCUIElement) throws -> String {
++        XCTAssertTrue(element.waitForExistence(timeout: timeout)); return try XCTUnwrap(element.value as? String)
++    }
++    private func wait(_ element: XCUIElement, key: String, equals value: Any) {
++        let condition = XCTNSPredicateExpectation(predicate: NSPredicate { object, _ in
++            guard let observed = object as? XCUIElement else { return false }
++            switch key {
++            case "enabled": return observed.isEnabled == (value as? Bool)
++            case "exists": return observed.exists == (value as? Bool)
++            case "value": return observed.value as? String == value as? String
++            default: return false
++            }
++        }, object: element)
++        XCTAssertEqual(XCTWaiter.wait(for: [condition], timeout: timeout), .completed, "\(element.identifier).\(key)")
++    }
++    private func object(_ raw: String) throws -> [String: Any] {
++        let data = try XCTUnwrap(raw.data(using: .utf8)); return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++    private func preparation(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        let condition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            guard let raw = h.element("test.preparedPreparation").value as? String,
++                  let data = raw.data(using: .utf8) else { return false }
++            return (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
++        }, object: nil)
++        XCTAssertEqual(XCTWaiter.wait(for: [condition], timeout: timeout), .completed)
++        return try object(h.diagnostic("test.preparedPreparation"))
++    }
++    private func soundState(_ h: FocusMateUIHarness) throws -> [String: Any] { try object(h.diagnostic("test.soundPreview")) }
++    private func waitPreview(_ h: FocusMateUIHarness, phase: String) {
++        let condition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            guard let raw = h.element("test.soundPreview").value as? String,
++                  let data = raw.data(using: .utf8),
++                  let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
++            return state["phase"] as? String == phase
++        }, object: nil)
++        XCTAssertEqual(XCTWaiter.wait(for: [condition], timeout: timeout), .completed, "preview phase \(phase)")
++    }
++}
+diff --git a/ios/FocusMateUITests/PreparationFlowUITests.swift b/ios/FocusMateUITests/PreparationFlowUITests.swift
+index f3e56cc..758e36d 100644
+--- a/ios/FocusMateUITests/PreparationFlowUITests.swift
++++ b/ios/FocusMateUITests/PreparationFlowUITests.swift
+@@ -29,18 +29,19 @@ final class PreparationFlowUITests: XCTestCase {
+         XCTAssertTrue(journey["active"] is NSNull)
+     }
+ 
+-    func testPreparationScreenExposesOnlyTheBackButtonAndNoCompletionAction() throws {
++    // 깨짐: 준비 허브가 초기 태그/할 일을 자동 선택하거나 confirm을 활성화한다.
++    func testPreparationHubInitiallyHasNoSelectedTagHiddenTaskAndDisabledConfirm() throws {
+         let app = launchCardOnly()
+         try openTimeScreenFromSearch(in: app)
+         try selectSixtyMinutesBus2014(in: app)
+         element("time.proceed", in: app).tap()
+         XCTAssertTrue(element("screen.preparation", in: app).waitForExistence(timeout: timeout))
+-
+-        let navigationBar = app.navigationBars.firstMatch
+-        XCTAssertTrue(navigationBar.waitForExistence(timeout: timeout))
+-        XCTAssertEqual(navigationBar.buttons.count, 1)
+-        XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
+-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "완료")).count, 0)
++        XCTAssertTrue(app.staticTexts["무엇을 할까요?"].exists)
++        for id in ["reading", "study", "work", "rest"] {
++            XCTAssertFalse(element("preparation.tag.\(id)", in: app).isSelected, id)
++        }
++        XCTAssertFalse(element("preparation.task", in: app).exists)
++        XCTAssertFalse(element("preparation.confirm", in: app).isEnabled)
+     }
+ 
+     func testRapidDoubleTapOnProceedPushesPreparationOnlyOnce() throws {

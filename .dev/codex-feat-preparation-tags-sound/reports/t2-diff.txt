@@ -1,0 +1,330 @@
+Full diff >500: stat + production hunks. Shared AppModel/PreparationDraft prior T1 logic already accepted; T2 owns controller registration/resourceName only. Read actual two named test files.
+ ios/FocusMate/AVSoundPreviewPlayer.swift           |  29 ++
+ ios/FocusMate/AppModel.swift                       |  48 +++-
+ ios/FocusMate/PreparationDraft.swift               |  96 +++++++
+ .../Resources/Audio/travel-bus-rain-v2.wav         | Bin 0 -> 7680044 bytes
+ ios/FocusMate/Resources/Audio/travel-bus-v2.wav    | Bin 0 -> 7680044 bytes
+ ios/FocusMate/Resources/Audio/travel-forest-v2.wav | Bin 0 -> 7680044 bytes
+ ios/FocusMate/Resources/Audio/travel-subway-v2.wav | Bin 0 -> 7680044 bytes
+ ios/FocusMate/SoundPreviewController.swift         | 104 +++++++
+ ios/FocusMateTests/AudioResourceTests.swift        |  49 ++++
+ .../SoundPreviewControllerTests.swift              | 313 +++++++++++++++++++++
+ 10 files changed, 638 insertions(+), 1 deletion(-)
+
+diff --git a/ios/FocusMate/AVSoundPreviewPlayer.swift b/ios/FocusMate/AVSoundPreviewPlayer.swift
+new file mode 100644
+index 0000000..bece3c8
+--- /dev/null
++++ b/ios/FocusMate/AVSoundPreviewPlayer.swift
+@@ -0,0 +1,29 @@
++import Foundation
++import AVFoundation
++
++@MainActor final class AVSoundPreviewPlayer: SoundPreviewPlaying {
++    private enum ResourceIssue: Error { case missingResource }
++    private let player: AVAudioPlayer
++    var volume: Float {
++        get { player.volume }
++        set { player.volume = newValue }
++    }
++    var numberOfLoops: Int {
++        get { player.numberOfLoops }
++        set { player.numberOfLoops = newValue }
++    }
++    init(url: URL) throws { player = try AVAudioPlayer(contentsOf: url) }
++    func prepareToPlay() -> Bool { player.prepareToPlay() }
++    func play() -> Bool { player.play() }
++    func setVolume(_ volume: Float, fadeDuration: TimeInterval) {
++        player.setVolume(volume, fadeDuration: fadeDuration)
++    }
++    func stop() { player.stop() }
++    static func make(sound: JourneySound, bundle: Bundle = .main) async throws -> any SoundPreviewPlaying {
++        guard let name = sound.resourceName,
++              let url = bundle.url(forResource: name, withExtension: "wav") else {
++            throw ResourceIssue.missingResource
++        }
++        return try AVSoundPreviewPlayer(url: url)
++    }
++}
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index 9010404..5a64d19 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -26,6 +26,48 @@ final class AppModel {
+     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
+     private var isHoldingIssuedCard = false
+     var journeyPlan = JourneyPlanDraft()
++    var preparation = PreparationDraft()
++    private var storedConfirmedPreparation: PreparedJourneyDetails?
++    private var storedPreparationRequest: PreparedJourneyDetails?
++    private var currentPreparationDetails: PreparedJourneyDetails? {
++        guard launchState == .ready(.main), let journey = preparedJourney,
++              preparation.isComplete, let tag = preparation.selectedTag else { return nil }
++        return PreparedJourneyDetails(journey: journey, tag: tag,
++                                      task: preparation.trimmedTask, sound: preparation.sound)
++    }
++    var confirmedPreparation: PreparedJourneyDetails? {
++        storedConfirmedPreparation == currentPreparationDetails ? storedConfirmedPreparation : nil
++    }
++    var preparationRequest: PreparedJourneyDetails? {
++        storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
++    }
++    var canConfirmPreparation: Bool { currentPreparationDetails != nil }
++    @discardableResult func confirmPreparation() -> Bool {
++        guard let details = currentPreparationDetails else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return false
++        }
++        storedConfirmedPreparation = details
++        storedPreparationRequest = details
++        return true
++    }
++    func consumePreparationRequest() -> PreparedJourneyDetails? {
++        guard let current = currentPreparationDetails,
++              storedConfirmedPreparation == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        guard let request = storedPreparationRequest else { return nil }
++        guard request == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        storedPreparationRequest = nil
++        return request
++    }
+     private(set) var recoveryFailure: StorageRecoveryIssue?
+     private(set) var isRecovering = false
+     private(set) var hasAttemptedCleanup = false
+@@ -33,11 +75,15 @@ final class AppModel {
+     var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
+     private let store: LocalSnapshotStore
+     private let cardFactory: CardSnapshotFactory
++    let soundPreview: SoundPreviewController
+     @ObservationIgnored private var hasLoaded = false
+     @ObservationIgnored private var hasAttemptedSupplement = false
+-    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init()) {
++    init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
++         soundPreview: SoundPreviewController? = nil) {
+         self.store = store
+         self.cardFactory = cardFactory
++        self.soundPreview = soundPreview ?? SoundPreviewController(sound: .bus,
++            makePlayer: { try await AVSoundPreviewPlayer.make(sound: $0) })
+     }
+
+     /// 화면 분기는 이 값만 쓴다. `launchState`는 로딩·실패 판단과 모델 내부 가드용이다.
+diff --git a/ios/FocusMate/PreparationDraft.swift b/ios/FocusMate/PreparationDraft.swift
+new file mode 100644
+index 0000000..578baa6
+--- /dev/null
++++ b/ios/FocusMate/PreparationDraft.swift
+@@ -0,0 +1,96 @@
++import Foundation
++
++enum PreparationTagIcon: String, CaseIterable, Equatable {
++    case reading, work, study, development, writing
++    var title: String { "" }
++    var systemImage: String { "" }
++}
++enum PreparationTagColor: String, CaseIterable, Equatable {
++    case sand, blue, purple, green, pink
++    var title: String { "" }
++}
++struct PreparationTag: Identifiable, Equatable {
++    let id: String
++    let name: String
++    let icon: PreparationTagIcon
++    let color: PreparationTagColor
++    static let defaults = [
++        PreparationTag(id: "reading", name: "독서", icon: .reading, color: .sand),
++        PreparationTag(id: "study", name: "공부", icon: .study, color: .purple),
++        PreparationTag(id: "work", name: "업무", icon: .work, color: .blue),
++        PreparationTag(id: "rest", name: "휴식", icon: .reading, color: .green),
++    ]
++}
++struct TagEditorDraft: Equatable {
++    var name: String = ""
++    var icon: PreparationTagIcon = .reading
++    var color: PreparationTagColor = .sand
++}
++enum TagNameIssue: Error, Equatable {
++    case empty, tooLong, duplicate
++    var message: String { "" }
++}
++enum JourneySound: String, CaseIterable, Equatable {
++    case bus, rainBus, subway, forest, none
++    var title: String { "" }
++    var systemImage: String { "" }
++    var resourceName: String? {
++        switch self {
++        case .bus: "travel-bus-v2"
++        case .rainBus: "travel-bus-rain-v2"
++        case .subway: "travel-subway-v2"
++        case .forest: "travel-forest-v2"
++        case .none: nil
++        }
++    }
++}
++struct PreparationDraft: Equatable {
++    private(set) var tags = PreparationTag.defaults
++    private(set) var selectedTagID: String?
++    private(set) var task = ""
++    private(set) var sound: JourneySound = .bus
++    var selectedTag: PreparationTag? { tags.first { $0.id == selectedTagID } }
++    var trimmedTask: String { task.trimmingCharacters(in: .whitespacesAndNewlines) }
++    var isComplete: Bool { selectedTag != nil && !trimmedTask.isEmpty }
++    @discardableResult mutating func chooseTag(id: String) -> Bool {
++        guard tags.contains(where: { $0.id == id }) else { return false }
++        selectedTagID = id
++        return true
++    }
++    mutating func setTask(_ value: String) {
++        var result = String.UnicodeScalarView()
++        var units = 0
++        for scalar in value.unicodeScalars {
++            let width = scalar.value > 0xFFFF ? 2 : 1
++            guard units + width <= 80 else { break }
++            result.append(scalar)
++            units += width
++        }
++        task = String(result)
++    }
++    mutating func setSound(_ value: JourneySound) { sound = value }
++    @discardableResult mutating func saveTag(_ editor: TagEditorDraft) -> Result<PreparationTag, TagNameIssue> {
++        let name = editor.name.trimmingCharacters(in: .whitespacesAndNewlines)
++        guard !name.isEmpty else { return .failure(.empty) }
++        guard name.utf16.count <= 20 else { return .failure(.tooLong) }
++        let normalized = name.precomposedStringWithCompatibilityMapping.lowercased()
++        guard !tags.contains(where: {
++            $0.name.precomposedStringWithCompatibilityMapping.lowercased() == normalized
++        }) else { return .failure(.duplicate) }
++        let tag = PreparationTag(id: UUID().uuidString,
++                                 name: name,
++                                 icon: editor.icon, color: editor.color)
++        tags.append(tag)
++        selectedTagID = tag.id
++        return .success(tag)
++    }
++}
++struct PreparedJourneyDetails: Equatable {
++    let journey: JourneySelection
++    let tag: PreparationTag
++    let task: String
++    let sound: JourneySound
++    var originName: String { RouteStops.name(at: journey.origin.index) }
++    var boundLabel: String { RouteStops.boundLabel(from: journey.origin) }
++    var distanceText: String { JourneyPlanner.distanceText(stops: journey.stops) }
++}
+diff --git a/ios/FocusMate/SoundPreviewController.swift b/ios/FocusMate/SoundPreviewController.swift
+new file mode 100644
+index 0000000..f65c92a
+--- /dev/null
++++ b/ios/FocusMate/SoundPreviewController.swift
+@@ -0,0 +1,104 @@
++import Foundation
++import Observation
++
++@MainActor protocol SoundPreviewPlaying: AnyObject {
++    var volume: Float { get set }
++    var numberOfLoops: Int { get set }
++    func prepareToPlay() -> Bool
++    func play() -> Bool
++    func setVolume(_ volume: Float, fadeDuration: TimeInterval)
++    func stop()
++}
++
++@MainActor @Observable final class SoundPreviewController {
++    enum Phase: Equatable { case stopped, loading, playing }
++    private(set) var selectedSound: JourneySound
++    private(set) var phase: Phase = .stopped
++    private(set) var errorMessage: String?
++    private let makePlayer: @MainActor (JourneySound) async throws -> any SoundPreviewPlaying
++    private let sleep: @MainActor (Duration) async -> Void
++    private var player: (any SoundPreviewPlaying)?
++    private var stopTask: Task<Void, Never>?
++    private var generation = 0
++    private var active = true
++    init(sound: JourneySound,
++         makePlayer: @escaping @MainActor (JourneySound) async throws -> any SoundPreviewPlaying,
++         sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
++        selectedSound = sound
++        self.makePlayer = makePlayer
++        self.sleep = sleep
++    }
++    func chooseSound(_ sound: JourneySound) {
++        stopPreview()
++        selectedSound = sound
++        errorMessage = nil
++    }
++    func togglePreview() async {
++        guard phase == .stopped else { stopPreview(); return }
++        guard active, selectedSound != .none, !Task.isCancelled else { return }
++        generation += 1
++        let token = generation
++        let sound = selectedSound
++        phase = .loading
++        errorMessage = nil
++        do {
++            let candidate = try await makePlayer(sound)
++            guard isCurrent(token, sound: sound) else {
++                candidate.stop()
++                if generation == token { phase = .stopped }
++                return
++            }
++            if let stopTask { await stopTask.value }
++            guard isCurrent(token, sound: sound) else {
++                candidate.stop()
++                if generation == token { phase = .stopped }
++                return
++            }
++            candidate.volume = 0
++            candidate.numberOfLoops = -1
++            guard candidate.prepareToPlay(), candidate.play() else {
++                candidate.stop()
++                phase = .stopped
++                errorMessage = "소리를 재생하지 못했어요. 선택은 그대로 저장할 수 있어요."
++                return
++            }
++            candidate.setVolume(1, fadeDuration: 0.12)
++            player = candidate
++            phase = .playing
++        } catch {
++            guard isCurrent(token, sound: sound) else {
++                if generation == token { phase = .stopped }
++                return
++            }
++            phase = .stopped
++            errorMessage = "소리를 재생하지 못했어요. 선택은 그대로 저장할 수 있어요."
++        }
++    }
++    func stopPreview() {
++        generation += 1
++        phase = .stopped
++        guard let player else { return }
++        self.player = nil
++        player.setVolume(0, fadeDuration: 0.06)
++        let sleep = self.sleep
++        stopTask = Task {
++            await sleep(.milliseconds(60))
++            player.stop()
++        }
++    }
++    func setActive(_ active: Bool) {
++        self.active = active
++        if !active { stopPreview() }
++    }
++    func beginSelection(sound: JourneySound) {
++        stopPreview()
++        active = true
++        selectedSound = sound
++        phase = .stopped
++        errorMessage = nil
++    }
++
++    private func isCurrent(_ token: Int, sound: JourneySound) -> Bool {
++        token == generation && active && selectedSound == sound && !Task.isCancelled
++    }
++}

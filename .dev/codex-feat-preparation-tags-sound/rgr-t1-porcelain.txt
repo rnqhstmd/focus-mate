@@ -1,0 +1,8 @@
+M  .dev/plan.md
+ M ios/FocusMate/AppModel.swift
+ M ios/FocusMate/TimeSelectionView.swift
+?? .dev/codex-feat-preparation-tags-sound/
+?? ios/FocusMate/PreparationDraft.swift
+?? ios/FocusMateTests/PreparationDetailsTests.swift
+?? ios/FocusMateTests/PreparationDraftTests.swift
+?? ios/FocusMateTests/PreparationModelTests.swift

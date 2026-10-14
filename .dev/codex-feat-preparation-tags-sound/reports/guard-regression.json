@@ -1,0 +1,7 @@
+[
+  "reproduced wrong main denial for feature target",
+  "proposed patch allows feature with no pending gate",
+  "proposed patch still denies real main target",
+  "chained main mutation and misleading message still denied",
+  "proposed patch still requires pending TDD verification"
+]

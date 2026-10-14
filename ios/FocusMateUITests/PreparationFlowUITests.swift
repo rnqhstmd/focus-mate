@@ -29,18 +29,19 @@ final class PreparationFlowUITests: XCTestCase {
         XCTAssertTrue(journey["active"] is NSNull)
     }
 
-    func testPreparationScreenExposesOnlyTheBackButtonAndNoCompletionAction() throws {
+    // 깨짐: 준비 허브가 초기 태그/할 일을 자동 선택하거나 confirm을 활성화한다.
+    func testPreparationHubInitiallyHasNoSelectedTagHiddenTaskAndDisabledConfirm() throws {
         let app = launchCardOnly()
         try openTimeScreenFromSearch(in: app)
         try selectSixtyMinutesBus2014(in: app)
         element("time.proceed", in: app).tap()
         XCTAssertTrue(element("screen.preparation", in: app).waitForExistence(timeout: timeout))
-
-        let navigationBar = app.navigationBars.firstMatch
-        XCTAssertTrue(navigationBar.waitForExistence(timeout: timeout))
-        XCTAssertEqual(navigationBar.buttons.count, 1)
-        XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
-        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "완료")).count, 0)
+        XCTAssertTrue(app.staticTexts["무엇을 할까요?"].exists)
+        for id in ["reading", "study", "work", "rest"] {
+            XCTAssertFalse(element("preparation.tag.\(id)", in: app).isSelected, id)
+        }
+        XCTAssertFalse(element("preparation.task", in: app).exists)
+        XCTAssertFalse(element("preparation.confirm", in: app).isEnabled)
     }
 
     func testRapidDoubleTapOnProceedPushesPreparationOnlyOnce() throws {

@@ -5,6 +5,7 @@ import Observation
 struct UITestBootstrap {
     let fileURL: URL
     let seed: String?
+    let shouldFailSound: Bool
     let shouldFailSave: Bool
     let issueHold: IssueHold
     enum IssueHold { case standard, manual }
@@ -24,6 +25,9 @@ struct UITestBootstrap {
         let save = try argument("--fm-ui-save")
         guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
         shouldFailSave = save == "fail"
+        let sound = try argument("--fm-ui-sound")
+        guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
+        shouldFailSound = sound == "fail"
         let hold = try argument("--fm-ui-issue-hold")
         guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
         issueHold = hold == "manual" ? .manual : .standard
@@ -83,6 +87,11 @@ struct UITestBootstrap {
         guard let original = model.snapshot else { throw SetupIssue.invalidSaveState }
         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+    }
+
+    @MainActor func makeSoundPreview() -> SoundPreviewController? {
+        guard shouldFailSound else { return nil }
+        return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
     }
 
     @MainActor func makeFeedbackRecorder() -> UITestFeedbackRecorder { UITestFeedbackRecorder() }

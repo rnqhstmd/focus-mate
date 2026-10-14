@@ -1,0 +1,46 @@
+Production byte-identical to accepted T2 code, mutation removed. Only independently authored test-strengthening diff:
+--- original-red-tests
++++ ios/FocusMateTests/SoundPreviewControllerTests.swift
+@@ -141,13 +141,18 @@
+         r.controller.stopPreview()
+         await fulfillment(of: [r.sleeper.arrival], timeout: 1)
+         if reopen { r.controller.beginSelection(sound: .forest) } else { r.controller.chooseSound(.forest) }
+-        let entered = expectation(description: "new request entered")
+-        let task = Task { entered.fulfill(); await r.controller.togglePreview() }
+-        await fulfillment(of: [entered], timeout: 1)
++        let prematurePlay = expectation(description: "B must not play while A stop gate is held")
++        prematurePlay.isInverted = true
++        b.playObservation = prematurePlay
++        let task = Task { await r.controller.togglePreview() }
++        await fulfillment(of: [r.factory.arrival(1)], timeout: 1)
++        r.factory.resolve(1, .success(b))
++        await fulfillment(of: [prematurePlay], timeout: 0.1)
+         XCTAssertEqual(a.stopCalls, 0); XCTAssertEqual(b.playCalls, 0)
++        b.playObservation = nil
+         r.sleeper.releaseAll()
+-        await fulfillment(of: [a.stopped, r.factory.arrival(1)], timeout: 1)
+-        r.factory.resolve(1, .success(b)); await task.value
++        await fulfillment(of: [a.stopped], timeout: 1)
++        await task.value
+         XCTAssertEqual(r.controller.phase, .playing)
+         let events = r.log.events
+         XCTAssertLessThan(events.firstIndex(of: "A.stop") ?? Int.max, events.firstIndex(of: "B.play") ?? -1)
+@@ -266,13 +271,17 @@
+     let name: String; let log: PreviewEventLog; let prepareResult: Bool; let playResult: Bool
+     let stopped = XCTestExpectation(description: "player stopped")
+     private(set) var playCalls = 0; private(set) var stopCalls = 0
++    var playObservation: XCTestExpectation?
+     var volume: Float = 1 { didSet { log.events.append("\(name).volume=\(volume)") } }
+     var numberOfLoops: Int = 0 { didSet { log.events.append("\(name).loops=\(numberOfLoops)") } }
+     init(_ name: String, log: PreviewEventLog, prepare: Bool = true, play: Bool = true) {
+         self.name = name; self.log = log; prepareResult = prepare; playResult = play
+     }
+     func prepareToPlay() -> Bool { log.events.append("\(name).prepare"); return prepareResult }
+-    func play() -> Bool { playCalls += 1; log.events.append("\(name).play"); return playResult }
++    func play() -> Bool {
++        playCalls += 1; log.events.append("\(name).play"); playObservation?.fulfill()
++        return playResult
++    }
+     func setVolume(_ volume: Float, fadeDuration: TimeInterval) { log.events.append("\(name).fade=\(volume):\(fadeDuration)") }
+     func stop() { stopCalls += 1; log.events.append("\(name).stop"); if stopCalls == 1 { stopped.fulfill() } }
+ }

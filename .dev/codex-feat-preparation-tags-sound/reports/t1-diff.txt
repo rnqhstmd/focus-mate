@@ -1,0 +1,155 @@
+Full diff >500 lines. Stat + production hunks; read named test files for test review.
+ ios/FocusMate/AppModel.swift                     |  42 +++
+ ios/FocusMate/PreparationDraft.swift             |  88 +++++
+ ios/FocusMateTests/PreparationDetailsTests.swift |  18 +
+ ios/FocusMateTests/PreparationDraftTests.swift   | 188 +++++++++++
+ ios/FocusMateTests/PreparationModelTests.swift   | 403 +++++++++++++++++++++++
+ 5 files changed, 739 insertions(+)
+
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index 9010404..c9602fb 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -26,6 +26,48 @@ final class AppModel {
+     /// 발급 직후 저장 단계는 이미 다음 단계지만, 사용자가 진행할 때까지 발급 완료 화면을 유지한다. 메모리에만 둔다(A3).
+     private var isHoldingIssuedCard = false
+     var journeyPlan = JourneyPlanDraft()
++    var preparation = PreparationDraft()
++    private var storedConfirmedPreparation: PreparedJourneyDetails?
++    private var storedPreparationRequest: PreparedJourneyDetails?
++    private var currentPreparationDetails: PreparedJourneyDetails? {
++        guard launchState == .ready(.main), let journey = preparedJourney,
++              preparation.isComplete, let tag = preparation.selectedTag else { return nil }
++        return PreparedJourneyDetails(journey: journey, tag: tag,
++                                      task: preparation.trimmedTask, sound: preparation.sound)
++    }
++    var confirmedPreparation: PreparedJourneyDetails? {
++        storedConfirmedPreparation == currentPreparationDetails ? storedConfirmedPreparation : nil
++    }
++    var preparationRequest: PreparedJourneyDetails? {
++        storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
++    }
++    var canConfirmPreparation: Bool { currentPreparationDetails != nil }
++    @discardableResult func confirmPreparation() -> Bool {
++        guard let details = currentPreparationDetails else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return false
++        }
++        storedConfirmedPreparation = details
++        storedPreparationRequest = details
++        return true
++    }
++    func consumePreparationRequest() -> PreparedJourneyDetails? {
++        guard let current = currentPreparationDetails,
++              storedConfirmedPreparation == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        guard let request = storedPreparationRequest else { return nil }
++        guard request == current else {
++            storedConfirmedPreparation = nil
++            storedPreparationRequest = nil
++            return nil
++        }
++        storedPreparationRequest = nil
++        return request
++    }
+     private(set) var recoveryFailure: StorageRecoveryIssue?
+     private(set) var isRecovering = false
+     private(set) var hasAttemptedCleanup = false
+diff --git a/ios/FocusMate/PreparationDraft.swift b/ios/FocusMate/PreparationDraft.swift
+new file mode 100644
+index 0000000..71c896d
+--- /dev/null
++++ b/ios/FocusMate/PreparationDraft.swift
+@@ -0,0 +1,88 @@
++import Foundation
++
++enum PreparationTagIcon: String, CaseIterable, Equatable {
++    case reading, work, study, development, writing
++    var title: String { "" }
++    var systemImage: String { "" }
++}
++enum PreparationTagColor: String, CaseIterable, Equatable {
++    case sand, blue, purple, green, pink
++    var title: String { "" }
++}
++struct PreparationTag: Identifiable, Equatable {
++    let id: String
++    let name: String
++    let icon: PreparationTagIcon
++    let color: PreparationTagColor
++    static let defaults = [
++        PreparationTag(id: "reading", name: "독서", icon: .reading, color: .sand),
++        PreparationTag(id: "study", name: "공부", icon: .study, color: .purple),
++        PreparationTag(id: "work", name: "업무", icon: .work, color: .blue),
++        PreparationTag(id: "rest", name: "휴식", icon: .reading, color: .green),
++    ]
++}
++struct TagEditorDraft: Equatable {
++    var name: String = ""
++    var icon: PreparationTagIcon = .reading
++    var color: PreparationTagColor = .sand
++}
++enum TagNameIssue: Error, Equatable {
++    case empty, tooLong, duplicate
++    var message: String { "" }
++}
++enum JourneySound: String, CaseIterable, Equatable {
++    case bus, rainBus, subway, forest, none
++    var title: String { "" }
++    var systemImage: String { "" }
++    var resourceName: String? { nil }
++}
++struct PreparationDraft: Equatable {
++    private(set) var tags = PreparationTag.defaults
++    private(set) var selectedTagID: String?
++    private(set) var task = ""
++    private(set) var sound: JourneySound = .bus
++    var selectedTag: PreparationTag? { tags.first { $0.id == selectedTagID } }
++    var trimmedTask: String { task.trimmingCharacters(in: .whitespacesAndNewlines) }
++    var isComplete: Bool { selectedTag != nil && !trimmedTask.isEmpty }
++    @discardableResult mutating func chooseTag(id: String) -> Bool {
++        guard tags.contains(where: { $0.id == id }) else { return false }
++        selectedTagID = id
++        return true
++    }
++    mutating func setTask(_ value: String) {
++        var result = String.UnicodeScalarView()
++        var units = 0
++        for scalar in value.unicodeScalars {
++            let width = scalar.value > 0xFFFF ? 2 : 1
++            guard units + width <= 80 else { break }
++            result.append(scalar)
++            units += width
++        }
++        task = String(result)
++    }
++    mutating func setSound(_ value: JourneySound) { sound = value }
++    @discardableResult mutating func saveTag(_ editor: TagEditorDraft) -> Result<PreparationTag, TagNameIssue> {
++        let name = editor.name.trimmingCharacters(in: .whitespacesAndNewlines)
++        guard !name.isEmpty else { return .failure(.empty) }
++        guard name.utf16.count <= 20 else { return .failure(.tooLong) }
++        let normalized = name.precomposedStringWithCompatibilityMapping.lowercased()
++        guard !tags.contains(where: {
++            $0.name.precomposedStringWithCompatibilityMapping.lowercased() == normalized
++        }) else { return .failure(.duplicate) }
++        let tag = PreparationTag(id: UUID().uuidString,
++                                 name: name,
++                                 icon: editor.icon, color: editor.color)
++        tags.append(tag)
++        selectedTagID = tag.id
++        return .success(tag)
++    }
++}
++struct PreparedJourneyDetails: Equatable {
++    let journey: JourneySelection
++    let tag: PreparationTag
++    let task: String
++    let sound: JourneySound
++    var originName: String { RouteStops.name(at: journey.origin.index) }
++    var boundLabel: String { RouteStops.boundLabel(from: journey.origin) }
++    var distanceText: String { JourneyPlanner.distanceText(stops: journey.stops) }
++}

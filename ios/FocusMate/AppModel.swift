@@ -4,7 +4,6 @@ import Observation
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
     case preparation, records, settings, profile, time
-    case cardStudio
     var title: String {
         switch self {
         case .time: "시간 선택"
@@ -12,7 +11,6 @@ enum Destination: String, Hashable, CaseIterable {
         case .records: "기록"
         case .settings: "설정"
         case .profile: "마이페이지"
-        case .cardStudio: "카드 꾸미기"
         }
     }
 }
@@ -259,3 +257,26 @@ final class AppModel {
     }
 }
 extension AppModel: CardIssuing {}
+
+extension AppModel: CardCustomizationSaving {
+    func beginCardCustomization() -> CardCustomizationController? {
+        guard case .ready = launchState, let snapshot, snapshot.cardIssued,
+              let card = snapshot.currentCard else { return nil }
+        return CardCustomizationController(card: card, saver: self)
+    }
+
+    func saveCardStyle(_ style: CardStyle, forCardID id: String) -> Bool {
+        guard case .ready = launchState, let snapshot, snapshot.cardIssued,
+              let card = snapshot.currentCard, card.id == id else {
+            if case let .failed(issue) = launchState { saveFailure = .writeBlocked(issue) }
+            else { saveFailure = .notReady }
+            return false
+        }
+        let cards = CardSection(items: snapshot.cards.items.map {
+            $0.id == id ? $0.updating(style: style) : $0
+        })
+        return save(snapshot.updating(cards: cards))
+    }
+
+    var currentCardStyle: CardStyle { snapshot?.currentCard?.style ?? .standard }
+}

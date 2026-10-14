@@ -18,6 +18,7 @@ final class LocalSnapshotStore {
     private let backupID: () -> UUID
     private let writeBackup: (Data, URL) throws -> Void
     private let removeData: (URL) throws -> Void
+    private let validateCardPhotos: (CardStyle) throws -> Void
 
     init(fileURL: URL,
          readData: @escaping (URL) throws -> Data = { try Data(contentsOf: $0) },
@@ -25,7 +26,8 @@ final class LocalSnapshotStore {
          writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) },
          backupID: @escaping () -> UUID = UUID.init,
          writeBackup: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .withoutOverwriting) },
-         removeData: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) }) {
+         removeData: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) },
+         validateCardPhotos: @escaping (CardStyle) throws -> Void = ImageIOCardPhotoProcessor.validateStoredStyle) {
         self.fileURL = fileURL
         self.readData = readData
         self.createDirectory = createDirectory
@@ -33,6 +35,7 @@ final class LocalSnapshotStore {
         self.backupID = backupID
         self.writeBackup = writeBackup
         self.removeData = removeData
+        self.validateCardPhotos = validateCardPhotos
     }
 
     func recoverySource() -> RecoverySource {
@@ -54,7 +57,8 @@ final class LocalSnapshotStore {
         default: break
         }
         do {
-            _ = try SnapshotCodec.decode(original)
+            let snapshot = try SnapshotCodec.decode(original)
+            try validatePhotos(in: snapshot)
             throw StorageRecoveryIssue.notRequired
         } catch let issue as StorageIssue {
             switch issue {
@@ -86,12 +90,21 @@ final class LocalSnapshotStore {
         do { data = try readData(fileURL) }
         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
         catch { throw StorageIssue.unreadable }
-        return try SnapshotCodec.decode(data)
+        let snapshot = try SnapshotCodec.decode(data)
+        try validatePhotos(in: snapshot)
+        return snapshot
+    }
+
+    private func validatePhotos(in snapshot: AppSnapshot) throws {
+        do {
+            for card in snapshot.cards.items { try validateCardPhotos(card.style) }
+        } catch { throw StorageIssue.invalidState(.invalidCardPhoto) }
     }
 
     func save(_ snapshot: AppSnapshot) throws {
         do { try snapshot.validate() }
         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
+        try validatePhotos(in: snapshot)
         do { _ = try load() }
         catch let issue as StorageIssue { throw StorageIssue.writeBlocked(issue) }
         do {

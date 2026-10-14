@@ -1,0 +1,159 @@
+ .dev/codex-feat-card-customization/.gitignore      |   38 +
+ .../actual-answer.json                             |    1 +
+ .../answered-question.json                         |   25 +
+ .../baseline-node-results.json                     |    1 +
+ .../baseline-warning-counts.json                   |    1 +
+ .dev/codex-feat-card-customization/baseline.md     |    3 +
+ .dev/codex-feat-card-customization/codemap.md      |   31 +
+ .dev/codex-feat-card-customization/decisions.md    |   62 +
+ .dev/codex-feat-card-customization/design-draft.md |  139 +
+ .dev/codex-feat-card-customization/design.md       |  253 +
+ .../notice-final-execution.json                    |   49 +
+ .../notice-policy-source-before.swift              |  245 +
+ .../notice-policy-source-diff.txt                  |   47 +
+ .../notice-policy-test-hashes-after.json           |   25 +
+ .dev/codex-feat-card-customization/prd.md          |  231 +
+ .../question-input.json                            |    1 +
+ .../reports/api-notes.md                           |   16 +
+ .../reports/design-reference/pencil-read.txt       |  119 +
+ .../reports/design-reference/x3PCFl.png            |  Bin 0 -> 642009 bytes
+ .../reports/design-reference/z3LCu.png             |  Bin 0 -> 90084 bytes
+ .../reports/design-review.md                       |   13 +
+ .../reports/final-review-r1.md                     |  106 +
+ .../reports/final-review.md                        |  104 +
+ .../reports/final-security.md                      |   19 +
+ .../reports/final-verification.md                  |   39 +
+ .../reports/notice-policy-fix.md                   |   65 +
+ .../reports/notice-policy-red.md                   |  188 +
+ .../reports/photos-library-preparation.md          |   87 +
+ .../reports/reduce-motion-setting.md               |   42 +
+ .../reports/review-deferred.md                     |    8 +
+ .../reports/review-diff.txt                        | 6304 ++++++++++++++++++++
+ .../reports/review-stat.txt                        |  146 +
+ .../reports/simulator-check.md                     |   62 +
+ .../reports/simulator/failures/manifest.json       |    3 +
+ .../final/t5-actual-photos-six-preserved.png       |  Bin 0 -> 2084690 bytes
+ .../final/t5-actual-profile-save-success-vo.png    |  Bin 0 -> 169078 bytes
+ .../final/t5-actual-r40-overlap-handle.png         |  Bin 0 -> 217584 bytes
+ .../t5-actual-same-uuid-after-source-deletion.png  |  Bin 0 -> 134691 bytes
+ .../final/t5-artwork-fixed-xxxl-basic-start.png    |  Bin 0 -> 224719 bytes
+ .../reports/simulator/issuance-start.png           |  Bin 0 -> 141447 bytes
+ .../reports/simulator/live-00.png                  |  Bin 0 -> 140781 bytes
+ .../reports/simulator/live-01.png                  |  Bin 0 -> 203884 bytes
+ .../reports/simulator/live-02.png                  |  Bin 0 -> 141531 bytes
+ .../reports/simulator/live-03.png                  |  Bin 0 -> 72557 bytes
+ .../reports/simulator/live-04.png                  |  Bin 0 -> 72557 bytes
+ .../reports/simulator/live-05.png                  |  Bin 0 -> 72911 bytes
+ .../reports/simulator/live-06.png                  |  Bin 0 -> 193894 bytes
+ .../reports/simulator/live-07.png                  |  Bin 0 -> 199717 bytes
+ .../reports/simulator/live-08.png                  |  Bin 0 -> 128256 bytes
+ .../reports/simulator/live-09.png                  |  Bin 0 -> 3207185 bytes
+ .../reports/simulator/live-10.png                  |  Bin 0 -> 71834 bytes
+ .../reports/simulator/live-11.png                  |  Bin 0 -> 129377 bytes
+ .../reports/simulator/t1-after-selection.png       |  Bin 0 -> 165622 bytes
+ .../reports/simulator/t1-preparation.png           |  Bin 0 -> 71079 bytes
+ .../reports/t1-impl.md                             |  135 +
+ .../reports/t1-red-diagnostic.md                   |  224 +
+ .../reports/t1-red.md                              |  204 +
+ .../reports/t2-declarations.md                     |   41 +
+ .../reports/t2-diff.txt                            | 1783 ++++++
+ .../reports/t2-fixture-input.md                    |    6 +
+ .../reports/t2-impl.md                             |  126 +
+ .../reports/t2-memory-red.md                       |  696 +++
+ .../reports/t2-png-draft.md                        |  282 +
+ .../reports/t2-r1-diff.txt                         | 2504 ++++++++
+ .../reports/t2-r1-review.md                        |   97 +
+ .../reports/t2-red.md                              | 1946 ++++++
+ .../reports/t2-review.md                           |   89 +
+ .../reports/t3-declarations.md                     |   19 +
+ .../reports/t3-impl.md                             |   47 +
+ .../reports/t3-red.md                              | 1017 ++++
+ .../reports/t3-test-draft.md                       |  121 +
+ .../reports/t4-declarations.md                     |   28 +
+ .../reports/t4-impl.md                             |   37 +
+ .../reports/t4-journey-contract.md                 |   47 +
+ .../reports/t4-red.md                              |  540 ++
+ .../reports/t4-test-draft.md                       |  550 ++
+ .../reports/t5-artwork-fix.md                      |   55 +
+ .../reports/t5-coordinate-investigation.md         |   89 +
+ .../reports/t5-diff-r1.txt                         | 1478 +++++
+ .../reports/t5-diff-r2.txt                         |  961 +++
+ .../reports/t5-diff.txt                            | 1408 +++++
+ .../reports/t5-fixture-staging.md                  |   60 +
+ .../reports/t5-gesture-fix.md                      |   53 +
+ .../reports/t5-impl.md                             |   73 +
+ .../reports/t5-native-alert-helper-draft.md        |   68 +
+ .../reports/t5-native-selection-red-draft.md       |  197 +
+ .../reports/t5-orchestration-context.md            |    2 +
+ .../reports/t5-passface-accessibility-red.md       |  121 +
+ .../reports/t5-placement-diagnostic.md             |   70 +
+ .../reports/t5-r2-review.md                        |   79 +
+ .../reports/t5-reach-author-repair.md              |   55 +
+ .../reports/t5-red.md                              |   51 +
+ .../reports/t5-review.md                           |   64 +
+ .../reports/t5-runtime-supplement.md               |  292 +
+ .../reports/t5-slider-author-draft.md              |   62 +
+ .../reports/t5-slider-author-repair.md             |   37 +
+ .../reports/t5-test-author-repair.md               |   69 +
+ .../reports/t5-ui-draft.md                         |   92 +
+ .../reports/t5-ui-fix-impl.md                      |   65 +
+ .../reports/t5-visual-handoff.md                   |   56 +
+ .../reports/t5-visual-precheck.md                  |   30 +
+ .../reports/t5-visual-preflight.md                 |   94 +
+ .../reports/t5-visual-verification.md              |   98 +
+ .../reports/t5-w11-integration-red.md              |  762 +++
+ .../reports/test-warning-cleanup-draft.md          |   59 +
+ .../reports/testability-draft.md                   |   35 +
+ .../reports/testability-final.md                   |    2 +
+ .../reports/voiceover-api-notes.md                 |    9 +
+ .../reports/voiceover-test-plan.md                 |  371 ++
+ .../reports/w03-main-integration.md                |  120 +
+ .../reports/warnings-baseline-evidence.md          |    8 +
+ .dev/codex-feat-card-customization/state.md        |  117 +
+ .../t5-w11-integration-source-diff.txt             |  130 +
+ .dev/codex-feat-card-customization/trust-ledger.md |   30 +
+ .../w03-composed-source-diff.txt                   |  142 +
+ .../w03-font-identical-evidence.json               |   14 +
+ .../w03-source-preservation-evidence.json          |   18 +
+ .../w03-test-hashes-after.json                     |   24 +
+ .dev/plan.md                                       |    2 +-
+ ios/FocusMate/AppModel+Profile.swift               |   13 +-
+ ios/FocusMate/AppModel.swift                       |   25 +-
+ ios/FocusMate/AppSnapshot.swift                    |    5 +
+ ios/FocusMate/CardCustomizationController.swift    |  273 +
+ ios/FocusMate/CardCustomizationView.swift          |  326 +
+ ios/FocusMate/CardIssuanceController.swift         |    2 +-
+ ios/FocusMate/CardPhotoProcessor.swift             |  371 ++
+ ios/FocusMate/CardSection.swift                    |   10 +-
+ ios/FocusMate/CardStyle.swift                      |   96 +
+ ios/FocusMate/DestinationScreen.swift              |    3 +-
+ ios/FocusMate/FocusMateApp.swift                   |    1 +
+ ios/FocusMate/FontCatalog.swift                    |   21 +
+ ios/FocusMate/LocalSnapshotStore.swift             |   19 +-
+ ios/FocusMate/PassFace.swift                       |   98 +-
+ ios/FocusMate/ProfileView.swift                    |    4 +-
+ ios/FocusMate/RootView.swift                       |  121 +-
+ ios/FocusMate/SnapshotCodec.swift                  |   39 +-
+ ios/FocusMate/UITestBootstrap.swift                |  102 +-
+ .../CardCustomizationAppModelTests.swift           |  463 ++
+ .../CardCustomizationControllerTestDoubles.swift   |   76 +
+ .../CardCustomizationControllerTests.swift         |  833 +++
+ .../CardCustomizationNoticeMessageTests.swift      |  127 +
+ ios/FocusMateTests/CardPhotoIntegrityTests.swift   |  194 +
+ ios/FocusMateTests/CardPhotoMemoryTests.swift      |  298 +
+ ios/FocusMateTests/CardPhotoProcessorTests.swift   |  282 +
+ ios/FocusMateTests/CardPhotoTestFixtures.swift     |  154 +
+ ios/FocusMateTests/CardStorageTests.swift          |   13 +-
+ ios/FocusMateTests/CardStyleStorageTests.swift     |  352 ++
+ ios/FocusMateTests/CardStyleTests.swift            |  319 +
+ ios/FocusMateTests/CardSupplementTests.swift       |    2 +-
+ .../PassFaceAccessibilityTests.swift               |   64 +
+ ios/FocusMateTests/ProfileModelTests.swift         |   66 +-
+ ios/FocusMateTests/RecordStorageTests.swift        |   12 +-
+ ios/FocusMateTests/SnapshotCodecTests.swift        |   12 +-
+ ios/FocusMateTests/StorageRecoveryTests.swift      |    2 +-
+ ios/FocusMateTests/StorageV2Tests.swift            |   12 +-
+ .../CardCustomizationFlowTests.swift               |  666 +++
+ ios/FocusMateUITests/ProfileUITests.swift          |  134 +-
+ .../SimulatorLargeTextRecoveryTests.swift          |  185 +
+ 158 files changed, 32287 insertions(+), 142 deletions(-)

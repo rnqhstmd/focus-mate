@@ -1,0 +1,1408 @@
+diff --git a/ios/FocusMate/CardCustomizationView.swift b/ios/FocusMate/CardCustomizationView.swift
+new file mode 100644
+index 0000000..07474c1
+--- /dev/null
++++ b/ios/FocusMate/CardCustomizationView.swift
+@@ -0,0 +1,336 @@
++import SwiftUI
++import PhotosUI
++
++@MainActor
++struct CardCustomizationView: View {
++    @Bindable var controller: CardCustomizationController
++    @Binding var importTask: Task<Void, Never>?
++    let close: () -> Void
++    let saved: () -> Void
++    @State private var pickerItems: [PhotosPickerItem] = []
++    @State private var confirmsExit = false
++    @State private var gestureOrigin: CardPhoto?
++    @State private var gestureTranslation: CGSize = .zero
++    @State private var resizing = false
++    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
++    @AccessibilityFocusState private var noticeFocused: Bool
++    #if DEBUG
++    var testBootstrap: UITestBootstrap?
++    @State private var importGate = UITestCardImportGate()
++    #endif
++
++    private let background = Color(red: 13 / 255, green: 15 / 255, blue: 16 / 255)
++    private let secondary = Color(red: 184 / 255, green: 191 / 255, blue: 197 / 255)
++    private var locked: Bool { controller.isImporting || controller.isSaving }
++    private var selected: CardPhoto? { controller.draft.photos.first { $0.id == controller.selectedPhotoID } }
++    private let palette: [(String, String, CardColor)] = [
++        ("standard", "기본 검정", .standard),
++        ("slate", "슬레이트", CardColor(red: 75 / 255, green: 86 / 255, blue: 97 / 255)),
++        ("blue", "짙은 파랑", CardColor(red: 36 / 255, green: 65 / 255, blue: 84 / 255)),
++        ("mauve", "모브", CardColor(red: 103 / 255, green: 83 / 255, blue: 100 / 255)),
++        ("sand", "샌드", CardColor(red: 217 / 255, green: 205 / 255, blue: 185 / 255)),
++        ("ivory", "아이보리", CardColor(red: 241 / 255, green: 238 / 255, blue: 231 / 255))
++    ]
++
++    var body: some View {
++        VStack(spacing: 0) {
++            header
++            ScrollView {
++                VStack(alignment: .leading, spacing: 0) {
++                    preview
++                    VStack(alignment: .leading, spacing: 6) {
++                        Text("사진을 자유롭게 배치해보세요.")
++                        Text("IC 칩은 고정되고, 카드 밖은 잘려요.")
++                    }.font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(secondary)
++                        .padding(.top, 16)
++                    colors.padding(.top, 30)
++                    photos.padding(.top, 10)
++                    if let selected { tools(selected).padding(.top, 20) }
++                    if controller.isImporting {
++                        ProgressView("사진을 불러오는 중이에요.").padding(.top, 16)
++                    }
++                    if let notice = controller.notice {
++                        Text(noticeMessage(notice)).font(FontCatalog.text(12, relativeTo: .caption))
++                            .foregroundStyle(secondary).padding(.top, 16)
++                            .accessibilityIdentifier("cardCustomization.notice")
++                            .accessibilityFocused($noticeFocused)
++                    }
++                    Text("사진은 이 기기에만 저장돼요. 최대 6장까지 넣을 수 있어요.")
++                        .font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(secondary).padding(.top, 18)
++                    Button { controller.restoreDefault() } label: {
++                        Text("기본 검정 카드로 되돌리기").underline()
++                    }
++                        .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(secondary)
++                        .frame(minHeight: 44).padding(.top, 22)
++                        .disabled(locked).accessibilityIdentifier("cardCustomization.restoreDefault")
++                }
++                .padding(.horizontal, 24).padding(.bottom, 24)
++                .frame(maxWidth: .infinity, alignment: .leading)
++            }.accessibilityElement(children: .contain).accessibilityIdentifier("cardCustomization.body")
++        }
++        .background(background).foregroundStyle(.white)
++        .safeAreaInset(edge: .bottom, spacing: 0) {
++            Button {
++                #if DEBUG
++                testBootstrap?.cardSaveFailure.arm()
++                #endif
++                if controller.save() { saved() }
++            } label: {
++                Text("이 카드로 저장하기").font(FontCatalog.text(15, relativeTo: .headline))
++                    .frame(maxWidth: .infinity).padding(.vertical, 16)
++            }.foregroundStyle(.black).background(.white, in: Capsule())
++                .disabled(locked).accessibilityIdentifier("cardCustomization.save")
++                .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 3).background(background)
++        }
++        #if DEBUG
++        .overlay(alignment: .topTrailing) {
++            if let testBootstrap, testBootstrap.photoManifestURL != nil {
++                Group {
++                    if testBootstrap.cardImportManual && controller.isImporting {
++                        Button { importGate.release() } label: {
++                            Text("사진 입력 해제").font(.system(size: 1)).foregroundStyle(.clear)
++                                .frame(width: 44, height: 44).contentShape(Rectangle())
++                        }.accessibilityLabel("사진 입력 해제").accessibilityIdentifier("test.releaseCardImport")
++                    } else {
++                        Button {
++                            startImport(testBootstrap.cardPhotoInputs(gate: testBootstrap.cardImportManual ? importGate : nil))
++                        } label: {
++                            Text("테스트 사진 불러오기").font(.system(size: 1)).foregroundStyle(.clear)
++                                .frame(width: 44, height: 44).contentShape(Rectangle())
++                        }.disabled(!controller.canAddPhotos).accessibilityLabel("테스트 사진 불러오기")
++                            .accessibilityIdentifier("test.cardImportFixture")
++                    }
++                }.padding(.trailing, 62).padding(.top, 10)
++            }
++        }
++        #endif
++        .interactiveDismissDisabled()
++        .alert("변경 내용을 버릴까요?", isPresented: $confirmsExit) {
++            Button("변경 버리기", role: .destructive) { close() }.accessibilityIdentifier("cardCustomization.discard")
++            Button("계속 편집", role: .cancel) { controller.continueEditing() }.accessibilityIdentifier("cardCustomization.continueEditing")
++        }
++        .onChange(of: pickerItems) { _, items in
++            guard !items.isEmpty else { return }
++            startImport(items.map { item in CardPhotoInput { try await item.loadTransferable(type: Data.self) } })
++            pickerItems = []
++        }
++        .onChange(of: controller.notice) { _, notice in
++            if let notice {
++                noticeFocused = true
++                SystemAccessibilityAnnouncer().announce(noticeMessage(notice))
++            }
++        }
++    }
++
++    private var header: some View {
++        HStack(spacing: 14) {
++            Button {
++                if controller.requestExit() == .confirmDiscard { confirmsExit = true } else { close() }
++            } label: {
++                Image(systemName: "chevron.left").font(.system(size: 22))
++                    .frame(width: 52, height: 52).overlay(Circle().stroke(.white, lineWidth: 2))
++            }.accessibilityLabel("닫기").accessibilityIdentifier("cardCustomization.close")
++            Text("카드 꾸미기").font(FontCatalog.text(20, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.cardCustomization")
++            Spacer(minLength: 0)
++            Button { controller.undo() } label: { Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44) }
++                .disabled(locked || !controller.canUndo).accessibilityLabel("되돌리기").accessibilityIdentifier("cardCustomization.undo")
++        }.buttonStyle(.plain).padding(.leading, 14).padding(.trailing, 14).padding(.top, 0).padding(.bottom, 20)
++    }
++
++    private var colors: some View {
++        VStack(alignment: .leading, spacing: 8) {
++            Text("배경색").font(FontCatalog.text(15, bold: true, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
++            HStack(spacing: 0) {
++                ForEach(palette, id: \.0) { entry in
++                    let isSelected = entry.2 == controller.draft.background
++                    Button { controller.setBackground(entry.2) } label: {
++                        Circle().fill(entry.2.swiftUIColor).frame(width: 39, height: 39)
++                            .overlay(Circle().stroke(secondary.opacity(0.6), lineWidth: 1))
++                            .overlay { if isSelected { Image(systemName: "checkmark").foregroundStyle(entry.0 == "sand" || entry.0 == "ivory" ? .black : .white) } }
++                            .frame(width: 48, height: 48)
++                            .overlay { if isSelected { Circle().stroke(.white, lineWidth: 2) } }
++                    }.buttonStyle(.plain).accessibilityLabel(entry.1)
++                        .accessibilityAddTraits(isSelected ? .isSelected : [])
++                        .accessibilityIdentifier("cardCustomization.color." + entry.0)
++                }
++            }
++            ColorPicker("직접 고르기", selection: Binding(get: { controller.draft.background.swiftUIColor }, set: { value in
++                let ui = UIColor(value)
++                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
++                if ui.getRed(&r, green: &g, blue: &b, alpha: &a) { controller.setBackground(CardColor(red: r, green: g, blue: b)) }
++            }), supportsOpacity: false)
++            .font(FontCatalog.text(12)).foregroundStyle(secondary).frame(maxWidth: 110, minHeight: 44)
++            .accessibilityIdentifier("cardCustomization.color.custom")
++        }.disabled(locked)
++    }
++
++    private var photos: some View {
++        VStack(alignment: .leading, spacing: 18) {
++            HStack {
++                Text("사진").font(FontCatalog.text(15, bold: true, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
++                Spacer()
++                PhotosPicker(selection: $pickerItems, maxSelectionCount: CardCustomizationPolicy.maximumPhotos - controller.draft.photos.count,
++                             selectionBehavior: .ordered, matching: .images) {
++                    Label("사진 추가", systemImage: "plus").font(FontCatalog.text(12))
++                        .padding(.horizontal, 14).frame(minHeight: 43)
++                        .background(Color(red: 24 / 255, green: 29 / 255, blue: 32 / 255), in: RoundedRectangle(cornerRadius: 9))
++                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(secondary.opacity(0.5)))
++                }.disabled(!controller.canAddPhotos).accessibilityIdentifier("cardCustomization.photoPicker")
++            }
++            if controller.draft.photos.isEmpty {
++                Text("좋아하는 풍경, 소중한 순간을 담아보세요.").font(FontCatalog.text(12)).foregroundStyle(secondary)
++            } else {
++                ScrollView(.horizontal) {
++                    HStack(spacing: 10) {
++                        ForEach(Array(controller.draft.photos.enumerated()), id: \.element.id) { index, photo in
++                            Button { controller.selectPhoto(photo.id) } label: {
++                                if let image = UIImage(data: photo.data) {
++                                    Image(uiImage: image).resizable().scaledToFill().frame(width: 58, height: 58).clipped()
++                                        .clipShape(RoundedRectangle(cornerRadius: 10))
++                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(controller.selectedPhotoID == photo.id ? .white : .clear, lineWidth: 2))
++                                }
++                            }.buttonStyle(.plain).disabled(locked)
++                                .accessibilityLabel("사진 \(index + 1)")
++                                .accessibilityAddTraits(controller.selectedPhotoID == photo.id ? .isSelected : [])
++                                .accessibilityIdentifier("cardCustomization.photo." + photo.id.uuidString)
++                        }
++                    }.padding(3)
++                }.accessibilityIdentifier("cardCustomization.photos")
++            }
++        }
++    }
++
++    private func tools(_ photo: CardPhoto) -> some View {
++        VStack(alignment: .leading, spacing: 12) {
++            HStack { Text("사진 크기"); Spacer(); Text("\(Int(photo.widthFraction * 100))%") }
++            Slider(value: Binding(get: { selected?.widthFraction ?? photo.widthFraction }, set: { value in
++                if let p = selected { place(p, width: value) }
++            }), in: CardCustomizationPolicy.widthFractionRange)
++                .accessibilityLabel("사진 크기").accessibilityValue("\(Int(photo.widthFraction * 100))퍼센트")
++                .accessibilityIdentifier("cardCustomization.width")
++            positionControl(photo, axis: "x")
++            positionControl(photo, axis: "y")
++            ViewThatFits(in: .horizontal) {
++                HStack { layerButtons(photo) }
++                VStack(alignment: .leading) { layerButtons(photo) }
++            }
++        }.font(FontCatalog.text(15)).disabled(locked)
++    }
++
++    private func positionControl(_ photo: CardPhoto, axis: String) -> some View {
++        let x = axis == "x"
++        let value = x ? photo.centerX : photo.centerY
++        return VStack(alignment: .leading, spacing: 4) {
++            if dynamicTypeSize.isAccessibilitySize { Text(x ? "가로 위치" : "세로 위치") }
++            HStack {
++                if !dynamicTypeSize.isAccessibilitySize { Text(x ? "가로 위치" : "세로 위치") }
++                Spacer(minLength: 4)
++                Button { place(photo, x: x ? value - 0.05 : nil, y: x ? nil : value - 0.05) } label: { Image(systemName: "minus").frame(width: 44, height: 44) }
++                    .accessibilityLabel(x ? "가로 위치 줄이기" : "세로 위치 줄이기").accessibilityIdentifier("cardCustomization.\(axis).decrease")
++                    .disabled(value <= -1)
++                Text("\(Int((value * 100).rounded()))%").accessibilityValue("\(Int((value * 100).rounded()))퍼센트")
++                Button { place(photo, x: x ? value + 0.05 : nil, y: x ? nil : value + 0.05) } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
++                    .accessibilityLabel(x ? "가로 위치 늘리기" : "세로 위치 늘리기").accessibilityIdentifier("cardCustomization.\(axis).increase")
++                    .disabled(value >= 2)
++            }
++        }.accessibilityElement(children: .contain).accessibilityIdentifier("cardCustomization." + axis)
++    }
++
++    @ViewBuilder private func layerButtons(_ photo: CardPhoto) -> some View {
++        Button("앞으로") { controller.moveLayer(photoID: photo.id, direction: .forward) }
++            .disabled(controller.draft.photos.last?.id == photo.id).accessibilityIdentifier("cardCustomization.forward").frame(minHeight: 44)
++        Button("뒤로") { controller.moveLayer(photoID: photo.id, direction: .backward) }
++            .disabled(controller.draft.photos.first?.id == photo.id).accessibilityIdentifier("cardCustomization.backward").frame(minHeight: 44)
++        Button("삭제", role: .destructive) { controller.deletePhoto(photo.id) }.accessibilityIdentifier("cardCustomization.delete").frame(minHeight: 44)
++    }
++
++    private var preview: some View {
++        GeometryReader { canvas in
++            let size = canvas.size
++            let style = previewStyle(size: size)
++            ZStack {
++                PassFace(style: style).accessibilityHidden(true)
++                if let photo = style.photos.first(where: { $0.id == controller.selectedPhotoID }) {
++                    let rect = photoRect(photo, size: size)
++                    Rectangle().stroke(.white, lineWidth: 1).frame(width: rect.width, height: rect.height)
++                        .overlay(alignment: .bottomTrailing) {
++                            Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 12))
++                                .frame(width: 32, height: 32).background(.white, in: Circle()).foregroundStyle(.black)
++                        }.position(x: rect.midX, y: rect.midY).allowsHitTesting(false).accessibilityHidden(true)
++                }
++                // All gesture hit testing stays on this bounded canvas, even when a photo is enormous or outside it.
++                Color.clear.frame(width: size.width, height: size.height).contentShape(Rectangle())
++                    .gesture(DragGesture().onChanged { value in
++                        if gestureOrigin == nil {
++                            let point = value.startLocation
++                            if let selected, handleRect(selected, size: size).contains(point) {
++                                gestureOrigin = selected; resizing = true
++                            } else if let hit = controller.draft.photos.reversed().first(where: { photoRect($0, size: size).contains(point) }) {
++                                gestureOrigin = hit; resizing = false; controller.selectPhoto(hit.id)
++                            }
++                        }
++                        if gestureOrigin != nil { gestureTranslation = value.translation }
++                    }.onEnded { value in
++                        if let start = gestureOrigin {
++                            if resizing { place(start, width: start.widthFraction + value.translation.width / size.width) }
++                            else { place(start, x: start.centerX + value.translation.width / size.width, y: start.centerY + value.translation.height / size.height) }
++                        }
++                        gestureOrigin = nil; gestureTranslation = .zero
++                    })
++                    .simultaneousGesture(SpatialTapGesture().onEnded { value in
++                        let photo = controller.draft.photos.reversed().first { photoRect($0, size: size).contains(value.location) }
++                        controller.selectPhoto(photo?.id)
++                    })
++                    .allowsHitTesting(!locked).accessibilityHidden(true)
++            }.frame(width: size.width, height: size.height)
++                .contentShape(Rectangle())
++                .clipShape(RoundedRectangle(cornerRadius: 16))
++                .accessibilityRepresentation {
++                    Color.clear.frame(width: size.width, height: size.height)
++                        .accessibilityElement().accessibilityLabel("카드 미리보기")
++                        .accessibilityIdentifier("cardCustomization.preview")
++                }
++        }.aspectRatio(PassFace.aspectRatio, contentMode: .fit)
++    }
++
++    private func photoRect(_ photo: CardPhoto, size: CGSize) -> CGRect {
++        let width = size.width * photo.widthFraction
++        let height = width * Double(photo.pixelHeight) / Double(photo.pixelWidth)
++        return CGRect(x: size.width * photo.centerX - width / 2, y: size.height * photo.centerY - height / 2, width: width, height: height)
++    }
++    private func handleRect(_ photo: CardPhoto, size: CGSize) -> CGRect {
++        let rect = photoRect(photo, size: size)
++        return CGRect(x: rect.maxX - 38, y: rect.maxY - 38, width: 44, height: 44)
++    }
++
++    private func previewStyle(size: CGSize) -> CardStyle {
++        var style = controller.draft
++        if let start = gestureOrigin, let index = style.photos.firstIndex(where: { $0.id == start.id }) {
++            if resizing {
++                style.photos[index].widthFraction = min(2.5, max(0.15, start.widthFraction + gestureTranslation.width / size.width))
++            } else {
++                style.photos[index].centerX = min(2, max(-1, start.centerX + gestureTranslation.width / size.width))
++                style.photos[index].centerY = min(2, max(-1, start.centerY + gestureTranslation.height / size.height))
++            }
++        }
++        return style
++    }
++
++    private func place(_ photo: CardPhoto, x: Double? = nil, y: Double? = nil, width: Double? = nil) {
++        guard let current = controller.draft.photos.first(where: { $0.id == photo.id }) else { return }
++        controller.setPlacement(photoID: photo.id, centerX: x ?? current.centerX, centerY: y ?? current.centerY, widthFraction: width ?? current.widthFraction)
++    }
++    private func startImport(_ inputs: [CardPhotoInput]) {
++        guard !locked else { return }
++        importTask = Task { await controller.importPhotos(inputs) }
++    }
++    private func noticeMessage(_ notice: CardCustomizationNotice) -> String {
++        switch notice {
++        case .maximumPhotos: "사진은 최대 6장까지 넣을 수 있어요."
++        case .importFailed: "사진을 읽지 못했어요. 사진 추가로 다시 선택해주세요."
++        case let .partialImport(failures, omittedCount):
++            omittedCount > 0 ? "사진은 최대 6장까지 넣을 수 있어요. 일부 사진은 추가하지 않았어요." : "사진 \(failures.count)장을 읽지 못했어요. 사진 추가로 다시 선택해주세요."
++        case .saveFailed: "카드 외형을 저장하지 못했어요. 초안은 유지돼요. 저장 버튼으로 다시 시도해주세요."
++        }
++    }
++}
+diff --git a/ios/FocusMate/CardIssuanceController.swift b/ios/FocusMate/CardIssuanceController.swift
+index b8fa2f5..b7fd7be 100644
+--- a/ios/FocusMate/CardIssuanceController.swift
++++ b/ios/FocusMate/CardIssuanceController.swift
+@@ -23,7 +23,7 @@ final class CardIssuanceController {
+ 
+     static let issuingAnnouncement = "카드를 발급하고 있어요."
+     static let issuedAnnouncement = "카드가 발급됐어요. 출발지를 선택해보세요."
+-    static let failedAnnouncement = "카드를 발급하지 못했어요. 다시 시도해 주세요."
++    nonisolated static let failedAnnouncement = "카드를 발급하지 못했어요. 다시 시도해 주세요."
+ 
+     private(set) var phase: Phase = .ready
+     private(set) var focusTarget: FocusTarget?
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+index c8475fe..f6c47c6 100644
+--- a/ios/FocusMate/FocusMateApp.swift
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -13,6 +13,7 @@ struct FocusMateApp: App {
+     #endif
+ 
+     init() {
++        FontCatalog.register()
+         do {
+             let support = try FileManager.default.url(for: .applicationSupportDirectory,
+                 in: .userDomainMask, appropriateFor: nil, create: false)
+diff --git a/ios/FocusMate/FontCatalog.swift b/ios/FocusMate/FontCatalog.swift
+new file mode 100644
+index 0000000..1d455c9
+--- /dev/null
++++ b/ios/FocusMate/FontCatalog.swift
+@@ -0,0 +1,21 @@
++import SwiftUI
++import CoreText
++
++/// Bundled Seoul city fonts; system text remains the fallback if registration fails.
++enum FontCatalog {
++    static func register() {
++        for name in ["SeoulAlrim-Medium", "SeoulAlrim-Bold"] {
++            if let url = Bundle.main.url(forResource: name, withExtension: "ttf") {
++                CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
++            }
++        }
++    }
++
++    static func text(_ size: CGFloat, bold: Bool = false, relativeTo: Font.TextStyle = .body) -> Font {
++        .custom(bold ? "SeoulAlrimTTF-Bold" : "SeoulAlrimTTF-Medium", size: size, relativeTo: relativeTo)
++    }
++}
++
++extension CardColor {
++    var swiftUIColor: Color { Color(.sRGB, red: red, green: green, blue: blue, opacity: 1) }
++}
+diff --git a/ios/FocusMate/Fonts/SOURCE.md b/ios/FocusMate/Fonts/SOURCE.md
+new file mode 100644
+index 0000000..2422e1b
+--- /dev/null
++++ b/ios/FocusMate/Fonts/SOURCE.md
+@@ -0,0 +1,12 @@
++# 서울알림체 출처
++
++제작·제공: 서울특별시.
++공식 소개·이용 안내: https://www.seoul.go.kr/seoul/font.do
++공식 수동 설치 원본: https://www.seoul.go.kr/upload/seoul/font/seoul_font3.zip
++다운로드일: 2026-10-11.
++
++원본 ZIP의 서울알림/TTF/SeoulAlrimTTF-Medium.ttf와 SeoulAlrimTTF-Bold.ttf를 이름만 정리해 로컬 프로토타입에서 사용한다. 폰트 파일은 수정하지 않았다.
++
++서울시 안내: 누구나 무료로 다운로드해 자유롭게 사용 가능. 서체 판매·유상양도·무단배포는 허용하지 않는다. 공식 안내 페이지에는 공공누리 제1유형(출처표시)이 표기되어 있다. 외부 배포 시 공식 이용 조건을 함께 유지한다.
++
++서울알림체는 서울시가 공공안내에 최적화된 기능 서체로 소개한 글꼴이다. 모든 버스 정류장에 실제로 같은 서체가 쓰였다고 확인한 것은 아니다.
+diff --git a/ios/FocusMate/Fonts/SeoulAlrim-Bold.ttf b/ios/FocusMate/Fonts/SeoulAlrim-Bold.ttf
+new file mode 100644
+index 0000000..2518e66
+Binary files /dev/null and b/ios/FocusMate/Fonts/SeoulAlrim-Bold.ttf differ
+diff --git a/ios/FocusMate/Fonts/SeoulAlrim-Medium.ttf b/ios/FocusMate/Fonts/SeoulAlrim-Medium.ttf
+new file mode 100644
+index 0000000..bed00a5
+Binary files /dev/null and b/ios/FocusMate/Fonts/SeoulAlrim-Medium.ttf differ
+diff --git a/ios/FocusMate/PassFace.swift b/ios/FocusMate/PassFace.swift
+index 87ac3c9..ec7daa2 100644
+--- a/ios/FocusMate/PassFace.swift
++++ b/ios/FocusMate/PassFace.swift
+@@ -1,60 +1,80 @@
+ import SwiftUI
+ 
+-/// 발급·승하차·마이페이지가 함께 쓰는 기본 카드(pass-face). 놓인 폭을 채우고 내부는 기준 폭 238 대비 배율로 그린다.
+-/// 카드 번호는 그리지 않는다. 식별자(`card.face`)는 호출하는 쪽이 붙인다.
++/// Shared saved or draft artwork. Editing affordances belong to the editor, never the saved card.
+ struct PassFace: View {
+-    static let aspectRatio: CGFloat = 85.6 / 53.98
+-    static let referenceWidth: CGFloat = 238
++    static let aspectRatio: CGFloat = 352 / 221.1875
++    static let referenceWidth: CGFloat = 352
+     static let dotsAssetName = "PassDots"
+-
+-    init() {}
++    var style: CardStyle = .standard
+ 
+     var body: some View {
+-        // 접근성은 바깥 한 요소(이름 + 이미지 특성)만 노출한다. GeometryReader 쪽 children: .ignore는
+-        // 내부 장식을 숨기지 못해, 그림 전체를 숨긴 overlay로 두고 빈 바탕을 접근성 요소로 쓴다.
+         Color.clear
+             .aspectRatio(Self.aspectRatio, contentMode: .fit)
+-            .overlay { artwork.accessibilityHidden(true) }
++            .overlay { artwork.accessibilityHidden(true).allowsHitTesting(false) }
+             .accessibilityElement()
+             .accessibilityLabel(PassIdentity.displayName)
+             .accessibilityAddTraits(.isImage)
++            .allowsHitTesting(false)
+     }
+ 
+     private var artwork: some View {
+         GeometryReader { proxy in
+-            let scale = proxy.size.width / Self.referenceWidth
+-            let shape = RoundedRectangle(cornerRadius: 16 * scale, style: .continuous)
++            let s = proxy.size.width / Self.referenceWidth
++            let shape = RoundedRectangle(cornerRadius: 16 * s, style: .continuous)
+             ZStack(alignment: .topLeading) {
+-                Color(red: 0x12 / 255, green: 0x14 / 255, blue: 0x16 / 255)
+-                Image(Self.dotsAssetName)
+-                    .resizable()
+-                    .aspectRatio(contentMode: .fit)
+-                    .frame(width: proxy.size.width * 0.78)
+-                    .opacity(0.85)
+-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+-                    .offset(x: proxy.size.width * 0.12)
+-                Text("Focus Mate")
+-                    .font(.system(size: 10 * scale, weight: .semibold))
+-                    .tracking(1 * scale)
+-                    .offset(x: 20 * scale, y: 17 * scale)
+-                Image(systemName: "wave.3.right")
+-                    .resizable()
+-                    .scaledToFit()
+-                    .frame(width: 22 * scale, height: 22 * scale)
+-                    .frame(maxWidth: .infinity, alignment: .trailing)
+-                    .padding(.top, 12 * scale)
+-                    .padding(.trailing, 16 * scale)
+-                RoundedRectangle(cornerRadius: 3 * scale, style: .continuous)
+-                    .fill(Color(red: 0xc5 / 255, green: 0xb9 / 255, blue: 0x98 / 255))
+-                    .frame(width: proxy.size.width * 0.12, height: proxy.size.height * 0.15)
+-                    .offset(x: proxy.size.width * 0.075, y: proxy.size.height * 0.43)
+-                Text(PassIdentity.displayName)
+-                    .font(.system(size: 19 * scale, weight: .semibold))
+-                    .offset(x: 20 * scale, y: proxy.size.height - 44 * scale)
++                style.background.swiftUIColor
++                if style.isStandard {
++                    Image(Self.dotsAssetName).resizable().scaledToFit()
++                        .frame(width: proxy.size.width * 0.78)
++                        .opacity(0.85)
++                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
++                        .offset(x: proxy.size.width * 0.12)
++                    Text("Focus Mate").font(FontCatalog.text(11 * s, bold: true))
++                        .offset(x: 20 * s, y: 17.2 * s)
++                    Text(PassIdentity.displayName).font(FontCatalog.text(20 * s, bold: true))
++                        .offset(x: 84.47 * s, y: 89.16 * s)
++                    Text("나를 위한 시간, 한 장으로.").font(FontCatalog.text(9 * s))
++                        .offset(x: 84.47 * s, y: 137.08 * s)
++                }
++                ForEach(style.photos) { photo in
++                    if let image = UIImage(data: photo.data) {
++                        Image(uiImage: image).resizable()
++                            .frame(width: proxy.size.width * photo.widthFraction,
++                                   height: proxy.size.width * photo.widthFraction * Double(photo.pixelHeight) / Double(photo.pixelWidth))
++                            .position(x: proxy.size.width * photo.centerX, y: proxy.size.height * photo.centerY)
++                    }
++                }
++                chip.frame(width: 40.68 * s, height: 30.68 * s)
++                    .offset(x: 26.78 * s, y: 96.25 * s)
++                Image(systemName: "wave.3.right").resizable().scaledToFit()
++                    .frame(width: 18 * s, height: 22 * s)
++                    .offset(x: 319 * s, y: 14.65 * s)
+             }
+-            .foregroundStyle(Color(red: 0xf1 / 255, green: 0xf2 / 255, blue: 0xf3 / 255))
++            .foregroundStyle(.white)
+             .clipShape(shape)
+-            .overlay(shape.stroke(Color(red: 0x51 / 255, green: 0x56 / 255, blue: 0x5a / 255), lineWidth: 1))
++            .overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
++        }
++    }
++
++    private var chip: some View {
++        GeometryReader { p in
++            let w = p.size.width, h = p.size.height
++            RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.77, green: 0.73, blue: 0.60))
++                .overlay {
++                    Path { path in
++                        path.move(to: CGPoint(x: 0, y: h / 3)); path.addLine(to: CGPoint(x: w, y: h / 3))
++                        path.move(to: CGPoint(x: 0, y: h * 2 / 3)); path.addLine(to: CGPoint(x: w, y: h * 2 / 3))
++                        path.move(to: CGPoint(x: w / 2, y: 0)); path.addLine(to: CGPoint(x: w / 2, y: h))
++                        for x in [CGFloat(0), w] {
++                            path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: w / 2, y: h / 2))
++                            path.move(to: CGPoint(x: x, y: h)); path.addLine(to: CGPoint(x: w / 2, y: h / 2))
++                        }
++                    }.stroke(Color(red: 0.53, green: 0.50, blue: 0.39), lineWidth: 1)
++                    RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.77, green: 0.73, blue: 0.60))
++                        .frame(width: w / 3, height: h / 2)
++                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color(red: 0.53, green: 0.50, blue: 0.39)))
++                }
++                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.53, green: 0.50, blue: 0.39), lineWidth: 1.5))
+         }
+     }
+ }
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index d2d1239..4c7b835 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -4,10 +4,17 @@ import SwiftUI
+ struct RootView: View {
+     @Bindable var model: AppModel
+     let issuance: CardIssuanceController
++    @State private var customization: CardCustomizationController?
++    @State private var showsCustomization = false
++    @State private var cardImportTask: Task<Void, Never>?
++    @State private var savedCardNotice = false
++    @State private var announceSavedCard = false
++    @AccessibilityFocusState private var cardFocus: Bool
+     private enum RecoveryFocus: Hashable { case error, confirmation, failure }
+     @AccessibilityFocusState private var recoveryFocus: RecoveryFocus?
+     #if DEBUG
+     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
++    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+     var testBootstrap: UITestBootstrap?
+     var testRecorder: UITestFeedbackRecorder?
+     var testGate: UITestIssuanceGate?
+@@ -29,6 +36,30 @@ struct RootView: View {
+             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
+             .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model) }
+         }
++        .fullScreenCover(isPresented: $showsCustomization, onDismiss: {
++            endCustomization()
++            if announceSavedCard {
++                announceSavedCard = false
++                savedCardNotice = true
++                cardFocus = true
++                #if DEBUG
++                if let testRecorder { testRecorder.announce("카드 외형을 저장했어요.") }
++                else { SystemAccessibilityAnnouncer().announce("카드 외형을 저장했어요.") }
++                #else
++                SystemAccessibilityAnnouncer().announce("카드 외형을 저장했어요.")
++                #endif
++            }
++        }) {
++            if let customization {
++                #if DEBUG
++                CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization,
++                                      saved: saveCompleted, testBootstrap: testBootstrap)
++                    .overlay(alignment: .bottomLeading) { testDiagnostics }
++                #else
++                CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization, saved: saveCompleted)
++                #endif
++            }
++        }
+         .preferredColorScheme(.dark)
+         .onChange(of: model.isCleanupConfirmationPresented) { _, presented in
+             if case .failed = model.launchState { recoveryFocus = presented ? .confirmation : .error }
+@@ -40,20 +71,7 @@ struct RootView: View {
+         }
+         #if DEBUG
+         .overlay(alignment: .bottomLeading) {
+-            VStack(spacing: 0) {
+-                if let testBootstrap {
+-                    Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
+-                    Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
+-                    Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
+-                    Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
+-                }
+-                if let testRecorder {
+-                    Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
+-                    Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
+-                }
+-                if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
+-            }
+-            .font(.system(size: 1)).foregroundStyle(.clear)
++            if !showsCustomization { testDiagnostics }
+         }
+         // 상단 모서리는 상태 표시줄이 터치를 가져가므로, 하단 버튼과도 겹치지 않는 오른쪽 가운데에 둔다.
+         .overlay(alignment: .trailing) {
+@@ -126,6 +144,17 @@ struct RootView: View {
+                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
+                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
+             }
++            PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
++            Button("카드 꾸미기") {
++                guard let session = model.beginCardCustomization() else { return }
++                savedCardNotice = false
++                customization = session
++                showsCustomization = true
++            }.buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
++            if savedCardNotice {
++                Text("카드 외형을 저장했어요.").accessibilityIdentifier("cardCustomization.savedNotice")
++                    .accessibilityFocused($cardFocus)
++            }
+             ForEach(Destination.mainMenu, id: \.self) { destination in
+                 Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
+                     .accessibilityIdentifier("open.\(destination.rawValue)")
+@@ -135,6 +164,23 @@ struct RootView: View {
+         }
+     }
+ 
++    private func endCustomization() {
++        // Invalidate generation before cancellation can complete a loader.
++        customization?.discard()
++        cardImportTask?.cancel()
++        cardImportTask = nil
++        customization = nil
++    }
++    private func dismissCustomization() {
++        endCustomization()
++        showsCustomization = false
++    }
++    private func saveCompleted() {
++        announceSavedCard = true
++        endCustomization()
++        showsCustomization = false
++    }
++
+     private func message(for issue: StorageIssue) -> String {
+         switch issue {
+         case .corrupt: "저장된 데이터 형식을 읽을 수 없어요."
+@@ -156,11 +202,43 @@ struct RootView: View {
+     }
+ 
+     #if DEBUG
++    private var testDiagnostics: some View {
++        VStack(spacing: 0) {
++            if let testBootstrap {
++                Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
++                Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
++                Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
++                Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
++                Text("카드 외형 진단").accessibilityValue(testBootstrap.cardStyleJSON(model: model, controller: customization)).accessibilityIdentifier("test.cardStyleJSON")
++                Text("동작 줄이기 진단").accessibilityValue(reduceMotion ? "true" : "false").accessibilityIdentifier("test.reduceMotion")
++            }
++            if let testRecorder {
++                Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
++                Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
++            }
++            if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
++        }.font(.system(size: 1)).foregroundStyle(.clear).allowsHitTesting(false)
++    }
+     private var snapshotJSON: String {
+         guard let snapshot = model.snapshot else { return "null" }
++        let diagnostic = snapshot.updating(cards: CardSection(items: snapshot.cards.items.map { $0.updating(style: CardStyle(background: $0.style.background, photos: [])) }))
+         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+-        guard let data = try? encoder.encode(snapshot), let json = String(data: data, encoding: .utf8) else { return "null" }
+-        return json
++        guard let data = try? encoder.encode(diagnostic),
++              var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return "null" }
++        // The legacy state diagnostic keeps actual sections and color, but only metadata for photo bytes.
++        if let testBootstrap,
++           let metadata = (try? JSONSerialization.jsonObject(with: Data(testBootstrap.cardStyleJSON(model: model, controller: nil).utf8))) as? [String: Any],
++           var cards = object["cards"] as? [String: Any], var items = cards["items"] as? [[String: Any]] {
++            for index in items.indices {
++                if var style = items[index]["style"] as? [String: Any] {
++                    style["photos"] = metadata["photos"]
++                    items[index]["style"] = style
++                }
++            }
++            cards["items"] = items; object["cards"] = cards
++        }
++        guard let compact = try? JSONSerialization.data(withJSONObject: object, options: .sortedKeys) else { return "null" }
++        return String(decoding: compact, as: UTF8.self)
+     }
+     #endif
+ }
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index ec3e52d..87c644a 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -1,8 +1,12 @@
+ #if DEBUG
+ import Foundation
+ import Observation
++import CryptoKit
+ 
+ struct UITestBootstrap {
++    let photoManifestURL: URL?
++    let cardImportManual: Bool
++    let cardSaveFailure: UITestCardSaveFailure
+     let fileURL: URL
+     let seed: String?
+     let shouldFailSave: Bool
+@@ -19,6 +23,19 @@ struct UITestBootstrap {
+         }
+         guard let id = try argument("--fm-ui-test-id") else { return nil }
+         guard let uuid = UUID(uuidString: id) else { throw SetupIssue.invalidArguments }
++        let manifest = try argument("--fm-ui-card-photo-manifest")
++        let support = applicationSupport.standardizedFileURL.resolvingSymlinksInPath()
++        if let manifest {
++            let url = (manifest.hasPrefix("/") ? URL(fileURLWithPath: manifest) : support.appendingPathComponent(manifest)).standardizedFileURL.resolvingSymlinksInPath()
++            guard url.path.hasPrefix(support.path + "/") else { throw SetupIssue.invalidArguments }
++            photoManifestURL = url
++        } else { photoManifestURL = nil }
++        let cardHold = try argument("--fm-ui-card-import-hold")
++        guard cardHold == nil || cardHold == "manual" else { throw SetupIssue.invalidArguments }
++        cardImportManual = cardHold == "manual"
++        let cardSave = try argument("--fm-ui-card-save")
++        guard cardSave == nil || cardSave == "fail-once" else { throw SetupIssue.invalidArguments }
++        cardSaveFailure = UITestCardSaveFailure(enabled: cardSave == "fail-once")
+         seed = try argument("--fm-ui-seed")
+         guard seed == nil || Self.seeds.contains(seed!) else { throw SetupIssue.invalidArguments }
+         let save = try argument("--fm-ui-save")
+@@ -33,6 +50,43 @@ struct UITestBootstrap {
+             .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
+     }
+ 
++    @MainActor func cardPhotoInputs(gate: UITestCardImportGate?) -> [CardPhotoInput] {
++        guard let manifest = photoManifestURL else { return [] }
++        struct Manifest: Decodable { struct Item: Decodable { let path: String }; let items: [Item] }
++        guard let bytes = try? Data(contentsOf: manifest), let entries = try? JSONDecoder().decode(Manifest.self, from: bytes) else {
++            return [CardPhotoInput { throw CardPhotoProcessingIssue.unreadable }]
++        }
++        let token = gate?.arm()
++        let directory = manifest.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
++        return entries.items.enumerated().map { index, item in
++            CardPhotoInput {
++                if index == 0, let gate, let token { try await gate.wait(token) }
++                try Task.checkCancellation()
++                let lexical = directory.appendingPathComponent(item.path).standardizedFileURL
++                let resolved = lexical.resolvingSymlinksInPath()
++                guard !item.path.hasPrefix("/"), lexical.path.hasPrefix(directory.path + "/"),
++                      resolved.path.hasPrefix(directory.path + "/") else { throw CardPhotoProcessingIssue.unreadable }
++                return try Data(contentsOf: resolved)
++            }
++        }
++    }
++
++    @MainActor func cardStyleJSON(model: AppModel, controller: CardCustomizationController?) -> String {
++        func color(_ c: CardColor) -> [String: Double] { ["red": c.red, "green": c.green, "blue": c.blue] }
++        func photos(_ style: CardStyle) -> [[String: Any]] {
++            style.photos.map { ["id": $0.id.uuidString, "pixelWidth": $0.pixelWidth, "pixelHeight": $0.pixelHeight,
++                "centerX": $0.centerX, "centerY": $0.centerY, "widthFraction": $0.widthFraction,
++                "byteCount": $0.data.count, "sha256": SHA256.hash(data: $0.data).map { String(format: "%02x", $0) }.joined()] }
++        }
++        let saved = model.currentCardStyle
++        let json: [String: Any] = ["cardID": model.snapshot?.currentCard?.id ?? "", "background": color(saved.background),
++            "photos": photos(saved), "draft": controller.map { ["background": color($0.draft.background), "photos": photos($0.draft)] as [String: Any] } ?? NSNull(),
++            "selectedPhotoID": controller?.selectedPhotoID?.uuidString as Any? ?? NSNull(),
++            "isImporting": controller?.isImporting ?? false, "canUndo": controller?.canUndo ?? false, "didSave": controller?.didSave ?? false]
++        guard let data = try? JSONSerialization.data(withJSONObject: json, options: .sortedKeys) else { return "null" }
++        return String(decoding: data, as: UTF8.self)
++    }
++
+     private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard"]).union(rawSeeds.keys)
+ 
+     func prepare() throws {
+@@ -54,6 +108,7 @@ struct UITestBootstrap {
+         let activeURL = fileURL
+         let scenario = recoveryScenario
+         let failSave = shouldFailSave
++        let cardFailure = cardSaveFailure
+         var activeReads = 0
+         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
+             if url == activeURL {
+@@ -64,7 +119,7 @@ struct UITestBootstrap {
+             }
+             return try Data(contentsOf: url)
+         }, writeData: { data, url in
+-            if failSave { throw StorageIssue.writeFailed }
++            if failSave || cardFailure.consume() { throw StorageIssue.writeFailed }
+             try data.write(to: url, options: .atomic)
+         }, writeBackup: { data, url in
+             if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
+@@ -162,4 +217,49 @@ final class UITestIssuanceGate {
+         waiter.resume()
+     }
+ }
++/// Only the editor Save action arms this shared box; bootstrap and unrelated saves never arm it.
++final class UITestCardSaveFailure {
++    private let enabled: Bool
++    private var used = false
++    private var armed = false
++    init(enabled: Bool) { self.enabled = enabled }
++    func arm() { if enabled && !used { armed = true } }
++    func consume() -> Bool {
++        guard armed else { return false }
++        armed = false; used = true
++        return true
++    }
++}
++
++@MainActor
++final class UITestCardImportGate {
++    private var token = UUID()
++    private var waiter: CheckedContinuation<Void, Error>?
++    private var released = false
++    func arm() -> UUID {
++        cancel(token)
++        token = UUID(); released = false
++        return token
++    }
++    func wait(_ expected: UUID) async throws {
++        try Task.checkCancellation()
++        guard expected == token else { throw CancellationError() }
++        if released { return }
++        try await withTaskCancellationHandler {
++            try await withCheckedThrowingContinuation { waiter = $0 }
++        } onCancel: {
++            Task { @MainActor in self.cancel(expected) }
++        }
++    }
++    func release() {
++        released = true
++        let continuation = waiter; waiter = nil
++        continuation?.resume()
++    }
++    private func cancel(_ expected: UUID) {
++        guard expected == token else { return }
++        let continuation = waiter; waiter = nil
++        continuation?.resume(throwing: CancellationError())
++    }
++}
+ #endif
+diff --git a/ios/FocusMateUITests/CardCustomizationFlowTests.swift b/ios/FocusMateUITests/CardCustomizationFlowTests.swift
+new file mode 100644
+index 0000000..f1dc1ea
+--- /dev/null
++++ b/ios/FocusMateUITests/CardCustomizationFlowTests.swift
+@@ -0,0 +1,547 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class CardCustomizationFlowTests: XCTestCase {
++    private let timeout: TimeInterval = 8
++    private let prefix = "cardCustomization."
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    func test01_저장_정체성을_유지해_열고_변경없이_닫는다() throws {
++        // 깨짐 명명: 진입/무변경 종료가 재발급 또는 파일 쓰기를 수행한다.
++        let h = launch()
++        let snapshot = try h.snapshot()
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try open(h)
++        let state = try style(h)
++        XCTAssertEqual(state.cardID, try card(snapshot)["id"] as? String)
++        XCTAssertEqual(state.saved, state.draft)
++        XCTAssertEqual(state.draft?.photos.count, 0)
++        XCTAssertFalse(state.canUndo)
++        XCTAssertTrue(control(h, "save").isEnabled)
++        for color in ["standard", "slate", "blue", "mauve", "sand", "ivory"] {
++            XCTAssertTrue(control(h, "color." + color).exists)
++        }
++        for tool in ["x", "y", "width", "forward", "backward", "delete"] {
++            let element = control(h, tool)
++            XCTAssertTrue(!element.exists || !element.isEnabled)
++        }
++        capture(h, "basic")
++        try tap(h, "close")
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertFalse(control(h, "discard").exists)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        XCTAssertEqual(try canonical(h.snapshot()), try canonical(snapshot))
++    }
++
++    func test02_색변경과_기본복원은_저장없이_각각_되돌릴수있다() throws {
++        // 깨짐 명명: 색/복원을 즉시 저장하거나 복원을 undo 이력에서 빠뜨린다.
++        let h = launch(); try open(h)
++        let baseline = try style(h)
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try tap(h, "color.sand")
++        let colored = try style(h)
++        XCTAssertNotEqual(colored.draft?.background, baseline.draft?.background)
++        XCTAssertEqual(colored.saved, baseline.saved)
++        try tap(h, "undo")
++        XCTAssertEqual(try style(h).draft, baseline.draft)
++        try tap(h, "color.blue")
++        let blue = try style(h).draft
++        try tap(h, "restoreDefault")
++        XCTAssertEqual(try style(h).draft, baseline.draft)
++        try tap(h, "undo")
++        XCTAssertEqual(try style(h).draft, blue)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++    }
++
++    func test03_명시적_종료에서_계속은_초안유지_버리기는_파일유지() throws {
++        // 깨짐 명명: 계속이 초안을 초기화하거나 버리기가 미저장 초안을 쓴다.
++        let h = launch(); try open(h)
++        let baseline = try style(h).draft
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try tap(h, "color.mauve")
++        let changed = try style(h)
++        try tap(h, "close")
++        try confirmation(h)
++        capture(h, "confirmation")
++        try tapConfirmation(h, "continueEditing", label: "계속 편집")
++        XCTAssertEqual(try style(h).draft, changed.draft)
++        XCTAssertEqual(try style(h).canUndo, changed.canUndo)
++        try tap(h, "close"); try confirmation(h)
++        try tapConfirmation(h, "discard", label: "변경 버리기")
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        try open(h)
++        XCTAssertEqual(try style(h).draft, baseline)
++    }
++
++    func test04_실제_두사진을_순서대로_추가해_선택사진만_편집한다() throws {
++        // 깨짐 명명: 입력 순서를 뒤집거나 선택 아닌 사진에 위치/크기/삭제를 적용한다.
++        let h = launch(manifest: "valid2"); try open(h); try importFixture(h, count: 2)
++        let imported = try style(h)
++        let photos = try XCTUnwrap(imported.draft).photos
++        try assertValid2(photos)
++        for photo in photos {
++            XCTAssertEqual(photo.centerX, 0.5)
++            XCTAssertEqual(photo.centerY, 0.5)
++            XCTAssertEqual(photo.widthFraction, 0.6) // Policy literal: initial width 60%.
++        }
++        XCTAssertEqual(imported.selectedPhotoID, photos[1].id)
++        XCTAssertEqual(imported.saved.photos.count, 0)
++        try tap(h, "color.sand")
++        capture(h, "photo2selected")
++        try select(h, photos[0].id)
++        XCTAssertEqual(try style(h).selectedPhotoID, photos[0].id)
++        try step(h, axis: "x", increase: true)
++        try step(h, axis: "y", increase: false)
++        let width = h.app.sliders[helperID("width")]
++        try reach(width, h)
++        width.adjust(toNormalizedSliderPosition: 0.5)
++        let moved = try XCTUnwrap(try style(h).draft).photos
++        XCTAssertEqual(moved[0].centerX, 0.55, accuracy: 0.0001)
++        XCTAssertEqual(moved[0].centerY, 0.45, accuracy: 0.0001)
++        // XCTest's native slider gesture is best effort; verify the user's resize outcome.
++        XCTAssertTrue(moved[0].widthFraction.isFinite)
++        XCTAssertTrue((0.15...2.5).contains(moved[0].widthFraction))
++        XCTAssertGreaterThan(moved[0].widthFraction, photos[0].widthFraction)
++        XCTAssertLessThan(moved[0].widthFraction, 2.5)
++        XCTAssertEqual(moved[0].pixelWidth, 120)
++        XCTAssertEqual(moved[0].pixelHeight, 80)
++        XCTAssertEqual(moved[1], photos[1])
++        try tap(h, "forward")
++        XCTAssertEqual(try style(h).draft?.photos.map(\.id), [photos[1].id, photos[0].id])
++        try tap(h, "delete")
++        XCTAssertEqual(try style(h).draft?.photos.map(\.id), [photos[1].id])
++        try tap(h, "undo")
++        XCTAssertEqual(try style(h).draft?.photos.map(\.id), [photos[1].id, photos[0].id])
++        try tap(h, "undo")
++        XCTAssertEqual(try style(h).draft?.photos, moved)
++    }
++
++    func test05_카드밖_사진은_색과_저장탭을_가로채지_않고_목록에서_복귀한다() throws {
++        // 깨짐 명명: 카드 밖 interaction layer가 아래 색/저장 탭을 가로챈다.
++        let h = launch(manifest: "valid2"); try open(h); try importFixture(h, count: 2)
++        let id = try XCTUnwrap(try style(h).selectedPhotoID)
++        // Portrait + maximum width deliberately spans the controls beneath preview.
++        let slider = h.app.sliders[helperID("width")]; try reach(slider, h)
++        slider.adjust(toNormalizedSliderPosition: 1)
++        for _ in 0..<30 { try step(h, axis: "y", increase: true) }
++        do {
++            let selectedID = try style(h).selectedPhotoID ?? "nil"
++            let observation = XCTAttachment(string: "selectedID=\(selectedID)\nbody=\(control(h, "body").frame)\npreview=\(control(h, "preview").frame)\nyIncrease=\(control(h, "y").buttons[helperID("y.increase")].frame)\ncardStyleJSON=\(try h.diagnostic("test.cardStyleJSON"))")
++            observation.name = "T5 test05 after-y-loop before-preview-scroll"
++            observation.lifetime = .keepAlways; add(observation)
++            print("T5 test05 after-y-loop selectedID=\(selectedID)")
++        }
++        let preview = control(h, "preview")
++        let body = control(h, "body")
++        for _ in 0..<10 {
++            if preview.exists && h.app.frame.contains(preview.frame) { break }
++            try scrollBody(body, contentUp: false)
++        }
++        do {
++            let selectedID = try style(h).selectedPhotoID ?? "nil"
++            let observation = XCTAttachment(string: "selectedID=\(selectedID)\nbody=\(body.frame)\npreview=\(preview.frame)\nyIncrease=\(control(h, "y").buttons[helperID("y.increase")].frame)\ncardStyleJSON=\(try h.diagnostic("test.cardStyleJSON"))")
++            observation.name = "T5 test05 after-preview-scroll before-sand"
++            observation.lifetime = .keepAlways; add(observation)
++            print("T5 test05 after-preview-scroll selectedID=\(selectedID)")
++        }
++        XCTAssertTrue(h.app.frame.contains(preview.frame), "Hit-test setup must keep preview onscreen")
++        let beforeColor = try style(h)
++        let sand = control(h, "color.sand")
++        XCTAssertTrue(sand.isHittable)
++        sand.tap() // No intervening scroll that would remove the overlapping preview.
++        do {
++            let selectedID = try style(h).selectedPhotoID ?? "nil"
++            let observation = XCTAttachment(string: "selectedID=\(selectedID)\nbody=\(body.frame)\npreview=\(preview.frame)\nyIncrease=\(control(h, "y").buttons[helperID("y.increase")].frame)\ncardStyleJSON=\(try h.diagnostic("test.cardStyleJSON"))")
++            observation.name = "T5 test05 after-sand before-save"
++            observation.lifetime = .keepAlways; add(observation)
++            print("T5 test05 after-sand selectedID=\(selectedID)")
++        }
++
++        XCTAssertNotEqual(try style(h).draft?.background, beforeColor.draft?.background)
++        let save = control(h, "save")
++        XCTAssertTrue(save.isHittable)
++        let expectedSaved = try XCTUnwrap(try style(h).draft)
++        save.tap() // Keep the hit-test arrangement while tapping fixed footer.
++
++        let closed = try successfulSave(h, expected: expectedSaved)
++        XCTAssertEqual(closed.saved.photos.first { $0.id == id }?.centerY, 2)
++        // Move fully off card at normal width, then reselect by generated ID in list.
++        try open(h)
++        try select(h, id)
++        let reopenedSlider = h.app.sliders[helperID("width")]
++        try reach(reopenedSlider, h)
++        reopenedSlider.adjust(toNormalizedSliderPosition: 0.19148936) // 60% in 15...250% range.
++        let undoBeforeSelection = try style(h).canUndo
++        let other = try XCTUnwrap(try style(h).draft?.photos.first { $0.id != id }?.id)
++        try select(h, other); try select(h, id)
++        XCTAssertEqual(try style(h).canUndo, undoBeforeSelection)
++        for _ in 0..<30 { try step(h, axis: "y", increase: false) }
++        XCTAssertEqual(try XCTUnwrap(try style(h).draft?.photos.first { $0.id == id }).centerY,
++                       0.5, accuracy: 0.0001)
++    }
++
++    func test06_수동입력중_초안조작은_잠기고_닫기와_명시적해제는_가능하다() throws {
++        // 깨짐 명명: import 중 색/undo/save가 활성화되거나 close도 잠긴다.
++        let h = launch(manifest: "hold", extra: ["--fm-ui-card-import-hold", "manual"])
++        try open(h); try tap(h, "color.slate")
++        let before = try style(h).draft
++        try fixtureButton(h)
++        try waitState(h) { $0.isImporting }
++        for name in ["color.sand", "photoPicker", "undo", "restoreDefault", "save"] {
++            XCTAssertFalse(control(h, name).isEnabled, name)
++        }
++        XCTAssertTrue(control(h, "close").isEnabled)
++        try tap(h, "close"); try confirmation(h)
++        try tapConfirmation(h, "continueEditing", label: "계속 편집")
++        XCTAssertTrue(try style(h).isImporting)
++        XCTAssertEqual(try style(h).draft, before)
++        try release(h)
++        try waitState(h) { !$0.isImporting && $0.draft?.photos.count == 1 }
++        XCTAssertTrue(control(h, "save").isEnabled)
++        XCTAssertTrue(control(h, "undo").isEnabled)
++    }
++
++    func test07_입력중_버린_실제gate는_재진입에_사진을_적용하지않는다() throws {
++        // 깨짐 명명: discard/cancel 뒤 이전 task가 새 세션에 사진을 반영한다.
++        let h = launch(manifest: "hold", extra: ["--fm-ui-card-import-hold", "manual"])
++        try open(h)
++        let baseline = try style(h).draft
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try fixtureButton(h); try waitState(h) { $0.isImporting }
++        try tap(h, "close"); try confirmation(h)
++        try tapConfirmation(h, "discard", label: "변경 버리기")
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        try open(h)
++        XCTAssertEqual(try style(h).draft, baseline)
++        // A new batch must arm again; release its real gate, not an artificial ignore-cancel loader.
++        try fixtureButton(h); try waitState(h) { $0.isImporting }; try release(h)
++        try waitState(h) { !$0.isImporting && $0.draft?.photos.count == 1 }
++        try tap(h, "undo")
++        XCTAssertEqual(try style(h).draft, baseline)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        // This is cancellation UI coverage, not unit proof of cancellation-ignoring late success.
++    }
++
++    func test08_먼저실패한_입력은_자리를_먹지않고_성공만_추가한다() throws {
++        // 깨짐 명명: 실패가 남은 자리를 소비하거나 성공 사진도 버린다.
++        let h = launch(manifest: "mixed"); try open(h)
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try importFixture(h, count: 1)
++        let photo = try XCTUnwrap(try style(h).draft?.photos.first)
++        XCTAssertEqual(photo.pixelWidth, 120); XCTAssertEqual(photo.pixelHeight, 80)
++        try notice(h); capture(h, "import-error")
++        XCTAssertTrue(control(h, "save").isEnabled)
++        XCTAssertTrue(control(h, "undo").isEnabled)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++    }
++
++    func test09_정상7장_선택은_앞6장만_추가하고_한도를_안내한다() throws {
++        // 깨짐 명명: 7장을 추가하거나 입력 뒤쪽 사진을 앞쪽 대신 추가한다.
++        let h = launch(manifest: "seven"); try open(h); try importFixture(h, count: 6)
++        let photos = try XCTUnwrap(try style(h).draft).photos
++        XCTAssertEqual(photos.map(\.pixelWidth), [101, 102, 103, 104, 105, 106])
++        XCTAssertEqual(photos.map(\.pixelHeight), [80, 80, 80, 80, 80, 80])
++        try notice(h)
++        XCTAssertTrue(control(h, "notice").label.contains("6") ||
++                      (control(h, "notice").value as? String)?.contains("6") == true)
++        XCTAssertFalse(control(h, "photoPicker").isEnabled)
++        try tap(h, "undo")
++        XCTAssertEqual(try style(h).draft?.photos.count, 0)
++    }
++
++    func test10_경로이탈과_없는파일은_초안과_파일을_보존한다() throws {
++        // 깨짐 명명: ../escape를 읽거나 모두 실패한 batch가 history를 만든다.
++        let h = launch(manifest: "invalidPaths"); try open(h)
++        let baseline = try style(h)
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try fixtureButton(h)
++        try notice(h); try waitState(h) { !$0.isImporting }
++        XCTAssertEqual(try style(h).draft, baseline.draft)
++        XCTAssertEqual(try style(h).canUndo, baseline.canUndo)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++    }
++
++    func test11_실제쓰기_한번실패는_초안과원본보존_재시도후_같은UUID로복원() throws {
++        // 깨짐 명명: write failure가 파일을 바꾸거나 retry/relaunch가 사진 bytes/배치를 잃는다.
++        let h = launch(manifest: "valid2", extra: ["--fm-ui-card-save", "fail-once"])
++        let originalSnapshot = try h.snapshot()
++        let bytes = try h.diagnostic("test.persistedBytes")
++        try open(h); try importFixture(h, count: 2); try tap(h, "color.sand")
++        let before = try style(h)
++        try tap(h, "save"); try notice(h); capture(h, "save-error")
++        let failed = try style(h)
++        XCTAssertFalse(failed.didSave)
++        XCTAssertEqual(failed.draft, before.draft)
++        XCTAssertEqual(failed.selectedPhotoID, before.selectedPhotoID)
++        XCTAssertEqual(failed.canUndo, before.canUndo)
++        XCTAssertEqual(failed.saved, before.saved)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        XCTAssertTrue(control(h, "save").isEnabled)
++        let expectedSaved = try XCTUnwrap(before.draft)
++        try tap(h, "save")
++        let saved = try successfulSave(h, expected: expectedSaved).saved
++        XCTAssertNotEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        let updated = try h.snapshot()
++        XCTAssertEqual(try card(updated)["id"] as? String, try card(originalSnapshot)["id"] as? String)
++        XCTAssertEqual(try card(updated)["issuedAt"] as? String,
++                       try card(originalSnapshot)["issuedAt"] as? String)
++        for section in ["currentStation", "initialStation", "journey", "records"] {
++            XCTAssertEqual(try canonical(updated[section]), try canonical(originalSnapshot[section]))
++        }
++        h.relaunch() // same random UUID; seed and fail-once OMITTED by existing harness.
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        try open(h)
++        XCTAssertEqual(try style(h).saved, saved)
++        XCTAssertEqual(try style(h).draft, saved)
++        try assertValid2(saved.photos) // decoded metadata + SHA preserved, not fake image Data.
++    }
++
++    func test12_XXXL에서_도구와복원이_고정저장위로_도달한다() throws {
++        // 깨짐 명명: 고정 footer가 스크롤 본문을 덮어 도구에 도달할 수 없다.
++        let h = launch(manifest: "valid2", extra: [
++            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
++        ])
++        try open(h)
++        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
++        capture(h, "XXXL-basic-start")
++        let save = control(h, "save")
++        XCTAssertTrue(save.isHittable)
++        try reach(control(h, "restoreDefault"), h, above: save)
++        capture(h, "XXXL-basic-end")
++        try importFixture(h, count: 2)
++        let body = control(h, "body")
++        try scrollBody(body, contentUp: false); try scrollBody(body, contentUp: false)
++        capture(h, "XXXL-photo-start")
++        for name in ["x", "y", "width", "forward", "backward", "delete", "restoreDefault"] {
++            try reach(control(h, name), h, above: save)
++        }
++        capture(h, "XXXL-photo-end")
++        XCTAssertTrue(save.isHittable)
++        let expectedSaved = try XCTUnwrap(try style(h).draft)
++        try tap(h, "save")
++        _ = try successfulSave(h, expected: expectedSaved)
++        try open(h)
++        XCTAssertEqual(try style(h).draft, expectedSaved)
++        let reopenedSave = control(h, "save")
++        try reach(control(h, "restoreDefault"), h, above: reopenedSave)
++        XCTAssertTrue(reopenedSave.isHittable)
++    }
++
++    // MARK: Test-only helpers. No production setters, snapshots/golden assertions or style values.
++    private func launch(manifest: String? = nil, extra: [String] = []) -> FocusMateUIHarness {
++        var arguments = extra
++        if let manifest {
++            arguments += ["--fm-ui-card-photo-manifest", "FocusMate/UITestPhotoFixtures/" + manifest + ".json"]
++        }
++        return FocusMateUIHarness.launch(seed: "ready", extraArguments: arguments, testID: UUID())
++    }
++    private func helperID(_ suffix: String) -> String { prefix + suffix }
++    private func control(_ h: FocusMateUIHarness, _ suffix: String) -> XCUIElement {
++        h.element(helperID(suffix))
++    }
++    private func open(_ h: FocusMateUIHarness) throws {
++        let entry = h.element("open.cardCustomization")
++        XCTAssertTrue(entry.waitForExistence(timeout: timeout)); entry.tap()
++        XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
++    }
++    private func tap(_ h: FocusMateUIHarness, _ suffix: String) throws {
++        let target = control(h, suffix); try reach(target, h); XCTAssertTrue(target.isEnabled); target.tap()
++    }
++    private func reach(_ target: XCUIElement, _ h: FocusMateUIHarness, above: XCUIElement? = nil) throws {
++        XCTAssertTrue(target.waitForExistence(timeout: timeout))
++        let body = control(h, "body")
++        XCTAssertTrue(body.waitForExistence(timeout: timeout), "Missing scroll body: " + helperID("body"))
++        let footer = control(h, "save")
++        func visibleBody() -> CGRect {
++            let viewport = body.frame.intersection(h.app.frame)
++            let bottom = min(viewport.maxY, above?.frame.minY ?? footer.frame.minY)
++            return CGRect(x: viewport.minX, y: viewport.minY,
++                          width: viewport.width, height: max(0, bottom - viewport.minY))
++        }
++        func reachable() -> Bool {
++            let fixedIDs = [helperID("close"), helperID("undo"),
++                            "test.cardImportFixture", "test.releaseCardImport"]
++            let viewport: CGRect
++            if target.identifier == helperID("save") {
++                viewport = h.app.frame
++            } else if fixedIDs.contains(target.identifier) {
++                let appFrame = h.app.frame
++                viewport = CGRect(x: appFrame.minX, y: appFrame.minY,
++                                  width: appFrame.width, height: footer.frame.minY - appFrame.minY)
++            } else {
++                viewport = visibleBody()
++            }
++            return target.isHittable && viewport.contains(target.frame)
++        }
++        for _ in 0..<12 {
++            if reachable() { break }
++            let lowerBound = visibleBody().minY
++            let upperBound = visibleBody().maxY
++            if target.frame.maxY > upperBound {
++                try scrollBody(body, contentUp: true)
++            } else if target.frame.minY < lowerBound {
++                try scrollBody(body, contentUp: false)
++            } else {
++                try scrollBody(body, contentUp: target.frame.midY >= body.frame.midY)
++            }
++        }
++        XCTAssertTrue(reachable(), "본문/조작 도달 실패: " + target.identifier)
++    }
++    private func scrollBody(_ body: XCUIElement, contentUp: Bool) throws {
++        XCTAssertTrue(body.waitForExistence(timeout: timeout))
++        let start = body.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: contentUp ? 0.8 : 0.2))
++        let end = body.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: contentUp ? 0.2 : 0.8))
++        start.press(forDuration: 0.01, thenDragTo: end)
++    }
++    private func confirmation(_ h: FocusMateUIHarness) throws {
++        // Container ID can be absent for native dialog. Require the contracted actual buttons.
++        XCTAssertTrue(confirmationButton(h, "continueEditing", label: "계속 편집")
++            .waitForExistence(timeout: timeout))
++        XCTAssertTrue(confirmationButton(h, "discard", label: "변경 버리기").exists)
++    }
++    private func confirmationButton(
++        _ h: FocusMateUIHarness,
++        _ suffix: String,
++        label: String
++    ) -> XCUIElement {
++        let alert = h.app.alerts
++            .matching(NSPredicate(format: "label == %@", "변경 내용을 버릴까요?"))
++            .firstMatch
++        let buttons = alert.buttons
++            .matching(identifier: helperID(suffix))
++            .matching(NSPredicate(format: "label == %@", label))
++        return buttons.firstMatch
++    }
++    private func tapConfirmation(
++        _ h: FocusMateUIHarness,
++        _ suffix: String,
++        label: String
++    ) throws {
++        let alert = h.app.alerts
++            .matching(NSPredicate(format: "label == %@", "변경 내용을 버릴까요?"))
++            .firstMatch
++        XCTAssertTrue(alert.waitForExistence(timeout: timeout))
++        let button = confirmationButton(h, suffix, label: label)
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertTrue(button.isEnabled)
++        XCTAssertTrue(button.isHittable)
++        button.tap()
++    }
++    private func fixtureButton(_ h: FocusMateUIHarness) throws {
++        let button = h.element("test.cardImportFixture"); try reach(button, h); button.tap()
++    }
++    private func release(_ h: FocusMateUIHarness) throws {
++        let button = h.element("test.releaseCardImport")
++        XCTAssertTrue(button.waitForExistence(timeout: timeout)); XCTAssertTrue(button.isEnabled); button.tap()
++    }
++    private func importFixture(_ h: FocusMateUIHarness, count: Int) throws {
++        try fixtureButton(h)
++        try waitState(h) { !$0.isImporting && $0.draft?.photos.count == count }
++    }
++    private func select(_ h: FocusMateUIHarness, _ id: String) throws {
++        try tap(h, "photo." + id)
++    }
++    private func step(_ h: FocusMateUIHarness, axis: String, increase: Bool) throws {
++        let container = control(h, axis)
++        let action = increase ? "increase" : "decrease"
++        let label: String
++        switch (axis, increase) {
++        case ("x", false): label = "가로 위치 줄이기"
++        case ("x", true): label = "가로 위치 늘리기"
++        case ("y", false): label = "세로 위치 줄이기"
++        case ("y", true): label = "세로 위치 늘리기"
++        default: XCTFail("Unsupported axis: " + axis); return
++        }
++        let button = container.buttons[helperID(axis + "." + action)]
++        try reach(button, h)
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertEqual(button.label, label)
++        XCTAssertTrue(button.isEnabled)
++        button.tap()
++    }
++    private func successfulSave(_ h: FocusMateUIHarness, expected: Style) throws -> StyleState {
++        let editor = h.element("screen.cardCustomization")
++        let main = h.element("screen.main")
++        let savedNotice = control(h, "savedNotice")
++        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            !editor.exists && main.exists && savedNotice.exists
++        }, object: h.app)
++        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
++        XCTAssertEqual(savedNotice.label, "카드 외형을 저장했어요.")
++        let closed = try style(h)
++        XCTAssertEqual(closed.saved, expected)
++        XCTAssertNil(closed.draft)
++        XCTAssertNil(closed.selectedPhotoID)
++        XCTAssertFalse(closed.didSave)
++        XCTAssertFalse(closed.canUndo)
++        return closed
++    }
++    private func notice(_ h: FocusMateUIHarness) throws {
++        let n = control(h, "notice")
++        XCTAssertTrue(n.waitForExistence(timeout: timeout))
++        XCTAssertFalse((n.label + ((n.value as? String) ?? "")).isEmpty)
++    }
++    private func waitState(_ h: FocusMateUIHarness, _ predicate: @escaping (StyleState) -> Bool) throws {
++        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
++            guard let value = try? self.style(h) else { return false }
++            return predicate(value)
++        }, object: h.app)
++        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
++    }
++    private func capture(_ h: FocusMateUIHarness, _ name: String) {
++        let attachment = XCTAttachment(screenshot: h.app.screenshot())
++        attachment.name = "T5 " + name; attachment.lifetime = .keepAlways; add(attachment)
++    }
++    private func card(_ snapshot: [String: Any]) throws -> [String: Any] {
++        let cards = try XCTUnwrap(snapshot["cards"] as? [String: Any])
++        let items = try XCTUnwrap(cards["items"] as? [[String: Any]])
++        XCTAssertEqual(items.count, 1)
++        return try XCTUnwrap(items.first)
++    }
++    private func canonical(_ value: Any?) throws -> Data {
++        try JSONSerialization.data(withJSONObject: value ?? NSNull(), options: [.sortedKeys, .fragmentsAllowed])
++    }
++    private func style(_ h: FocusMateUIHarness) throws -> StyleState {
++        try JSONDecoder().decode(StyleState.self, from: Data(h.diagnostic("test.cardStyleJSON").utf8))
++    }
++    private func assertValid2(_ photos: [Photo]) throws {
++        XCTAssertEqual(photos.count, 2)
++        XCTAssertEqual(photos.map(\.pixelWidth), [120, 80])
++        XCTAssertEqual(photos.map(\.pixelHeight), [80, 120])
++        XCTAssertEqual(Set(photos.map(\.id)).count, 2)
++        XCTAssertNotEqual(photos[0].sha256, photos[1].sha256)
++        for photo in photos {
++            XCTAssertTrue((1...1_048_576).contains(photo.byteCount))
++            XCTAssertNotNil(photo.sha256.range(of: "^[a-fA-F0-9]{64}$", options: .regularExpression))
++        }
++    }
++    private struct StyleState: Decodable {
++        let cardID: String
++        let background: Color
++        let photos: [Photo]
++        let draft: Style?
++        let selectedPhotoID: String?
++        let isImporting: Bool
++        let canUndo: Bool
++        let didSave: Bool
++        var saved: Style { Style(background: background, photos: photos) }
++    }
++    private struct Color: Decodable, Equatable { let red: Double; let green: Double; let blue: Double }
++    private struct Style: Decodable, Equatable { let background: Color; let photos: [Photo] }
++    private struct Photo: Decodable, Equatable {
++        let id: String
++        let pixelWidth: Int
++        let pixelHeight: Int
++        let centerX: Double
++        let centerY: Double
++        let widthFraction: Double
++        let byteCount: Int
++        let sha256: String
++    }
++}

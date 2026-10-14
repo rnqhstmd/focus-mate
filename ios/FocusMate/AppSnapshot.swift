@@ -11,6 +11,7 @@ enum SnapshotValidationIssue: Error, Equatable {
     case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
     case multipleCards(Int), cardWithoutIssuance, invalidCardID
     case invalidRecords(RecordValidationIssue)
+    case invalidCardStyle(CardStyleValidationIssue), invalidCardPhoto
 }
 
 struct AppSnapshot: Codable, Equatable {
@@ -71,6 +72,10 @@ struct AppSnapshot: Codable, Equatable {
         guard cards.items.count <= 1 else { throw SnapshotValidationIssue.multipleCards(cards.items.count) }
         guard cards.items.isEmpty || cardIssued else { throw SnapshotValidationIssue.cardWithoutIssuance }
         guard cards.items.allSatisfy({ CardSnapshot.isValidID($0.id) }) else { throw SnapshotValidationIssue.invalidCardID }
+        for card in cards.items {
+            do { try card.style.validate() }
+            catch let issue as CardStyleValidationIssue { throw SnapshotValidationIssue.invalidCardStyle(issue) }
+        }
         do { try records.validate() }
         catch let issue as RecordValidationIssue { throw SnapshotValidationIssue.invalidRecords(issue) }
     }

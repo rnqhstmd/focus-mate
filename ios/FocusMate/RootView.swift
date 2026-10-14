@@ -4,10 +4,17 @@ import SwiftUI
 struct RootView: View {
     @Bindable var model: AppModel
     let issuance: CardIssuanceController
+    @State private var customization: CardCustomizationController?
+    @State private var showsCustomization = false
+    @State private var cardImportTask: Task<Void, Never>?
+    @State private var savedCardNotice = false
+    @State private var announceSavedCard = false
+    @AccessibilityFocusState private var cardFocus: Bool
     private enum RecoveryFocus: Hashable { case error, confirmation, failure }
     @AccessibilityFocusState private var recoveryFocus: RecoveryFocus?
     #if DEBUG
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var testBootstrap: UITestBootstrap?
     var testRecorder: UITestFeedbackRecorder?
     var testGate: UITestIssuanceGate?
@@ -27,7 +34,41 @@ struct RootView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model) }
+            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization) }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if savedCardNotice {
+                Text("카드 외형을 저장했어요.")
+                    .accessibilityIdentifier("cardCustomization.savedNotice")
+                    .accessibilityFocused($cardFocus)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24).padding(.vertical, 12)
+                    .background(.black)
+            }
+        }
+        .fullScreenCover(isPresented: $showsCustomization, onDismiss: {
+            endCustomization()
+            if announceSavedCard {
+                announceSavedCard = false
+                savedCardNotice = true
+                cardFocus = true
+                #if DEBUG
+                if let testRecorder { testRecorder.announce("카드 외형을 저장했어요.") }
+                else { SystemAccessibilityAnnouncer().announce("카드 외형을 저장했어요.") }
+                #else
+                SystemAccessibilityAnnouncer().announce("카드 외형을 저장했어요.")
+                #endif
+            }
+        }) {
+            if let customization {
+                #if DEBUG
+                CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization,
+                                      saved: saveCompleted, testBootstrap: testBootstrap)
+                    .overlay(alignment: .bottomLeading) { testDiagnostics }
+                #else
+                CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization, saved: saveCompleted)
+                #endif
+            }
         }
         .preferredColorScheme(.dark)
         .onChange(of: model.isCleanupConfirmationPresented) { _, presented in
@@ -40,20 +81,7 @@ struct RootView: View {
         }
         #if DEBUG
         .overlay(alignment: .bottomLeading) {
-            VStack(spacing: 0) {
-                if let testBootstrap {
-                    Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
-                    Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
-                    Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
-                    Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
-                }
-                if let testRecorder {
-                    Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
-                    Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
-                }
-                if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
-            }
-            .font(.system(size: 1)).foregroundStyle(.clear)
+            if !showsCustomization { testDiagnostics }
         }
         // 상단 모서리는 상태 표시줄이 터치를 가져가므로, 하단 버튼과도 겹치지 않는 오른쪽 가운데에 둔다.
         .overlay(alignment: .trailing) {
@@ -126,6 +154,9 @@ struct RootView: View {
                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
             }
+            PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
+            Button("카드 꾸미기", action: startCardCustomization)
+                .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
             ForEach(Destination.mainMenu, id: \.self) { destination in
                 Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
                     .accessibilityIdentifier("open.\(destination.rawValue)")
@@ -133,6 +164,30 @@ struct RootView: View {
         case nil:
             EmptyView()
         }
+    }
+
+    private func startCardCustomization() {
+        guard let session = model.beginCardCustomization() else { return }
+        savedCardNotice = false
+        customization = session
+        showsCustomization = true
+    }
+
+    private func endCustomization() {
+        // Invalidate generation before cancellation can complete a loader.
+        customization?.discard()
+        cardImportTask?.cancel()
+        cardImportTask = nil
+        customization = nil
+    }
+    private func dismissCustomization() {
+        endCustomization()
+        showsCustomization = false
+    }
+    private func saveCompleted() {
+        announceSavedCard = true
+        endCustomization()
+        showsCustomization = false
     }
 
     private func message(for issue: StorageIssue) -> String {
@@ -156,11 +211,43 @@ struct RootView: View {
     }
 
     #if DEBUG
+    private var testDiagnostics: some View {
+        VStack(spacing: 0) {
+            if let testBootstrap {
+                Text("상태 진단").accessibilityValue(snapshotJSON).accessibilityIdentifier("test.snapshot")
+                Text("파일 진단").accessibilityValue(testBootstrap.persistedBytes).accessibilityIdentifier("test.persistedBytes")
+                Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
+                Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
+                Text("카드 외형 진단").accessibilityValue(testBootstrap.cardStyleJSON(model: model, controller: customization)).accessibilityIdentifier("test.cardStyleJSON")
+                Text("동작 줄이기 진단").accessibilityValue(reduceMotion ? "true" : "false").accessibilityIdentifier("test.reduceMotion")
+            }
+            if let testRecorder {
+                Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
+                Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
+            }
+            if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
+        }.font(.system(size: 1)).foregroundStyle(.clear).allowsHitTesting(false)
+    }
     private var snapshotJSON: String {
         guard let snapshot = model.snapshot else { return "null" }
+        let diagnostic = snapshot.updating(cards: CardSection(items: snapshot.cards.items.map { $0.updating(style: CardStyle(background: $0.style.background, photos: [])) }))
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(snapshot), let json = String(data: data, encoding: .utf8) else { return "null" }
-        return json
+        guard let data = try? encoder.encode(diagnostic),
+              var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return "null" }
+        // The legacy state diagnostic keeps actual sections and color, but only metadata for photo bytes.
+        if let testBootstrap,
+           let metadata = (try? JSONSerialization.jsonObject(with: Data(testBootstrap.cardStyleJSON(model: model, controller: nil).utf8))) as? [String: Any],
+           var cards = object["cards"] as? [String: Any], var items = cards["items"] as? [[String: Any]] {
+            for index in items.indices {
+                if var style = items[index]["style"] as? [String: Any] {
+                    style["photos"] = metadata["photos"]
+                    items[index]["style"] = style
+                }
+            }
+            cards["items"] = items; object["cards"] = cards
+        }
+        guard let compact = try? JSONSerialization.data(withJSONObject: object, options: .sortedKeys) else { return "null" }
+        return String(decoding: compact, as: UTF8.self)
     }
     #endif
 }

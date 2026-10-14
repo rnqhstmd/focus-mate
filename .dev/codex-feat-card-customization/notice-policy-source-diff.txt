@@ -1,0 +1,47 @@
+--- CardCustomizationController.swift before
++++ CardCustomizationController.swift after
+@@ -30,12 +30,40 @@
+     case saveFailed(StorageIssue)
+ 
+     var message: String {
++        func importMessage(_ base: String, failures: [CardPhotoProcessingIssue]) -> String {
++            let reasons = failures.reduce(into: [String]()) { reasons, issue in
++                let reason: String? = switch issue {
++                case .inputTooLarge: "선택한 입력 사진은 장당 8MiB 이하여야 해요."
++                case .unsupportedAspectRatio: "사진의 가로·세로 비율은 0.1~10 범위여야 해요."
++                case .cannotMeetStorageLimit: "사진을 1MiB 이하로 압축해 저장하지 못했어요."
++                case .encodingFailed: "사진 변환에 실패했어요."
++                case .unreadable: nil
++                }
++                if let reason, !reasons.contains(reason) { reasons.append(reason) }
++            }
++            return ([base] + reasons).joined(separator: " ")
++        }
++        func storageReason(_ issue: StorageIssue) -> String? {
++            switch issue {
++            case .invalidState(.invalidCardStyle(.photoTooLarge)):
++                "사진 한 장의 저장 용량이 1MiB를 초과했어요."
++            case .invalidState(.invalidCardStyle(.totalPhotosTooLarge)):
++                "사진 전체의 저장 용량이 6MiB를 초과했어요."
++            case let .writeBlocked(cause): storageReason(cause)
++            default: nil
++            }
++        }
+         switch self {
+-        case .maximumPhotos: "사진은 최대 6장까지 넣을 수 있어요."
+-        case .importFailed: "사진을 읽지 못했어요. 사진 추가로 다시 선택해주세요."
++        case .maximumPhotos:
++            return "사진은 최대 6장까지 넣을 수 있어요."
++        case let .importFailed(failures):
++            return importMessage("사진을 읽지 못했어요. 사진 추가로 다시 선택해주세요.", failures: failures)
+         case let .partialImport(failures, omittedCount):
+-            omittedCount > 0 ? "사진은 최대 6장까지 넣을 수 있어요. 일부 사진은 추가하지 않았어요." : "사진 \(failures.count)장을 읽지 못했어요. 사진 추가로 다시 선택해주세요."
+-        case .saveFailed: "카드 외형을 저장하지 못했어요. 초안은 유지돼요. 저장 버튼으로 다시 시도해주세요."
++            let base = omittedCount > 0 ? "사진은 최대 6장까지 넣을 수 있어요. 일부 사진은 추가하지 않았어요." : "사진 \(failures.count)장을 읽지 못했어요. 사진 추가로 다시 선택해주세요."
++            return importMessage(base, failures: failures)
++        case let .saveFailed(issue):
++            let base = "카드 외형을 저장하지 못했어요. 초안은 유지돼요. 저장 버튼으로 다시 시도해주세요."
++            return storageReason(issue).map { base + " " + $0 } ?? base
+         }
+     }
+ }

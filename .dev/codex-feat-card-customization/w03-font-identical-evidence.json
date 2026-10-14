@@ -1,0 +1,14 @@
+{
+  "SOURCE.md": {
+    "sha256": "23565b23626b88c4916598a12bea08446682ae6c7fd2294eccc46cc311a6bff1",
+    "git_blob": "2422e1b222a6a4c57fb19b2532d48da6c25bbf19"
+  },
+  "SeoulAlrim-Medium.ttf": {
+    "sha256": "6e00e4c55c765cc48b142c9770bdbf84a2794a763126147a929092f3075e73e5",
+    "git_blob": "bed00a536f965af8712e7fe53358bd6aa6525a78"
+  },
+  "SeoulAlrim-Bold.ttf": {
+    "sha256": "eb0420723b27ca16bf2f42d734263a97ff23353143d452c29afa2c1d5a370ce9",
+    "git_blob": "2518e66dce8d7c7e92ac6dac2762d33ed897de19"
+  }
+}

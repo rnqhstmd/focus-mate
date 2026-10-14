@@ -66,20 +66,20 @@ final class RecordStorageTests: XCTestCase {
         try assertProtected(bytes, loadIssue: issue, saveIssue: .writeBlocked(issue))
     }
 
-    // 깨짐 명명: 미지원 v3에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
+    // 깨짐 명명: 미지원 v4에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
     @MainActor
     func testAC12_미지원버전_AppModel은_완료와_메모저장을_차단하고_원본을_보존한다() throws {
-        let bytes = Data(#"{"version":3,"state":null}"#.utf8)
+        let bytes = Data(#"{"version":4,"state":null}"#.utf8)
         try withTemporaryFile { fileURL in
             try seed(fileURL, bytes)
             let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
             model.loadIfNeeded()
-            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(3)))
+            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(4)))
 
             XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(3)))
+            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(4)))
             XCTAssertFalse(model.saveRecordMemo("메모", forJourneyID: "journey-001"))
-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(3)))
+            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(4)))
             XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
         }
     }
@@ -94,7 +94,7 @@ final class RecordStorageTests: XCTestCase {
             XCTAssertTrue(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 2)
+            XCTAssertEqual(root["version"] as? Int, 3)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             XCTAssertEqual(state["cardIssued"] as? Bool, true)
             XCTAssertEqual(((state["cards"] as? [String: Any])?["items"] as? [Any])?.count, 0)

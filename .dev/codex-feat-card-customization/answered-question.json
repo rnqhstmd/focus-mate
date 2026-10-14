@@ -1,0 +1,25 @@
+{
+  "question": {
+    "version": 1,
+    "question_set_id": "2cdaa4b7-f292-47e5-8e36-8ad1c002c977",
+    "phase": "requirements",
+    "questions": [
+      {
+        "id": "w10_photo_policy",
+        "header": "사진 정책",
+        "question": "W10의 iOS 사진 정책을 권장 세트로 적용할까요?",
+        "options": [
+          {
+            "label": "권장 정책 세트",
+            "description": "HEIC 포함 플랫폼 사진, 입력8MiB·6장·웹 편집범위·되돌리기20회, 보존 장당1MiB·전체6MiB"
+          },
+          {
+            "label": "웹 형식만 허용",
+            "description": "JPG·PNG·WebP만 허용하고 나머지 한도는 권장 세트와 동일"
+          }
+        ]
+      }
+    ]
+  },
+  "answer_digest": "e9832a8127353e2f8293c776933eb2610bb8ef0ec322310d2da7801815333758"
+}

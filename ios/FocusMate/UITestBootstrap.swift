@@ -1,8 +1,12 @@
 #if DEBUG
 import Foundation
 import Observation
+import CryptoKit
 
 struct UITestBootstrap {
+    let photoManifestURL: URL?
+    let cardImportManual: Bool
+    let cardSaveFailure: UITestCardSaveFailure
     let fileURL: URL
     let seed: String?
     let shouldFailSound: Bool
@@ -20,6 +24,19 @@ struct UITestBootstrap {
         }
         guard let id = try argument("--fm-ui-test-id") else { return nil }
         guard let uuid = UUID(uuidString: id) else { throw SetupIssue.invalidArguments }
+        let manifest = try argument("--fm-ui-card-photo-manifest")
+        let support = applicationSupport.standardizedFileURL.resolvingSymlinksInPath()
+        if let manifest {
+            let url = (manifest.hasPrefix("/") ? URL(fileURLWithPath: manifest) : support.appendingPathComponent(manifest)).standardizedFileURL.resolvingSymlinksInPath()
+            guard url.path.hasPrefix(support.path + "/") else { throw SetupIssue.invalidArguments }
+            photoManifestURL = url
+        } else { photoManifestURL = nil }
+        let cardHold = try argument("--fm-ui-card-import-hold")
+        guard cardHold == nil || cardHold == "manual" else { throw SetupIssue.invalidArguments }
+        cardImportManual = cardHold == "manual"
+        let cardSave = try argument("--fm-ui-card-save")
+        guard cardSave == nil || cardSave == "fail-once" else { throw SetupIssue.invalidArguments }
+        cardSaveFailure = UITestCardSaveFailure(enabled: cardSave == "fail-once")
         seed = try argument("--fm-ui-seed")
         guard seed == nil || Self.seeds.contains(seed!) else { throw SetupIssue.invalidArguments }
         let save = try argument("--fm-ui-save")
@@ -35,6 +52,43 @@ struct UITestBootstrap {
         guard recoveryScenario == nil || ["readOnce", "readAlways", "backupFail", "backupMismatch", "cleanupFail"].contains(recoveryScenario!) else { throw SetupIssue.invalidArguments }
         fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
             .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
+    }
+
+    @MainActor func cardPhotoInputs(gate: UITestCardImportGate?) -> [CardPhotoInput] {
+        guard let manifest = photoManifestURL else { return [] }
+        struct Manifest: Decodable { struct Item: Decodable { let path: String }; let items: [Item] }
+        guard let bytes = try? Data(contentsOf: manifest), let entries = try? JSONDecoder().decode(Manifest.self, from: bytes) else {
+            return [CardPhotoInput { throw CardPhotoProcessingIssue.unreadable }]
+        }
+        let token = gate?.arm()
+        let directory = manifest.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
+        return entries.items.enumerated().map { index, item in
+            CardPhotoInput {
+                if index == 0, let gate, let token { try await gate.wait(token) }
+                try Task.checkCancellation()
+                let lexical = directory.appendingPathComponent(item.path).standardizedFileURL
+                let resolved = lexical.resolvingSymlinksInPath()
+                guard !item.path.hasPrefix("/"), lexical.path.hasPrefix(directory.path + "/"),
+                      resolved.path.hasPrefix(directory.path + "/") else { throw CardPhotoProcessingIssue.unreadable }
+                return try Data(contentsOf: resolved)
+            }
+        }
+    }
+
+    @MainActor func cardStyleJSON(model: AppModel, controller: CardCustomizationController?) -> String {
+        func color(_ c: CardColor) -> [String: Double] { ["red": c.red, "green": c.green, "blue": c.blue] }
+        func photos(_ style: CardStyle) -> [[String: Any]] {
+            style.photos.map { ["id": $0.id.uuidString, "pixelWidth": $0.pixelWidth, "pixelHeight": $0.pixelHeight,
+                "centerX": $0.centerX, "centerY": $0.centerY, "widthFraction": $0.widthFraction,
+                "byteCount": $0.data.count, "sha256": SHA256.hash(data: $0.data).map { String(format: "%02x", $0) }.joined()] }
+        }
+        let saved = model.currentCardStyle
+        let json: [String: Any] = ["cardID": model.snapshot?.currentCard?.id ?? "", "background": color(saved.background),
+            "photos": photos(saved), "draft": controller.map { ["background": color($0.draft.background), "photos": photos($0.draft)] as [String: Any] } ?? NSNull(),
+            "selectedPhotoID": controller?.selectedPhotoID?.uuidString as Any? ?? NSNull(),
+            "isImporting": controller?.isImporting ?? false, "canUndo": controller?.canUndo ?? false, "didSave": controller?.didSave ?? false]
+        guard let data = try? JSONSerialization.data(withJSONObject: json, options: .sortedKeys) else { return "null" }
+        return String(decoding: data, as: UTF8.self)
     }
 
     private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard"]).union(rawSeeds.keys)
@@ -58,6 +112,7 @@ struct UITestBootstrap {
         let activeURL = fileURL
         let scenario = recoveryScenario
         let failSave = shouldFailSave
+        let cardFailure = cardSaveFailure
         var activeReads = 0
         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
             if url == activeURL {
@@ -68,7 +123,7 @@ struct UITestBootstrap {
             }
             return try Data(contentsOf: url)
         }, writeData: { data, url in
-            if failSave { throw StorageIssue.writeFailed }
+            if failSave || cardFailure.consume() { throw StorageIssue.writeFailed }
             try data.write(to: url, options: .atomic)
         }, writeBackup: { data, url in
             if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
@@ -173,6 +228,51 @@ final class UITestIssuanceGate {
         guard let waiter else { releasedEarly = true; return }
         self.waiter = nil
         waiter.resume()
+    }
+}
+/// Only the editor Save action arms this shared box; bootstrap and unrelated saves never arm it.
+final class UITestCardSaveFailure {
+    private let enabled: Bool
+    private var used = false
+    private var armed = false
+    init(enabled: Bool) { self.enabled = enabled }
+    func arm() { if enabled && !used { armed = true } }
+    func consume() -> Bool {
+        guard armed else { return false }
+        armed = false; used = true
+        return true
+    }
+}
+
+@MainActor
+final class UITestCardImportGate {
+    private var token = UUID()
+    private var waiter: CheckedContinuation<Void, Error>?
+    private var released = false
+    func arm() -> UUID {
+        cancel(token)
+        token = UUID(); released = false
+        return token
+    }
+    func wait(_ expected: UUID) async throws {
+        try Task.checkCancellation()
+        guard expected == token else { throw CancellationError() }
+        if released { return }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { waiter = $0 }
+        } onCancel: {
+            Task { @MainActor in self.cancel(expected) }
+        }
+    }
+    func release() {
+        released = true
+        let continuation = waiter; waiter = nil
+        continuation?.resume()
+    }
+    private func cancel(_ expected: UUID) {
+        guard expected == token else { return }
+        let continuation = waiter; waiter = nil
+        continuation?.resume(throwing: CancellationError())
     }
 }
 #endif

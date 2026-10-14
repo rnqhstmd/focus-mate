@@ -129,6 +129,10 @@ struct UITestBootstrap {
         "duplicateCards": state(cards: card + "," + #"{"id":"FM-20261014","issuedAt":"2026-10-13T09:00:00Z"}"#),
         "cardWithoutIssuance": state(issued: false, cards: card, stations: #""currentStation":null,"initialStation":null"#),
         "undefinedRecord": state(cards: "", records: #"{"kind":"x"}"#),
+        // 마이페이지 UI 테스트: 카드 번호 FM-12345678과 완료 기록 3건(25·25·15분, 합 65분).
+        // 버전 2 형식이다. 카드 꾸미기(W10)가 합류하면 버전 3 변환(카드 style 기본값)을 거쳐 읽힌다.
+        "profileRecords": state(cards: #"{"id":"FM-12345678","issuedAt":"2026-10-13T09:00:00Z"}"#,
+                                records: ##"{"bus":"버스2014","completedAt":"2026-10-13T03:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-a","memo":"","minutes":25,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"},{"bus":"버스2014","completedAt":"2026-10-13T02:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-b","memo":"","minutes":25,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"},{"bus":"버스2014","completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-c","memo":"","minutes":15,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"}"##),
     ]
 }
 

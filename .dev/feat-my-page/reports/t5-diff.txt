@@ -1,0 +1,555 @@
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index 123b176..44ed1a7 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -7,6 +7,15 @@ struct DestinationScreen: View {
+     @Bindable var model: AppModel
+ 
+     var body: some View {
++        // 마이페이지는 시안대로 자체 여백·좌측 제목을 쓰므로 공통 자리표시 체인 밖에서 그린다.
++        if destination == .profile {
++            ProfileView(model: model, onCustomize: { model.openFromProfile(.customize) })
++        } else {
++            placeholderOrTime
++        }
++    }
++
++    private var placeholderOrTime: some View {
+         Group {
+             if destination == .time {
+                 TimeSelectionView(model: model)
+diff --git a/ios/FocusMate/ProfileView.swift b/ios/FocusMate/ProfileView.swift
+new file mode 100644
+index 0000000..b49c931
+--- /dev/null
++++ b/ios/FocusMate/ProfileView.swift
+@@ -0,0 +1,169 @@
++import SwiftUI
++
++/// 마이페이지 문구(시안 EPnQQ). 카드 이름은 PassIdentity, 행 이름은 목적지 제목을 단일 출처로 쓴다.
++enum ProfileCopy {
++    static let headline = "내 시간에, 내 취향을."
++    static let subhead = "한 장으로 함께하는 나만의 여정"
++    static let cardTagline = "모든 몰입 여정에 함께"
++    static let journeysLabel = "완료한 여정"
++    static let timeLabel = "함께한 시간"
++    static let statsError = "기록을 불러오지 못했어요"
++    static let unavailableValue = "-"
++}
++
++/// 통계 표시 값. 화면은 시안의 숫자·"min/h", VoiceOver는 "N회"·"분/시간"으로 읽는다.
++struct ProfileStatsDisplay: Equatable {
++    let journeysText: String
++    let timeText: String
++    let journeysAccessibilityLabel: String
++    let timeAccessibilityLabel: String
++    let errorMessage: String?
++
++    init(_ stats: ProfileStats) {
++        switch stats {
++        case let .loaded(summary):
++            journeysText = "\(summary.count)"
++            timeText = ProfileTimeText.display(minutes: summary.minutes)
++            journeysAccessibilityLabel = "\(ProfileCopy.journeysLabel), \(summary.count)회"
++            timeAccessibilityLabel = "\(ProfileCopy.timeLabel), \(ProfileTimeText.spoken(minutes: summary.minutes))"
++            errorMessage = nil
++        case .unavailable:
++            // 값 "-"는 읽지 않고 항목 이름만 읽는다. 이유는 바로 아래 안내 문구가 알려 준다.
++            journeysText = ProfileCopy.unavailableValue
++            timeText = ProfileCopy.unavailableValue
++            journeysAccessibilityLabel = ProfileCopy.journeysLabel
++            timeAccessibilityLabel = ProfileCopy.timeLabel
++            errorMessage = ProfileCopy.statsError
++        }
++    }
++}
++
++private enum ProfileLayout {
++    static let background = Color(red: 0x0F / 255, green: 0x10 / 255, blue: 0x12 / 255)
++    static let horizontal: CGFloat = 24
++}
++
++/// 마이페이지(읽기 전용). 하단 고정 요소 없이 전체를 스크롤해 가장 큰 글자에서도 모든 요소가 통째로 보이게 한다.
++/// 애니메이션이 없어 동작 줄이기 설정과 무관하게 같은 화면이다.
++@MainActor
++struct ProfileView: View {
++    let model: AppModel
++    /// 카드 꾸미기 진입. W10 합류 때 주입하는 쪽만 꾸미기 세션 시작으로 바꾼다.
++    let onCustomize: () -> Void
++    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
++
++    var body: some View {
++        let stats = ProfileStatsDisplay(model.profileStats)
++        ScrollView {
++            VStack(alignment: .leading, spacing: 0) {
++                Text(ProfileCopy.headline).font(.title2.bold())
++                    .accessibilityIdentifier("profile.headline")
++                Text(ProfileCopy.subhead).font(.subheadline).foregroundStyle(.secondary)
++                    .padding(.top, 8).accessibilityIdentifier("profile.subhead")
++                PassFace().frame(maxWidth: .infinity)
++                    .padding(.top, 32).accessibilityIdentifier("profile.card")
++                Text(PassIdentity.displayName).font(.title3.bold())
++                    .padding(.top, 16).accessibilityIdentifier("profile.cardName")
++                Text(ProfileCopy.cardTagline).font(.subheadline).foregroundStyle(.secondary)
++                    .padding(.top, 4).accessibilityIdentifier("profile.cardTagline")
++                Divider().padding(.top, 28)
++                ProfileMenuRow(systemImage: "pencil", title: Destination.cardStudio.title,
++                               identifier: "profile.customize", action: onCustomize)
++                statsSection(stats).padding(.top, 20)
++                Divider().padding(.top, 32)
++                ProfileMenuRow(systemImage: "slider.horizontal.3", title: Destination.settings.title,
++                               identifier: "profile.settings") { model.openFromProfile(.settings) }
++            }
++            .padding(.horizontal, ProfileLayout.horizontal)
++            .padding(.vertical, 32)
++        }
++        .background(ProfileLayout.background.ignoresSafeArea())
++        .navigationBarTitleDisplayMode(.inline)
++        .toolbarRole(.editor)
++        .toolbar { titleItem }
++    }
++
++    /// 시안처럼 뒤로 chevron 오른쪽에 버블 없는 좌측 정렬 제목을 둔다. 바 높이가 고정이라 글자 크기에 상한을 둔다.
++    @ToolbarContentBuilder private var titleItem: some ToolbarContent {
++        if #available(iOS 26.0, *) {
++            ToolbarItem(placement: .topBarLeading) { title }.sharedBackgroundVisibility(.hidden)
++        } else {
++            ToolbarItem(placement: .topBarLeading) { title }
++        }
++    }
++
++    // 툴바는 제목 뷰를 감싸는 래퍼에 바깥 식별자를 복사한다. 바깥 컨테이너에 별도 식별자를 줘
++    // 제목 Text의 screen.profile이 한 요소로만 잡히게 한다.
++    private var title: some View {
++        HStack {
++            Text(Destination.profile.title).font(.title2.bold()).fixedSize()
++                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
++                .accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.profile")
++        }
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier("profile.titleBar")
++    }
++
++    @ViewBuilder private func statsSection(_ stats: ProfileStatsDisplay) -> some View {
++        // 접근성 크기에서는 세로로 쌓는다. 여정이 위, 시간이 아래라 위→아래 순서는 그대로다.
++        let layout = dynamicTypeSize.isAccessibilitySize
++            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
++            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
++        VStack(alignment: .leading, spacing: 12) {
++            layout {
++                ProfileStatView(value: stats.journeysText, label: ProfileCopy.journeysLabel,
++                                accessibilityLabel: stats.journeysAccessibilityLabel, identifier: "profile.stat.journeys")
++                ProfileStatView(value: stats.timeText, label: ProfileCopy.timeLabel,
++                                accessibilityLabel: stats.timeAccessibilityLabel, identifier: "profile.stat.time")
++            }
++            if let message = stats.errorMessage {
++                Text(message).font(.subheadline).foregroundStyle(.secondary)
++                    .accessibilityIdentifier("profile.statsError")
++            }
++        }
++        .padding(.vertical, 20)
++    }
++}
++
++private struct ProfileMenuRow: View {
++    let systemImage: String
++    let title: String
++    let identifier: String
++    let action: () -> Void
++
++    var body: some View {
++        Button(action: action) {
++            HStack(spacing: 16) {
++                Image(systemName: systemImage).frame(width: 24).accessibilityHidden(true)
++                Text(title)
++                Spacer(minLength: 8)
++                Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
++            }
++            .padding(.vertical, 20)
++            .frame(minHeight: 44)
++            .contentShape(Rectangle())
++        }
++        .buttonStyle(.plain)
++        .accessibilityLabel(title)
++        .accessibilityIdentifier(identifier)
++    }
++}
++
++private struct ProfileStatView: View {
++    let value: String
++    let label: String
++    let accessibilityLabel: String
++    let identifier: String
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: 8) {
++            Text(value).font(.title.bold()).lineLimit(1).minimumScaleFactor(0.6)
++                .accessibilityIdentifier("\(identifier).value")
++            Text(label).font(.subheadline).foregroundStyle(.secondary)
++        }
++        .frame(maxWidth: .infinity, alignment: .leading)
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel(accessibilityLabel)
++        .accessibilityIdentifier(identifier)
++    }
++}
+diff --git a/ios/FocusMateTests/ProfileStatsDisplayTests.swift b/ios/FocusMateTests/ProfileStatsDisplayTests.swift
+new file mode 100644
+index 0000000..5edf553
+--- /dev/null
++++ b/ios/FocusMateTests/ProfileStatsDisplayTests.swift
+@@ -0,0 +1,38 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++final class ProfileStatsDisplayTests: XCTestCase {
++    // 깨짐 명명: 0건 표시가 "0"/"0 min"이 아니거나 라벨이 0회/0분이 아니면 실패
++    func test기록이_없으면_0과_0분을_보여주고_오류는_없다() {
++        let display = ProfileStatsDisplay(.loaded(RecordLifetimeSummary(count: 0, minutes: 0)))
++
++        XCTAssertEqual(display.journeysText, "0")
++        XCTAssertEqual(display.timeText, "0 min")
++        XCTAssertEqual(display.journeysAccessibilityLabel, "완료한 여정, 0회")
++        XCTAssertEqual(display.timeAccessibilityLabel, "함께한 시간, 0분")
++        XCTAssertNil(display.errorMessage)
++    }
++
++    // 깨짐 명명: 65분을 "65 min"으로 두거나 시/분 분해·라벨 한국어 단위를 틀리면 실패
++    func test3회_65분은_시와_분으로_나누어_보여준다() {
++        let display = ProfileStatsDisplay(.loaded(RecordLifetimeSummary(count: 3, minutes: 65)))
++
++        XCTAssertEqual(display.journeysText, "3")
++        XCTAssertEqual(display.timeText, "1 h 5 min")
++        XCTAssertEqual(display.journeysAccessibilityLabel, "완료한 여정, 3회")
++        XCTAssertEqual(display.timeAccessibilityLabel, "함께한 시간, 1시간 5분")
++        XCTAssertNil(display.errorMessage)
++    }
++
++    // 깨짐 명명: 집계 실패를 0으로 보여주거나 오류 문구를 누락하면 실패
++    func test집계_불가면_대시와_오류_문구를_보여준다() {
++        let display = ProfileStatsDisplay(.unavailable)
++
++        XCTAssertEqual(display.journeysText, "-")
++        XCTAssertEqual(display.timeText, "-")
++        XCTAssertEqual(display.journeysAccessibilityLabel, "완료한 여정")
++        XCTAssertEqual(display.timeAccessibilityLabel, "함께한 시간")
++        XCTAssertEqual(display.errorMessage, "기록을 불러오지 못했어요")
++    }
++}
+diff --git a/ios/FocusMateUITests/Phase1FlowTests.swift b/ios/FocusMateUITests/Phase1FlowTests.swift
+index ef3be0e..c933d3d 100644
+--- a/ios/FocusMateUITests/Phase1FlowTests.swift
++++ b/ios/FocusMateUITests/Phase1FlowTests.swift
+@@ -165,7 +165,6 @@ final class Phase1FlowTests: XCTestCase {
+         let destinations = [
+             (button: "기록", screen: "screen.records"),
+             (button: "설정", screen: "screen.settings"),
+-            (button: "마이페이지", screen: "screen.profile"),
+         ]
+ 
+         for destination in destinations {
+diff --git a/ios/FocusMateUITests/ProfileUITests.swift b/ios/FocusMateUITests/ProfileUITests.swift
+new file mode 100644
+index 0000000..5e185c0
+--- /dev/null
++++ b/ios/FocusMateUITests/ProfileUITests.swift
+@@ -0,0 +1,298 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class ProfileUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // MARK: - 진입·구성
++
++    // 깨짐 명명: open.profile 탭이 마이페이지로 이동하지 않거나 제목이 "마이페이지"가 아니면 실패
++    func test메인에서_마이페이지로_진입하면_제목이_마이페이지다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        let screen = openProfile(h)
++        XCTAssertEqual(screen.label, "마이페이지")
++    }
++
++    // 깨짐 명명: 요소 순서가 바뀌거나 한 요소라도 빠지면 실패
++    func test마이페이지_요소는_설계_순서대로_위에서_아래로_배치된다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        let ids = [
++            "screen.profile", "profile.headline", "profile.subhead", "profile.card",
++            "profile.cardName", "profile.cardTagline", "profile.customize",
++            "profile.stat.journeys", "profile.stat.time", "profile.settings"
++        ]
++        var frames: [(String, CGFloat, CGFloat)] = []
++        for id in ids {
++            let e = h.element(id)
++            XCTAssertTrue(e.waitForExistence(timeout: timeout), "없음: \(id)")
++            frames.append((id, e.frame.minY.rounded(), e.frame.minX))
++        }
++        // 통계 두 칸은 같은 행(minY 1pt 이내)일 수 있으므로 같은 행이면 minX로 비교
++        for i in 1..<frames.count {
++            let prev = frames[i - 1], cur = frames[i]
++            let sameRow = abs(prev.1 - cur.1) <= 1
++            let ordered = sameRow ? prev.2 <= cur.2 : prev.1 < cur.1
++            XCTAssertTrue(ordered, "순서 위반: \(prev.0)(\(prev.1),\(prev.2)) -> \(cur.0)(\(cur.1),\(cur.2))")
++        }
++    }
++
++    // 깨짐 명명: 헤드라인·서브헤드 문구가 달라지면 실패
++    func test헤드라인과_서브헤드_문구가_설계와_같다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        XCTAssertEqual(h.element("profile.headline").label, "내 시간에, 내 취향을.")
++        XCTAssertEqual(h.element("profile.subhead").label, "한 장으로 함께하는 나만의 여정")
++    }
++
++    // 깨짐 명명: 카드 이름·태그라인 문구가 달라지면 실패
++    func test카드_이름과_태그라인_문구가_설계와_같다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        XCTAssertEqual(h.element("profile.cardName").label, "집중동행카드")
++        XCTAssertEqual(h.element("profile.cardTagline").label, "모든 몰입 여정에 함께")
++    }
++
++    // 깨짐 명명: 통계 칸 접근성 라벨에 항목 이름이 빠지면 실패
++    func test통계_칸_라벨에_항목_이름이_들어_있다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        XCTAssertTrue(h.element("profile.stat.journeys").label.contains("완료한 여정"))
++        XCTAssertTrue(h.element("profile.stat.time").label.contains("함께한 시간"))
++    }
++
++    // 깨짐 명명: 카드 접근성 라벨이 "집중동행카드"가 아니거나 카드 번호(FM-)가 노출되면 실패
++    func test카드_접근성_라벨은_집중동행카드이고_카드번호를_노출하지_않는다() {
++        let h = FocusMateUIHarness.launch(seed: "profileRecords")
++        _ = openProfile(h)
++        let card = h.element("profile.card")
++        XCTAssertTrue(card.exists)
++        XCTAssertTrue(card.label.contains("집중동행카드"))
++        XCTAssertFalse(card.label.contains("FM-"))
++    }
++
++    // 깨짐 명명: 화면 어디에든 카드 번호(FM-)가 label/value로 노출되면 실패
++    func test마이페이지_화면_어디에도_카드번호가_보이지_않는다() throws {
++        let h = FocusMateUIHarness.launch(seed: "profileRecords")
++        _ = openProfile(h)
++        XCTAssertTrue(h.element("profile.settings").waitForExistence(timeout: timeout))
++        let root = try h.app.snapshot()
++        var texts: [String] = []
++        collect(root, into: &texts)
++        XCTAssertFalse(texts.isEmpty, "수집된 텍스트가 없음")
++        XCTAssertTrue(texts.filter { $0.contains("FM-") }.isEmpty, "카드번호 노출: \(texts.filter { $0.contains("FM-") })")
++    }
++
++    // MARK: - 통계 값
++
++    // 깨짐 명명: 기록 0건에서 0/0 min이 아니거나 오류가 표시되면 실패
++    func test기록이_없으면_통계가_0과_0분이고_오류가_없다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        XCTAssertEqual(h.element("profile.stat.journeys.value").label, "0")
++        XCTAssertEqual(h.element("profile.stat.time.value").label, "0 min")
++        XCTAssertFalse(h.element("profile.statsError").exists)
++    }
++
++    // 깨짐 명명: 기록 3건(65분) 집계가 틀리거나 값에 한국어 단위가 섞이면 실패
++    func test기록_3건은_3과_1h_5min으로_단위_없이_표시된다() {
++        let h = FocusMateUIHarness.launch(seed: "profileRecords")
++        _ = openProfile(h)
++        let journeys = h.element("profile.stat.journeys.value").label
++        let time = h.element("profile.stat.time.value").label
++        XCTAssertEqual(journeys, "3")
++        XCTAssertEqual(time, "1 h 5 min")
++        for text in [journeys, time] {
++            XCTAssertFalse(text.contains("분"))
++            XCTAssertFalse(text.contains("시간"))
++        }
++    }
++
++    // 깨짐 명명: 통계 칸 접근성 라벨이 한국어 단위 문장("3회", "1시간 5분")이 아니면 실패
++    func test통계_칸_접근성_라벨은_한국어_단위로_읽힌다() {
++        let h = FocusMateUIHarness.launch(seed: "profileRecords")
++        _ = openProfile(h)
++        XCTAssertEqual(h.element("profile.stat.journeys").label, "완료한 여정, 3회")
++        XCTAssertEqual(h.element("profile.stat.time").label, "함께한 시간, 1시간 5분")
++    }
++
++    // 깨짐 명명: 정상 집계인데 오류 안내가 표시되면 실패
++    func test정상_집계에서는_통계_오류가_없다() {
++        for seed in ["ready", "profileRecords"] {
++            let h = FocusMateUIHarness.launch(seed: seed)
++            _ = openProfile(h)
++            XCTAssertTrue(h.element("profile.settings").waitForExistence(timeout: timeout))
++            XCTAssertFalse(h.element("profile.statsError").exists, "seed=\(seed)")
++            h.app.terminate()
++        }
++    }
++
++    // MARK: - 읽기 전용·내비게이션
++
++    // 깨짐 명명: 마이페이지가 열려 있는 동안 저장 파일을 바꾸면(쓰기 발생) 실패
++    func test마이페이지를_열어도_저장_데이터는_바뀌지_않는다() throws {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        XCTAssertTrue(h.element("open.profile").waitForExistence(timeout: timeout))
++        let before = try h.diagnostic("test.persistedBytes")
++        _ = openProfile(h)
++        let result = XCTWaiter().wait(for: [XCTestExpectation(description: "idle")], timeout: 3)
++        XCTAssertEqual(result, .timedOut)
++        backButton(h).tap()
++        XCTAssertTrue(h.element("open.profile").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), before)
++    }
++
++    // 깨짐 명명: 뒤로 버튼이 마이페이지를 닫지 않거나 메인 진입점이 복구되지 않으면 실패
++    func test뒤로를_누르면_메인으로_돌아와_마이페이지_진입점이_눌린다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        backButton(h).tap()
++        let entry = h.element("open.profile")
++        XCTAssertTrue(entry.waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.profile").exists)
++        XCTAssertTrue(entry.isHittable)
++    }
++
++    // 깨짐 명명: customize/settings를 버튼으로 노출하지 않거나 라벨·탭 가능 상태가 틀리면 실패
++    func test카드_꾸미기와_설정은_눌리는_버튼으로_노출된다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        let customize = h.app.buttons["profile.customize"]
++        let settings = h.app.buttons["profile.settings"]
++        XCTAssertTrue(customize.waitForExistence(timeout: timeout))
++        XCTAssertTrue(settings.waitForExistence(timeout: timeout))
++        XCTAssertEqual(customize.label, "카드 꾸미기")
++        XCTAssertEqual(settings.label, "설정")
++        XCTAssertTrue(customize.isHittable)
++        XCTAssertTrue(settings.isHittable)
++    }
++
++    // 깨짐 명명: 카드 꾸미기 탭이 카드 스튜디오로 이동하지 않으면 실패
++    func test카드_꾸미기를_누르면_카드_스튜디오가_열린다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        h.element("profile.customize").tap()
++        let studio = h.element("screen.cardStudio")
++        XCTAssertTrue(studio.waitForExistence(timeout: timeout))
++        XCTAssertEqual(studio.label, "카드 꾸미기")
++    }
++
++    // 깨짐 명명: 카드 스튜디오에서 뒤로가 마이페이지로 복귀시키지 않으면 실패
++    func test카드_스튜디오에서_뒤로가면_마이페이지로_돌아온다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        h.element("profile.customize").tap()
++        XCTAssertTrue(h.element("screen.cardStudio").waitForExistence(timeout: timeout))
++        backButton(h).tap()
++        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.cardStudio").exists)
++    }
++
++    // 깨짐 명명: 설정 탭이 설정 화면으로 이동하지 않으면 실패
++    func test설정을_누르면_설정_화면이_열린다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        h.element("profile.settings").tap()
++        XCTAssertTrue(h.element("screen.settings").waitForExistence(timeout: timeout))
++    }
++
++    // 깨짐 명명: 설정에서 뒤로가 마이페이지로 복귀시키지 않으면 실패
++    func test설정에서_뒤로가면_마이페이지로_돌아온다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        h.element("profile.settings").tap()
++        XCTAssertTrue(h.element("screen.settings").waitForExistence(timeout: timeout))
++        backButton(h).tap()
++        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
++    }
++
++    // 깨짐 명명: 내비 버튼이 뒤로 외에 더 있거나 본문 버튼이 customize/settings 2개가 아니면 실패
++    func test마이페이지의_버튼_구성은_뒤로와_카드꾸미기와_설정뿐이다() {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        _ = openProfile(h)
++        let nav = h.app.navigationBars.firstMatch
++        XCTAssertTrue(nav.waitForExistence(timeout: timeout))
++        XCTAssertEqual(nav.buttons.count, 1)
++        XCTAssertEqual(h.app.buttons.count, 3)
++    }
++
++    // MARK: - 최대 글자 크기
++
++    // 깨짐 명명: 큰 글자에서 주요 요소가 스크롤해도 가시 영역에 완전히 들어오지 않으면 실패
++    func test최대_글자_크기에서_주요_요소가_스크롤로_가시_영역에_들어온다() throws {
++        let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: xxxl)
++        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
++        let entry = h.element("open.profile")
++        XCTAssertTrue(entry.waitForExistence(timeout: timeout))
++        XCTAssertTrue(entry.isHittable, "메인에서 마이페이지 진입 불가(메인 스크롤 없음)")
++        entry.tap()
++        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
++
++        let navMaxY = h.app.navigationBars.firstMatch.frame.maxY
++        let windowMaxY = h.app.windows.firstMatch.frame.maxY
++        for id in ["profile.card", "profile.customize", "profile.stat.journeys", "profile.stat.time", "profile.settings"] {
++            let target = h.element(id)
++            XCTAssertTrue(target.waitForExistence(timeout: timeout), "없음: \(id)")
++            var swipes = 0
++            while !(target.frame.minY >= navMaxY && target.frame.maxY <= windowMaxY) && swipes < 3 {
++                h.app.swipeUp()
++                swipes += 1
++            }
++            XCTAssertGreaterThanOrEqual(target.frame.minY, navMaxY, "\(id) 위쪽이 내비바에 가림")
++            XCTAssertLessThanOrEqual(target.frame.maxY, windowMaxY, "\(id) 아래쪽이 화면 밖")
++        }
++    }
++
++    // 깨짐 명명: 큰 글자에서 설정 버튼 탭이 설정 화면을 열지 못하면 실패
++    func test최대_글자_크기에서_설정을_눌러_설정에_가고_뒤로_돌아온다() {
++        let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: xxxl)
++        let entry = h.element("open.profile")
++        XCTAssertTrue(entry.waitForExistence(timeout: timeout))
++        XCTAssertTrue(entry.isHittable, "메인에서 마이페이지 진입 불가(메인 스크롤 없음)")
++        entry.tap()
++        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
++        let settings = h.element("profile.settings")
++        XCTAssertTrue(settings.waitForExistence(timeout: timeout))
++        var swipes = 0
++        while !settings.isHittable && swipes < 3 {
++            h.app.swipeUp()
++            swipes += 1
++        }
++        settings.tap()
++        XCTAssertTrue(h.element("screen.settings").waitForExistence(timeout: timeout))
++        backButton(h).tap()
++        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
++    }
++
++    // MARK: - Helpers
++
++    private let xxxl = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
++
++    @discardableResult
++    private func openProfile(_ h: FocusMateUIHarness) -> XCUIElement {
++        let entry = h.element("open.profile")
++        XCTAssertTrue(entry.waitForExistence(timeout: timeout), "open.profile 없음")
++        entry.tap()
++        let screen = h.element("screen.profile")
++        XCTAssertTrue(screen.waitForExistence(timeout: timeout), "screen.profile 없음")
++        return screen
++    }
++
++    private func backButton(_ h: FocusMateUIHarness) -> XCUIElement {
++        h.app.navigationBars.firstMatch.buttons.firstMatch
++    }
++
++    private func collect(_ node: XCUIElementSnapshot, into texts: inout [String]) {
++        if !node.identifier.hasPrefix("test.") {
++            if !node.label.isEmpty { texts.append(node.label) }
++            if let value = node.value as? String, !value.isEmpty { texts.append(value) }
++        }
++        for child in node.children { collect(child, into: &texts) }
++    }
++}

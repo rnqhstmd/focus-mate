@@ -30,6 +30,7 @@ struct RecordCompletionInput: Equatable {
 
 enum RecordCompletionOutcome: Equatable { case alighted, active, abandoned }
 struct RecordDaySummary: Equatable { let count: Int; let minutes: Int }
+struct RecordLifetimeSummary: Equatable { let count: Int; let minutes: Int }
 enum RecordValidationIssue: Error, Equatable {
     case invalidID, invalidText(String), invalidTagColor, invalidCompletedAt, invalidDate
     case invalidMinutes(Int), memoTooLong, duplicateJourneyID(String), recordNotFound(String)
@@ -88,6 +89,10 @@ struct RecordSection: Codable, Equatable {
         guard RecordDates.day(date) != nil else { throw RecordValidationIssue.invalidDate }
         let matches = items.filter { $0.date == date }
         return RecordDaySummary(count: matches.count, minutes: matches.reduce(0) { $0 + $1.minutes })
+    }
+    func lifetimeSummary() throws -> RecordLifetimeSummary {
+        try validate()
+        return RecordLifetimeSummary(count: items.count, minutes: items.reduce(0) { $0 + $1.minutes })
     }
     func sortedNewestFirst() -> RecordSection {
         let sorted = items.enumerated().sorted { left, right in

@@ -17,28 +17,28 @@ final class JourneyLiveActivityPolicyTests: XCTestCase {
 
     // MARK: attributes(for:)
 
-    // 깨짐: journeyID/버스 번호/종류를 잘못 채우면 실패한다.
-    func testV15_AC31_저장된_도착지가_계산값과_달라도_저장_이름과_버스를_쓴다() throws {
-        let snapshot = F.journey(busID: "421", destinationStopID: "seongsuIntersection", phase: .departed)
+    // 깨짐: journeyID/버스 번호/종류/도착지 이름을 저장된 여정 값이 아닌 곳에서 가져오면 실패한다.
+    func testV15_AC31_속성은_저장된_번호_종류_도착지_이름을_쓴다() {
+        let snapshot = F.journey(
+            busID: "421", busNumber: "343", busKind: "간선",
+            destinationStopID: "seongsuIntersection", destinationName: "성수사거리", phase: .departed
+        )
 
-        let attrs = try XCTUnwrap(JourneyLiveActivityPolicy.attributes(for: snapshot))
+        let attrs = JourneyLiveActivityPolicy.attributes(for: snapshot)
 
         XCTAssertEqual(attrs.journeyID, "journey-1")
         XCTAssertEqual(attrs.busNumber, "343")
         XCTAssertEqual(attrs.busKind, "간선")
-        XCTAssertEqual(attrs.destinationName, snapshot.destinationName)
-        XCTAssertNotNil(snapshot.destinationName)
-        XCTAssertNotEqual(attrs.destinationName, "성동구민체육센터")
+        XCTAssertEqual(attrs.destinationName, "성수사거리")
     }
 
-    // 깨짐: 알 수 없는 버스인데도 속성을 만들면 실패한다.
-    func testV15_정책_버스를_모르면_속성이_nil이다() {
-        XCTAssertNil(JourneyLiveActivityPolicy.attributes(for: F.journey(busID: "gone-bus")))
-    }
-
-    // 깨짐: 알 수 없는 도착지인데도 속성을 만들면 실패한다.
-    func testV15_정책_도착지를_모르면_속성이_nil이다() {
-        XCTAssertNil(JourneyLiveActivityPolicy.attributes(for: F.journey(destinationStopID: "gone-dest")))
+    // 깨짐: 카탈로그 밖 id인 여정에서 속성을 만들지 않으면(non-optional 계약 위반) 실패한다.
+    func testV15_카탈로그_밖_id여도_속성이_만들어진다() {
+        let attrs = JourneyLiveActivityPolicy.attributes(
+            for: F.journey(busID: "gone-bus", busNumber: "N37", destinationStopID: "gone-dest", destinationName: "사라진 곳")
+        )
+        XCTAssertEqual(attrs.busNumber, "N37")
+        XCTAssertEqual(attrs.destinationName, "사라진 곳")
     }
 
     // MARK: request

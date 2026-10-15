@@ -136,7 +136,7 @@ struct PreparedJourneyDetails: Equatable {
     let tag: PreparationTag
     let task: String
     let sound: JourneySound
-    var originName: String { RouteStops.name(at: journey.origin.index) }
-    var boundLabel: String { RouteStops.boundLabel(from: journey.origin) }
-    var distanceText: String { JourneyPlanner.distanceText(stops: journey.stops) }
+    var originName: String { journey.originName }
+    var boundLabel: String? { journey.boundLabel }
+    var distanceText: String { RouteCandidates.distanceText(meters: journey.distanceMeters) }
 }

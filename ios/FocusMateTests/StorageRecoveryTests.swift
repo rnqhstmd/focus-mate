@@ -397,7 +397,7 @@ final class StorageRecoveryTests: XCTestCase {
     func testAC8_오류버전은_원본바이트_그대로_백업에_보존된다() throws {
         let cases: [(name: String, bytes: Data)] = [
             ("version 0", Data(#"{"version":0,"state":null}"#.utf8)),
-            ("version 5", Data(#"{"version":5,"state":null}"#.utf8)),
+            ("version 6", Data(#"{"version":6,"state":null}"#.utf8)),
             ("string version", Data(#"{"version":"2","state":null}"#.utf8)),
         ]
 

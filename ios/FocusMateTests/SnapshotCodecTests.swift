@@ -3,7 +3,7 @@ import XCTest
 @testable import FocusMate
 
 final class SnapshotCodecTests: XCTestCase {
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수")
 
     private static let v1Issued = """
     {"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seongsu","name":"성수","direction":1}}}
@@ -34,16 +34,19 @@ final class SnapshotCodecTests: XCTestCase {
         let out = try SnapshotCodec.encode(AppSnapshot.empty)
         XCTAssertEqual(
             String(decoding: out, as: UTF8.self),
-            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":4}"#
+            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":5}"#
         )
     }
 
-    // 깨짐 명명: v1 마이그레이션에서 정류장을 버리거나 영역 골격을 빼면 실패한다.
-    func testEncodeOfDecodedV1MatchesGolden() throws {
-        let out = try SnapshotCodec.encode(try SnapshotCodec.decode(data(Self.v1Issued)))
+    // 깨짐 명명: 인코더가 정류장에 direction 키를 남기거나 id·name을 빠뜨리면 golden 문자열이 달라져 실패한다.
+    func testEncodeStationedSnapshotMatchesGolden() throws {
+        let snapshot = AppSnapshot.empty.updatingStage(
+            cardIssued: true, initialStation: Self.seongsu, currentStation: Self.seongsu
+        )
+        let out = try SnapshotCodec.encode(snapshot)
         XCTAssertEqual(
             String(decoding: out, as: UTF8.self),
-            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":4}"#
+            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"id":"seongsu","name":"성수"},"initialStation":{"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":5}"#
         )
     }
 
@@ -52,22 +55,24 @@ final class SnapshotCodecTests: XCTestCase {
         let original = AppSnapshot.empty.updatingStage(
             cardIssued: true,
             initialStation: Self.seongsu,
-            currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+            currentStation: StationSnapshot(id: "seoulForest", name: "서울숲")
         )
         XCTAssertEqual(try SnapshotCodec.decode(try SnapshotCodec.encode(original)), original)
     }
 
     // 깨짐 명명: 인코더가 비결정적 키 순서를 쓰면 바이트가 달라져 실패한다.
     func testReEncodingSameStateYieldsIdenticalBytes() throws {
-        let snapshot = try SnapshotCodec.decode(data(Self.v1Issued))
+        let snapshot = AppSnapshot.empty.updatingStage(
+            cardIssued: true, initialStation: Self.seongsu, currentStation: Self.seongsu
+        )
         let first = try SnapshotCodec.encode(snapshot)
         let second = try SnapshotCodec.encode(try SnapshotCodec.decode(first))
         XCTAssertEqual(first, second)
     }
 
-    func testCurrentVersionIsFour() {
-        // 깨짐 명명: currentVersion이 4가 아니면 실패한다.
-        XCTAssertEqual(SnapshotCodec.currentVersion, 4)
+    func testCurrentVersionIsFive() {
+        // 깨짐 명명: currentVersion이 5가 아니면 실패한다.
+        XCTAssertEqual(SnapshotCodec.currentVersion, 5)
     }
 
     // 깨짐 명명: 헤더/버전 검사 순서나 분류가 틀리면 해당 입력에서 실패한다.
@@ -81,7 +86,7 @@ final class SnapshotCodecTests: XCTestCase {
             (#"{"state":{}}"#, .corrupt),
             (#"{"version":0,"state":{}}"#, .unsupportedVersion(0)),
             (#"{"version":-1,"state":{}}"#, .unsupportedVersion(-1)),
-            (#"{"version":5,"state":{}}"#, .unsupportedVersion(5)),
+            (#"{"version":6,"state":{}}"#, .unsupportedVersion(6)),
             (#"{"version":999}"#, .unsupportedVersion(999)),
         ]
         for (input, issue) in cases {
@@ -171,35 +176,14 @@ final class SnapshotCodecTests: XCTestCase {
         )
     }
 
-    // 깨짐 명명: 마이그레이션이 발급/정류장을 보존하지 않거나 영역을 비우지 않으면 실패한다.
-    func testMigrateV1PreservesStageFieldsAndEmptiesAreas() throws {
-        let legacy = try JSONDecoder().decode(
-            LegacySnapshotV1.self,
-            from: data(#"{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}"#)
-        )
-        let migrated = SnapshotCodec.migrateV1(legacy)
-        XCTAssertEqual(
-            migrated,
-            AppSnapshot.empty.updatingStage(
-                cardIssued: true,
-                initialStation: Self.seongsu,
-                currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
-            )
-        )
-        XCTAssertTrue(migrated.cards.items.isEmpty)
-        XCTAssertNil(migrated.journey.active)
-        XCTAssertTrue(migrated.records.items.isEmpty)
-    }
-
-    // 깨짐 명명: v1 읽기에서 정류장이나 launchRoute 계산이 틀리면 실패한다.
-    func testDecodeV1IssuedStateMigratesToMainRoute() throws {
+    // 깨짐 명명: v1 읽기에서 발급 여부를 잃거나 옛 정류장을 남기면 실패한다. (W16b: 정류장은 비워진다)
+    func testDecodeV1IssuedStateKeepsIssuanceAndClearsStations() throws {
         let snapshot = try SnapshotCodec.decode(data(Self.v1Issued))
         XCTAssertTrue(snapshot.cardIssued)
-        XCTAssertEqual(snapshot.initialStation, Self.seongsu)
-        XCTAssertEqual(snapshot.currentStation, Self.seongsu)
+        XCTAssertNil(snapshot.initialStation)
+        XCTAssertNil(snapshot.currentStation)
         XCTAssertTrue(snapshot.cards.items.isEmpty)
         XCTAssertNil(snapshot.journey.active)
         XCTAssertTrue(snapshot.records.items.isEmpty)
-        XCTAssertEqual(try snapshot.launchRoute(), .main)
     }
 }

@@ -3,7 +3,7 @@ import Observation
 
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
-    case preparation, records, settings, profile, time, board, boarding, journey, alighting, alightingSummary
+    case preparation, records, settings, profile, time, board, boarding, journey, alighting, alightingSummary, dataSource
     var title: String {
         switch self {
         case .time: "시간 선택"
@@ -16,6 +16,7 @@ enum Destination: String, Hashable, CaseIterable {
         case .profile: "마이페이지"
         case .alighting: "하차 태그"
         case .alightingSummary: "요약"
+        case .dataSource: "데이터 출처"
         }
     }
 }
@@ -96,12 +97,21 @@ final class AppModel {
     let soundPreview: SoundPreviewController
     /// 하차 시각·로컬 날짜, 기록 화면의 '오늘'.
     let recordClock: RecordClock
+    /// 서울 버스 정류장 데이터. 첫 화면은 로딩을 기다리지 않는다.
+    let routeData: RouteCatalogStore
+    /// 출발 정류장을 다시 골라야 하는 이유. 메모리 안내이며 최초 정류장 저장에 성공하면 지운다.
+    var stationResetNotice: StationResetReason?
+    /// 옛 형식을 읽어 정류장·여정을 비운 경우. 시작 단계에서 v5로 한 번 저장한다.
+    @ObservationIgnored private var pendingMigration: SnapshotMigration?
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var hasAttemptedSupplement = false
     init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
          soundPreview: SoundPreviewController? = nil, journeyFactory: ActiveJourneyFactory = .init(),
-         recordClock: RecordClock = .live) {
+         recordClock: RecordClock = .live,
+         routeData: RouteCatalogStore? = nil) {
         self.store = store
+        // 기본 인자는 메인 액터 밖에서 평가되므로 저장소는 여기서 만든다(soundPreview와 같은 이유).
+        self.routeData = routeData ?? RouteCatalogStore(load: { try RouteCatalogLoader.bundled() })
         self.recordClock = recordClock
         self.cardFactory = cardFactory
         self.journeyFactory = journeyFactory
@@ -116,9 +126,20 @@ final class AppModel {
     }
 
     /// 읽기(`loadIfNeeded`)와 보충 쓰기를 분리해 둔다 — 읽기는 쓰지 않는다.
+    /// 정류장 데이터 로딩은 시작하지 않는다(`startRouteData`, AC-55).
     func start() {
         loadIfNeeded()
+        persistMigrationIfNeeded()
         supplementCardIfNeeded()
+    }
+
+    /// 옛 형식에서 비운 정류장·여정을 v5로 한 번 저장하고 다시 고르기 안내를 띄운다.
+    /// 저장이 실패해도 메모리 상태는 이미 비워져 있다. 다음 저장이 v5로 쓰고, 그 전에 앱을 끄면 다음 실행에서 다시 이전한다.
+    private func persistMigrationIfNeeded() {
+        guard pendingMigration == .routeDataReset, case .ready = launchState, let snapshot else { return }
+        pendingMigration = nil
+        stationResetNotice = .routeDataReplaced
+        save(snapshot)
     }
 
     func supplementCardIfNeeded() {
@@ -147,8 +168,10 @@ final class AppModel {
         guard case .failed = launchState, cleanupSource == nil, !isRecovering else { return }
         recoveryFailure = nil
         isRecovering = true
-        defer { isRecovering = false }
         loadSnapshot()
+        isRecovering = false
+        // 복구 중에는 저장이 막혀 있으므로 복구를 끝낸 뒤 이전을 저장한다.
+        persistMigrationIfNeeded()
     }
 
     func requestCleanup() {
@@ -191,11 +214,13 @@ final class AppModel {
 
     private func loadSnapshot() {
         do {
-            let loaded = try store.load() ?? .empty
+            let report = try store.loadReport()
+            let loaded = report?.snapshot ?? .empty
             // 앱 종료는 여정이 끊긴 것으로 본다. 진행 중이던 여정은 메모리에서만 일시정지로 두고 파일은 다음 저장 때 바뀐다.
             let restored = loaded.journey.active.map { loaded.updating(journey: JourneySection(active: $0.restingForLaunch())) } ?? loaded
             let route = try restored.launchRoute()
             snapshot = restored
+            pendingMigration = report?.migration
             launchState = .ready(route)
             path = []
             saveFailure = nil

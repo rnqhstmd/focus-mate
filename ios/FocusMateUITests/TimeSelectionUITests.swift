@@ -156,7 +156,9 @@ final class TimeSelectionUITests: XCTestCase {
         app.launchArguments = ["--fm-ui-test-id", UUID().uuidString, "--fm-ui-seed", "cardOnly"]
         app.launch()
 
-        let origin = element("search.result.seongsu:1", in: app)
+        app.typeStationQuery("성수역")
+
+        let origin = element("search.result.seongsu", in: app)
         XCTAssertTrue(origin.waitForExistence(timeout: timeout))
         origin.tap()
         element("search.confirm", in: app).tap()

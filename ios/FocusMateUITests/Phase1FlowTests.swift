@@ -28,16 +28,16 @@ final class Phase1FlowTests: XCTestCase {
         XCTAssertNotEqual(try diagnosticValue("test.persistedBytes", in: app), "absent")
     }
 
-    func testReadyStateOpensMainWithSavedCurrentStationAndDirection() throws {
+    func testReadyStateOpensMainWithSavedCurrentStationAndBound() throws {
         let app = launch(seed: "ready")
 
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
-        XCTAssertEqual(try value("main.direction", in: app), "역방향")
+        XCTAssertTrue(app.waitForBound("성동구민체육센터 방면"), "main.bound 값이 채워지지 않음")
 
         let snapshot = try snapshot(in: app)
-        try assertStation(snapshot["initialStation"], id: "seongsu", name: "성수", direction: 1)
-        try assertStation(snapshot["currentStation"], id: "seoulForest", name: "서울숲", direction: -1)
+        try assertStation(snapshot["initialStation"], id: "seongsu", name: "성수")
+        try assertStation(snapshot["currentStation"], id: "seoulForest-r", name: "서울숲")
     }
 
     func testDestinationRoundTripsPreserveStateAndExposeNoCompletionAction() throws {
@@ -65,7 +65,7 @@ final class Phase1FlowTests: XCTestCase {
             backButton.tap()
             XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
             XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
-            XCTAssertEqual(try value("main.direction", in: app), "역방향")
+            XCTAssertTrue(app.waitForBound("성동구민체육센터 방면"), "main.bound 값이 채워지지 않음")
         }
     }
 
@@ -80,11 +80,11 @@ final class Phase1FlowTests: XCTestCase {
 
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
-        XCTAssertEqual(try value("main.direction", in: app), "역방향")
+        XCTAssertTrue(app.waitForBound("성동구민체육센터 방면"), "main.bound 값이 채워지지 않음")
         let restored = try snapshot(in: app)
         XCTAssertEqual(restored["cardIssued"] as? Bool, true)
-        try assertStation(restored["initialStation"], id: "seongsu", name: "성수", direction: 1)
-        try assertStation(restored["currentStation"], id: "seoulForest", name: "서울숲", direction: -1)
+        try assertStation(restored["initialStation"], id: "seongsu", name: "성수")
+        try assertStation(restored["currentStation"], id: "seoulForest-r", name: "서울숲")
         XCTAssertEqual(try jsonData(restored), try jsonData(before))
     }
 
@@ -142,7 +142,7 @@ final class Phase1FlowTests: XCTestCase {
         XCTAssertEqual(try diagnosticValue("test.snapshot", in: app), readySnapshot)
         XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), readyBytes)
         XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
-        XCTAssertEqual(try value("main.direction", in: app), "역방향")
+        XCTAssertTrue(app.waitForBound("성동구민체육센터 방면"), "main.bound 값이 채워지지 않음")
     }
 
     func testMalformedTestIDReportsSetupErrorAndStaysLoading() {
@@ -240,14 +240,13 @@ final class Phase1FlowTests: XCTestCase {
         _ rawStation: Any?,
         id: String,
         name: String,
-        direction: Int,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
         let station = try XCTUnwrap(rawStation as? [String: Any], file: file, line: line)
         XCTAssertEqual(station["id"] as? String, id, file: file, line: line)
         XCTAssertEqual(station["name"] as? String, name, file: file, line: line)
-        XCTAssertEqual(station["direction"] as? Int, direction, file: file, line: line)
+        XCTAssertNil(station["direction"], file: file, line: line)
     }
 
     private func jsonData(_ object: [String: Any]) throws -> Data {

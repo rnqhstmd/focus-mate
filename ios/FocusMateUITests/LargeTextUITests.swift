@@ -13,7 +13,9 @@ final class LargeTextUITests: XCTestCase {
     func testSearchAtLargestTextSizeLetsUserReachResultAndConfirmWithoutScrolling() throws {
         let app = launchLargestText()
 
-        let result = element("search.result.seongsu:1", in: app)
+        app.typeStationQuery("성수역")
+
+        let result = element("search.result.seongsu", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
         try reach(result, in: app)
         result.tap()
@@ -27,12 +29,12 @@ final class LargeTextUITests: XCTestCase {
         let station = try XCTUnwrap(try snapshot(in: app)["currentStation"] as? [String: Any])
         XCTAssertEqual(station["id"] as? String, "seongsu")
         XCTAssertEqual(station["name"] as? String, "성수역")
-        XCTAssertEqual(station["direction"] as? Int, 1)
     }
 
     func testTimeScreenAtLargestTextSizeKeepsProceedReachableAndCompletesSixtyMinuteFlow() throws {
         let app = launchLargestText()
-        let result = element("search.result.seongsu:1", in: app)
+        app.typeStationQuery("성수역")
+        let result = element("search.result.seongsu", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
         try reach(result, in: app)
         result.tap()

@@ -21,7 +21,7 @@ final class JourneyTimerModelTests: XCTestCase {
             writeData: { data, _ in probe.writes.append(data) }
         )
         let factory = ActiveJourneyFactory(makeID: { "new-journey" }, now: { F.boardedAt })
-        let model = AppModel(store: store, journeyFactory: factory)
+        let model = AppModel(store: store, journeyFactory: factory, routeData: BoardingFixtures.readyRouteData())
         model.loadIfNeeded()
         XCTAssertEqual(model.launchState, .ready(.main))
         return model
@@ -31,7 +31,7 @@ final class JourneyTimerModelTests: XCTestCase {
     private func fillPreparation(_ model: AppModel) {
         model.open(.time)
         model.journeyPlan.setMinutes(60)
-        _ = model.journeyPlan.choose(busID: "2014", from: StopPosition(index: 0, direction: 1))
+        BoardingFixtures.chooseRoute("2014", in: model)
         XCTAssertTrue(model.proceedToPreparation())
         XCTAssertTrue(model.preparation.chooseTag(id: "reading"))
         model.preparation.setTask("책 읽기")

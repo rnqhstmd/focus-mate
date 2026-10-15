@@ -5,13 +5,6 @@ import XCTest
 final class JourneySnapshotStorageTests: XCTestCase {
     private typealias F = BoardingFixtures
 
-    private static let v2WithActive = Data(
-        #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":{"id":"j"}},"records":{"items":[]}},"version":2}"#.utf8
-    )
-    private static let v2NullActive = Data(
-        #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":2}"#.utf8
-    )
-
     // 깨짐: active 객체를 저장 때 누락하거나 읽을 때 다른 값으로 복원하면 실패. (AC-24, BR-8)
     func testAC24_진행여정_1건을_저장하고_다시_읽으면_같은_값이다() throws {
         try withTemporaryFile { fileURL in
@@ -38,13 +31,13 @@ final class JourneySnapshotStorageTests: XCTestCase {
         }
     }
 
-    // 깨짐: v4 파일의 active가 단일 객체가 아니거나 version이 4가 아니거나 paused가 없으면 실패. (BR-8, BR-9)
-    func testBR8_저장된_active는_단일_객체이고_version은_4이며_paused는_false다() throws {
+    // 깨짐: v5 파일의 active가 단일 객체가 아니거나 version이 5가 아니거나 paused·이름 키가 없으면 실패. (BR-8, BR-9)
+    func testBR8_저장된_active는_단일_객체이고_version은_5이며_paused는_false다() throws {
         try withTemporaryFile { fileURL in
             try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: F.awaiting()))
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             let journey = try XCTUnwrap(state["journey"] as? [String: Any])
             let active = try XCTUnwrap(journey["active"] as? [String: Any])
@@ -53,58 +46,18 @@ final class JourneySnapshotStorageTests: XCTestCase {
             XCTAssertEqual(active["boardedAt"] as? String, "2026-10-13T09:00:00Z")
             XCTAssertEqual((active["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
             XCTAssertEqual(active["paused"] as? Bool, false)
+            XCTAssertEqual(active["originName"] as? String, "성수역")
+            XCTAssertEqual(active["busNumber"] as? String, "2014")
+            XCTAssertEqual(active["busKind"] as? String, "지선")
+            XCTAssertEqual(active["destinationStopID"] as? String, "seongdongSportsCenter")
+            XCTAssertEqual(active["destinationName"] as? String, "성동구민체육센터")
+            XCTAssertNil(active["direction"])
             XCTAssertNil(active["stops"])
         }
     }
 
-    // 깨짐: v2 파일의 active 객체를 읽어 버리면(corrupt로 막지 않으면) 실패.
-    func testV2_active가_객체인_파일은_corrupt다() throws {
-        try withTemporaryFile { fileURL in
-            try seed(fileURL, Self.v2WithActive)
-
-            assertStorageIssue(.corrupt) {
-                _ = try LocalSnapshotStore(fileURL: fileURL).load()
-            }
-        }
-    }
-
-    // 깨짐: v2 null active 마이그레이션이 깨지면 실패.
-    func testV2_active가_null인_파일은_진행여정_없이_읽힌다() throws {
-        try withTemporaryFile { fileURL in
-            try seed(fileURL, Self.v2NullActive)
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertNil(loaded.journey.active)
-        }
-    }
-
-    // 깨짐: active 손상 때 파일 전체를 .corrupt로 던지거나 active를 살려두면 실패. (F1 여정만 버리기)
-    func testV3_active가_빈_객체면_진행여정만_버리고_읽힌다() throws {
-        try withTemporaryFile { fileURL in
-            try seed(fileURL, Self.v3(active: "{}"))
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertNil(loaded.journey.active)
-            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-        }
-    }
-
-    // 깨짐: 문자열 active 때 파일 전체를 .corrupt로 던지면 실패.
-    func testV3_active가_문자열이면_진행여정만_버리고_읽힌다() throws {
-        try withTemporaryFile { fileURL in
-            try seed(fileURL, Self.v3(active: #""x""#))
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertNil(loaded.journey.active)
-            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-        }
-    }
-
     // 깨짐: 모르는 아이콘 때 .corrupt로 던지거나 카드를 함께 버리면 실패.
-    func testV3_모르는_아이콘_값이면_진행여정만_버리고_카드는_유지된다() throws {
+    func testV5_모르는_아이콘_값이면_진행여정만_버리고_카드는_유지된다() throws {
         try withTemporaryFile { fileURL in
             try saveThenRewrite(fileURL, replacing: #""icon":"reading""#, with: #""icon":"no-such-icon""#)
 
@@ -116,7 +69,7 @@ final class JourneySnapshotStorageTests: XCTestCase {
     }
 
     // 깨짐: 카드가 다른 active를 검증 실패로 파일 전체 거절하거나 active를 살리면 실패.
-    func testV3_카드_불일치_active_파일은_진행여정만_버리고_카드와_기록은_그대로다() throws {
+    func testV5_카드_불일치_active_파일은_진행여정만_버리고_카드와_기록은_그대로다() throws {
         try withTemporaryFile { fileURL in
             try saveThenRewrite(fileURL, replacing: #""cardID":"FM-01234567""#, with: #""cardID":"FM-76543210""#)
 
@@ -129,7 +82,7 @@ final class JourneySnapshotStorageTests: XCTestCase {
     }
 
     // 깨짐: awaiting인데 진도 5인 active를 읽어 살리거나 파일 전체를 거절하면 실패.
-    func testV3_대기_상태인데_진도가_5인_active는_버려진다() throws {
+    func testV5_대기_상태인데_진도가_5인_active는_버려진다() throws {
         try withTemporaryFile { fileURL in
             try saveThenRewrite(fileURL, replacing: #""elapsedSeconds":0"#, with: #""elapsedSeconds":5"#)
 
@@ -137,16 +90,6 @@ final class JourneySnapshotStorageTests: XCTestCase {
 
             XCTAssertNil(loaded.journey.active)
             XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
-        }
-    }
-
-    // 깨짐: journey 객체에 active 키가 없는 파일을 정상으로 읽으면 실패 (키 누락은 여전히 손상).
-    func testV3_journey에_active_키가_없으면_corrupt다() throws {
-        try withTemporaryFile { fileURL in
-            let bytes = Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{},"records":{"items":[]}},"version":3}"#.utf8)
-            try seed(fileURL, bytes)
-
-            assertStorageIssue(.corrupt) { _ = try LocalSnapshotStore(fileURL: fileURL).load() }
         }
     }
 
@@ -186,8 +129,8 @@ final class JourneySnapshotStorageTests: XCTestCase {
         }
     }
 
-    // 깨짐: active가 null인 기존 v3 파일을 재저장할 때 바이트가 달라지면 실패.
-    func testV3_active_null인_기존_파일은_재저장해도_바이트가_같다() throws {
+    // 깨짐: active가 null인 기존 파일을 재저장할 때 바이트가 달라지면 실패.
+    func testActiveNull_기존_파일은_재저장해도_바이트가_같다() throws {
         try withTemporaryFile { fileURL in
             let store = LocalSnapshotStore(fileURL: fileURL)
             try store.save(F.snapshot(active: nil))
@@ -216,10 +159,6 @@ final class JourneySnapshotStorageTests: XCTestCase {
     }
 
     // MARK: - helpers
-
-    private static func v3(active: String) -> Data {
-        Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":\#(active)},"records":{"items":[]}},"version":3}"#.utf8)
-    }
 
     private func saveThenRewrite(_ fileURL: URL, replacing target: String, with replacement: String) throws {
         try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: F.awaiting()))

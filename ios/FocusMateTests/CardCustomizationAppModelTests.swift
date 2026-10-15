@@ -10,13 +10,17 @@ final class CardCustomizationAppModelTests: XCTestCase {
     private static let issuedAt = Date(timeIntervalSince1970: 1_791_882_000)
     private static let editedColor = CardColor(red: 0.2, green: 0.3, blue: 0.4)
     private static let recordJSON = ##"{"id":"journey-001","completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","bus":"버스2014","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","minutes":25,"sound":"빗소리","from":"성수역","to":"서울숲 입구","memo":"첫 메모"}"##
-    private static let legacyV2 = Data(#"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"}]},"journey":{"active":null},"records":{"items":[\#(recordJSON)]}}}"#.utf8)
+    private static let legacyV2 = Data(#"{"version":2,"state":{"cardIssued":true,"initialStation":null,"currentStation":null,"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"}]},"journey":{"active":null},"records":{"items":[\#(recordJSON)]}}}"#.utf8)
 
     private func snapshot(style: CardStyle = .standard, id: String = CardCustomizationAppModelTests.cardID) throws -> AppSnapshot {
         let base = try SnapshotCodec.decode(Self.legacyV2)
         let cards = Self.stage(true, nil, nil).issuingCard(
             CardSnapshot(id: id, issuedAt: Self.issuedAt, style: style)).cards
-        return base.updating(cards: cards)
+        return base.updatingStage(
+            cardIssued: true,
+            initialStation: StationSnapshot(id: "seongsu", name: "성수"),
+            currentStation: StationSnapshot(id: "seoulForest", name: "서울숲")
+        ).updating(cards: cards)
     }
 
     private func seed(_ url: URL, style: CardStyle = .standard) throws {
@@ -24,7 +28,7 @@ final class CardCustomizationAppModelTests: XCTestCase {
     }
 
     private func loadedModel(_ url: URL) -> AppModel {
-        let model = AppModel(store: LocalSnapshotStore(fileURL: url))
+        let model = AppModel(store: LocalSnapshotStore(fileURL: url), routeData: BoardingFixtures.readyRouteData())
         model.loadIfNeeded()
         return model
     }
@@ -35,10 +39,12 @@ final class CardCustomizationAppModelTests: XCTestCase {
         XCTAssertEqual(snapshot?.currentCard?.issuedAt, Date(timeIntervalSince1970: 1_791_882_000), file: file, line: line)
     }
 
-    private func assertOriginalUsage(_ snapshot: AppSnapshot?, file: StaticString = #filePath, line: UInt = #line) {
+    private func assertOriginalUsage(
+        _ snapshot: AppSnapshot?, stationed: Bool = true, file: StaticString = #filePath, line: UInt = #line
+    ) {
         XCTAssertEqual(snapshot?.cardIssued, true, file: file, line: line)
-        XCTAssertEqual(snapshot?.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1), file: file, line: line)
-        XCTAssertEqual(snapshot?.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1), file: file, line: line)
+        XCTAssertEqual(snapshot?.initialStation, stationed ? StationSnapshot(id: "seongsu", name: "성수") : nil, file: file, line: line)
+        XCTAssertEqual(snapshot?.currentStation, stationed ? StationSnapshot(id: "seoulForest", name: "서울숲") : nil, file: file, line: line)
         XCTAssertNotNil(snapshot, file: file, line: line)
         XCTAssertNil(snapshot?.journey.active, file: file, line: line)
         XCTAssertEqual(snapshot?.records.items.count, 1, file: file, line: line)
@@ -150,8 +156,8 @@ final class CardCustomizationAppModelTests: XCTestCase {
             let model = loadedModel(url)
             let controller = try XCTUnwrap(model.beginCardCustomization())
             let latest = try XCTUnwrap(model.snapshot).updatingStage(cardIssued: true,
-                initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
-                currentStation: StationSnapshot(id: "seongsu", name: "성수역", direction: -1))
+                initialStation: StationSnapshot(id: "seongsu", name: "성수"),
+                currentStation: StationSnapshot(id: "seongsu", name: "성수역"))
             XCTAssertTrue(model.save(latest)) // Existing public API; no snapshot setter.
             XCTAssertEqual(model.updateRecordMemo("진입 후 메모", forJourneyID: "journey-001"), .done)
             let latestRecords = try XCTUnwrap(model.snapshot).records
@@ -162,8 +168,8 @@ final class CardCustomizationAppModelTests: XCTestCase {
             // Then: handwritten expected state + full section preservation.
             let restored = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
             assertIdentity(restored)
-            XCTAssertEqual(restored.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-            XCTAssertEqual(restored.currentStation, StationSnapshot(id: "seongsu", name: "성수역", direction: -1))
+            XCTAssertEqual(restored.initialStation, StationSnapshot(id: "seongsu", name: "성수"))
+            XCTAssertEqual(restored.currentStation, StationSnapshot(id: "seongsu", name: "성수역"))
             XCTAssertEqual(restored.records.items.count, 1)
             XCTAssertEqual(restored.records.items.first?.minutes, 25)
             XCTAssertEqual(restored.records.items.first?.memo, "진입 후 메모")
@@ -182,29 +188,23 @@ final class CardCustomizationAppModelTests: XCTestCase {
             try seed(url)
             let model = loadedModel(url)
             let controller = try XCTUnwrap(model.beginCardCustomization())
-            let seongsuForward = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
+            let seongsuForward = StationSnapshot(id: "seongsu", name: "성수역")
             let current = try XCTUnwrap(model.snapshot)
             XCTAssertTrue(model.save(current.updatingStage(
                 cardIssued: true,
-                initialStation: current.initialStation,
+                initialStation: seongsuForward,
                 currentStation: seongsuForward
             )))
             model.open(.time)
             model.journeyPlan.setMinutes(60)
-            XCTAssertTrue(model.journeyPlan.choose(
-                busID: "2014",
-                from: StopPosition(index: 0, direction: 1)
-            ))
+            XCTAssertTrue(BoardingFixtures.chooseRoute("2014", in: model))
             XCTAssertTrue(model.proceedToPreparation())
-            let expected = JourneySelection(
-                origin: StopPosition(index: 0, direction: 1),
-                minutes: 60,
-                busID: "2014",
-                busNumber: "2014",
-                destination: "성동구민체육센터",
-                stops: 12
-            )
-            XCTAssertEqual(model.preparedJourney, expected)
+            let expected = try XCTUnwrap(model.preparedJourney)
+            XCTAssertEqual(expected.originStopID, "seongsu")
+            XCTAssertEqual(expected.minutes, 60)
+            XCTAssertEqual(expected.busID, "2014")
+            XCTAssertEqual(expected.destinationStopID, "seongdongSportsCenter")
+            XCTAssertEqual(expected.stops, 12)
 
             // When
             controller.setBackground(Self.editedColor)
@@ -439,7 +439,7 @@ final class CardCustomizationAppModelTests: XCTestCase {
     }
 
     // 깨짐 명명: begin이 v2를 쓰거나 saveCardStyle가 v3 변환/이용상태를 잃으면 실패.
-    func testAC29_v2진입은_쓰기없고_외형저장때만_v3로_전환한다() throws {
+    func testAC29_v2진입은_쓰기없고_외형저장때만_현재버전으로_전환한다() throws {
         try withTemporaryFile { url in
             // Given: hand-authored legacy envelope, independent of encoder.
             try CardPhotoTestFixtures.seed(Self.legacyV2, at: url)
@@ -453,11 +453,11 @@ final class CardCustomizationAppModelTests: XCTestCase {
             XCTAssertTrue(controller.save())
             // Then: no seed on relaunch.
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
             let restarted = loadedModel(url)
             XCTAssertEqual(restarted.currentCardStyle, CardStyle(background: Self.editedColor, photos: []))
             assertIdentity(restarted.snapshot)
-            assertOriginalUsage(restarted.snapshot)
+            assertOriginalUsage(restarted.snapshot, stationed: false)
         }
     }
 }

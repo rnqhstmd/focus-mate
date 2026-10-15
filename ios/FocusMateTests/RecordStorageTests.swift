@@ -6,8 +6,8 @@ final class RecordStorageTests: XCTestCase {
     private enum ProbeError: Error { case expected }
 
     private static let seoul = TimeZone(identifier: "Asia/Seoul")!
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
-    private static let seoulForest = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수")
+    private static let seoulForest = StationSnapshot(id: "seoulForest", name: "서울숲")
 
     // 깨짐 명명: 실제 저장 뒤 새 store/AppModel이 메모 또는 완료 필드 하나라도 잃으면 실패.
     @MainActor
@@ -66,57 +66,57 @@ final class RecordStorageTests: XCTestCase {
         try assertProtected(bytes, loadIssue: issue, saveIssue: .writeBlocked(issue))
     }
 
-    // 깨짐 명명: 미지원 v5에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
+    // 깨짐 명명: 미지원 v6에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
     @MainActor
     func testAC12_미지원버전_AppModel은_완료와_메모저장을_차단하고_원본을_보존한다() throws {
-        let bytes = Data(#"{"version":5,"state":null}"#.utf8)
+        let bytes = Data(#"{"version":6,"state":null}"#.utf8)
         try withTemporaryFile { fileURL in
             try seed(fileURL, bytes)
             let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
             model.loadIfNeeded()
-            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(5)))
+            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(6)))
 
             XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(5)))
+            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(6)))
             XCTAssertEqual(model.updateRecordMemo("메모", forJourneyID: "journey-001"), .rejected)
-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(5)))
+            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(6)))
             XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
         }
     }
 
     // 깨짐 명명: records 갱신이 카드·여정·정류장 또는 version 값을 바꾸면 실패.
     @MainActor
-    func testAC13_완료저장은_v2의_다른영역을_보존한다() throws {
+    func testAC13_완료저장은_v5의_다른영역을_보존한다() throws {
         try withTemporaryFile { fileURL in
-            try seed(fileURL, Self.emptyV2)
+            try seed(fileURL, Self.emptyV5)
             let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
             model.loadIfNeeded()
             XCTAssertTrue(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             XCTAssertEqual(state["cardIssued"] as? Bool, true)
             XCTAssertEqual(((state["cards"] as? [String: Any])?["items"] as? [Any])?.count, 0)
             XCTAssertTrue((state["journey"] as? [String: Any])?["active"] is NSNull)
-            assertStationJSON(state["initialStation"], id: "seongsu", name: "성수", direction: 1)
-            assertStationJSON(state["currentStation"], id: "seoulForest", name: "서울숲", direction: -1)
+            assertStationJSON(state["initialStation"], id: "seongsu", name: "성수")
+            assertStationJSON(state["currentStation"], id: "seoulForest", name: "서울숲")
             let records = try XCTUnwrap(state["records"] as? [String: Any])
             XCTAssertEqual((records["items"] as? [Any])?.count, 1)
         }
     }
 
-    // 회귀: W00에서 이미 통과할 수 있으며 신규 API의 RED 근거와 구분한다.
-    func testAC14_기존_v1과_빈records_v2는_빈기록과_정류장을_복원한다() throws {
-        let fixtures = [Self.v1, Self.emptyV2]
+    // 회귀: 옛 v1은 빈 기록으로 읽히되 정류장이 비워지고, 현재 형식의 빈 records 파일은 정류장을 복원한다.
+    func testAC14_기존_v1과_빈records_v5는_빈기록을_복원하고_v1만_정류장이_비워진다() throws {
+        let fixtures: [(bytes: Data, stationed: Bool)] = [(Self.v1, false), (Self.emptyV5, true)]
 
-        for bytes in fixtures {
-            let store = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unused/app-state.json"), readData: { _ in bytes })
+        for item in fixtures {
+            let store = LocalSnapshotStore(fileURL: URL(fileURLWithPath: "/unused/app-state.json"), readData: { _ in item.bytes })
             let loaded = try XCTUnwrap(try store.load())
             XCTAssertEqual(loaded.records.items.count, 0)
             XCTAssertEqual(loaded.cardIssued, true)
-            XCTAssertTrue(try XCTUnwrap(loaded.initialStation).id.utf16.elementsEqual("seongsu".utf16))
-            XCTAssertTrue(try XCTUnwrap(loaded.currentStation).id.utf16.elementsEqual("seoulForest".utf16))
+            XCTAssertEqual(loaded.initialStation?.id, item.stationed ? "seongsu" : nil)
+            XCTAssertEqual(loaded.currentStation?.id, item.stationed ? "seoulForest" : nil)
         }
     }
 
@@ -143,7 +143,7 @@ final class RecordStorageTests: XCTestCase {
         var writeCalls = 0
         let store = LocalSnapshotStore(
             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
-            readData: { _ in Self.emptyV2 },
+            readData: { _ in Self.emptyV5 },
             createDirectory: { _ in },
             writeData: { _, _ in writeCalls += 1 }
         )
@@ -220,7 +220,7 @@ final class RecordStorageTests: XCTestCase {
         var writeCalls = 0
         let store = LocalSnapshotStore(
             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
-            readData: { _ in Self.emptyV2 },
+            readData: { _ in Self.emptyV5 },
             createDirectory: { _ in },
             writeData: { _, _ in writeCalls += 1 }
         )
@@ -239,7 +239,7 @@ final class RecordStorageTests: XCTestCase {
     func test기록쓰기실패는_기존상태와경로를_보존한다() {
         let store = LocalSnapshotStore(
             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
-            readData: { _ in Self.emptyV2 },
+            readData: { _ in Self.emptyV5 },
             createDirectory: { _ in },
             writeData: { _, _ in throw ProbeError.expected }
         )
@@ -297,8 +297,8 @@ final class RecordStorageTests: XCTestCase {
     private static let v1 = Data(
         #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
     )
-    private static let emptyV2 = Data(
-        #"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
+    private static let emptyV5 = Data(
+        #"{"version":5,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수"},"currentStation":{"id":"seoulForest","name":"서울숲"},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
     )
 
     private static func input(
@@ -329,10 +329,10 @@ final class RecordStorageTests: XCTestCase {
         ##"{"id":"\##(id)","completedAt":"\##(completedAt)","date":"\##(date)","bus":"버스2014","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","minutes":25,"sound":"빗소리","from":"성수역","to":"서울숲 입구","memo":"\##(memo)"}"##
     }
 
-    /// 프로덕션 encoder를 거치지 않는 손수 작성 v2 envelope.
+    /// 프로덕션 encoder를 거치지 않는 손수 작성 v5 envelope.
     private static func envelope(records: [String]) -> Data {
         Data(
-            #"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[\#(records.joined(separator: ","))]}}}"#.utf8
+            #"{"version":5,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수"},"currentStation":{"id":"seoulForest","name":"서울숲"},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[\#(records.joined(separator: ","))]}}}"#.utf8
         )
     }
 
@@ -380,7 +380,6 @@ final class RecordStorageTests: XCTestCase {
         _ value: Any?,
         id: String,
         name: String,
-        direction: Int,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -389,7 +388,7 @@ final class RecordStorageTests: XCTestCase {
         }
         XCTAssertEqual(station["id"] as? String, id, file: file, line: line)
         XCTAssertEqual(station["name"] as? String, name, file: file, line: line)
-        XCTAssertEqual(station["direction"] as? Int, direction, file: file, line: line)
+        XCTAssertNil(station["direction"], file: file, line: line)
     }
 
     private func seed(_ fileURL: URL, _ bytes: Data) throws {

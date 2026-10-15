@@ -4,7 +4,7 @@ import XCTest
 
 final class CardStyleStorageTests: XCTestCase {
     private enum ProbeError: Error { case write, validation }
-    private static let station = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+    private static let station = StationSnapshot(id: "seongsu", name: "성수")
     private static let issuedAt = Date(timeIntervalSince1970: 1_791_882_000)
     private static let recordJSON = ##"{"id":"journey-001","completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","bus":"버스2014","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","minutes":25,"sound":"빗소리","from":"성수역","to":"서울숲 입구","memo":"첫 메모"}"##
 
@@ -106,7 +106,7 @@ final class CardStyleStorageTests: XCTestCase {
     }
 
     // 깨짐 명명: v2 읽기가 재저장되거나 꾸미기 저장이 기존 단계/기록을 잃으면 실패한다.
-    func testAC29_V2_읽기는_원본보존_꾸미기저장후_v3로_이용상태를_유지한다() throws {
+    func testAC29_V2_읽기는_원본보존_꾸미기저장후_현재버전으로_이용상태를_유지한다() throws {
         try withTemporaryFile { url in
             let bytes = legacyV2()
             try CardPhotoTestFixtures.seed(bytes, at: url)
@@ -120,8 +120,8 @@ final class CardStyleStorageTests: XCTestCase {
             let restored = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
             XCTAssertEqual(restored, updated)
             XCTAssertTrue(restored.cardIssued)
-            XCTAssertEqual(restored.initialStation, Self.station)
-            XCTAssertEqual(restored.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+            XCTAssertNil(restored.initialStation)
+            XCTAssertNil(restored.currentStation)
             XCTAssertNil(restored.journey.active)
             XCTAssertEqual(restored.records.items.count, 1)
             let record = try XCTUnwrap(restored.records.items.first)
@@ -132,19 +132,19 @@ final class CardStyleStorageTests: XCTestCase {
             XCTAssertEqual(restored.currentCard?.id, "FM-01234567")
             XCTAssertEqual(restored.currentCard?.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
         }
     }
 
     // 깨짐 명명: v1 변환을 제거하거나 읽기 중 쓰면 실패한다. 자동 카드 보충은 기존 별도 통합 시험이다.
-    func testAC29_V1_읽기는_단계와_정류장을_유지하고_쓰지_않는다() throws {
+    func testAC29_V1_읽기는_단계를_유지하고_옛_정류장은_비우며_쓰지_않는다() throws {
         let bytes = Data(#"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seongsu","name":"성수","direction":1}}}"#.utf8)
         try withTemporaryFile { url in
             try CardPhotoTestFixtures.seed(bytes, at: url)
             let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: url).load())
             XCTAssertTrue(loaded.cardIssued)
-            XCTAssertEqual(loaded.initialStation, Self.station)
-            XCTAssertEqual(loaded.currentStation, Self.station)
+            XCTAssertNil(loaded.initialStation)
+            XCTAssertNil(loaded.currentStation)
             XCTAssertTrue(loaded.cards.items.isEmpty)
             XCTAssertNil(loaded.journey.active)
             XCTAssertTrue(loaded.records.items.isEmpty)

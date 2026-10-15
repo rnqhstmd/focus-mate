@@ -1,6 +1,31 @@
 import Foundation
 import XCTest
 
+extension XCUIApplication {
+    /// 최초 정류장 검색 화면에서 검색어를 입력한다(빈 검색어는 결과를 보이지 않는다).
+    @MainActor
+    func typeStationQuery(_ text: String, timeout: TimeInterval = 5) {
+        let field = descendants(matching: .any)["search.query"]
+        XCTAssertTrue(field.waitForExistence(timeout: timeout), "Missing: search.query")
+        field.tap()
+        field.typeText(text)
+    }
+}
+
+extension XCUIApplication {
+    /// 메인의 방면 줄(main.bound)이 기대 값이 될 때까지 기다린다. 정류장 데이터는 시작 뒤 비동기로 준비된다.
+    @MainActor
+    func waitForBound(_ expected: String, timeout: TimeInterval = 5) -> Bool {
+        let bound = descendants(matching: .any)["main.bound"]
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if (bound.value as? String) == expected { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return (bound.value as? String) == expected
+    }
+}
+
 /// 카드 발급 UI 테스트용 실행·진단 도우미. (XCTestCase 아님)
 /// Phase1FlowTests의 private 헬퍼와 별개로 둔다.
 struct FocusMateUIHarness {
@@ -223,9 +248,9 @@ extension FocusMateUIHarness {
     }
 
     @MainActor
-    func persistedCurrentStation() throws -> (id: String?, direction: Int?) {
+    func persistedCurrentStation() throws -> (id: String?, name: String?) {
         let station = try persistedState()["currentStation"] as? [String: Any]
-        return (station?["id"] as? String, station?["direction"] as? Int)
+        return (station?["id"] as? String, station?["name"] as? String)
     }
 
     @MainActor

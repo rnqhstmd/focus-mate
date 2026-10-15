@@ -5,11 +5,13 @@ import SwiftUI
 @MainActor
 struct JourneyAbandonBar: View {
     let timer: JourneyTimerController
+    private let abandoner: JourneyAbandoning
     @State private var flow: JourneyAbandonController
     @AccessibilityFocusState private var abandonFocused: Bool
 
     init(abandoner: JourneyAbandoning, timer: JourneyTimerController) {
         self.timer = timer
+        self.abandoner = abandoner
         _flow = State(initialValue: JourneyAbandonController(abandoner: abandoner))
     }
 
@@ -24,6 +26,8 @@ struct JourneyAbandonBar: View {
                         .overlay(Capsule().stroke(Color(white: 0.6), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                // 정류장 데이터를 읽는 중에는 도달 정류장을 정할 수 없다(AC-43).
+                .disabled(!abandoner.canEndActiveJourney)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                 .accessibilityLabel(JourneyLifecycleText.abandonButton)
                 .accessibilityIdentifier("journey.abandon")
@@ -61,7 +65,7 @@ struct JourneyAbandonBar: View {
 
     #if DEBUG
     private var diagnostics: some View {
-        let object: [String: Any] = ["visible": isPaused, "confirming": flow.isConfirming,
+        let object: [String: Any] = ["visible": isPaused, "enabled": abandoner.canEndActiveJourney, "confirming": flow.isConfirming,
                                      "showsFailure": flow.showsFailure,
                                      "focus": flow.focusTarget == .abandonButton ? "abandon" : "none"]
         let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))

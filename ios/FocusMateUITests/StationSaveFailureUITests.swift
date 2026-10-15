@@ -14,7 +14,8 @@ final class StationSaveFailureUITests: XCTestCase {
     func testConfirmWithWriteFailureKeepsSearchScreenAndShowsSearchSaveFailure() throws {
         let app = launch(seed: "cardOnly", save: "fail")
         XCTAssertFalse(element("test.setupError", in: app).waitForExistence(timeout: 2))
-        let result = element("search.result.seongsu:-1", in: app)
+        app.typeStationQuery("성수역")
+        let result = element("search.result.seongsu-r", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
         result.tap()
         let confirm = element("search.confirm", in: app)
@@ -40,7 +41,8 @@ final class StationSaveFailureUITests: XCTestCase {
 
     func testConfirmStaysEnabledAndRetryKeepsSameFailureState() throws {
         let app = launch(seed: "cardOnly", save: "fail")
-        let result = element("search.result.seongsu:-1", in: app)
+        app.typeStationQuery("성수역")
+        let result = element("search.result.seongsu-r", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
         result.tap()
         let confirm = element("search.confirm", in: app)

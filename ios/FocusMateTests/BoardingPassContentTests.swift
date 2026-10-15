@@ -13,8 +13,10 @@ final class BoardingPassContentTests: XCTestCase {
 
     private func details(destination: String) -> PreparedJourneyDetails {
         let journey = JourneySelection(
-            origin: StopPosition(index: 0, direction: 1), minutes: 60,
-            busID: "2014", busNumber: "2014", destination: destination, stops: 12
+            originStopID: "seongsu", originName: "성수역", boundLabel: "성수동 방면", minutes: 60,
+            busID: "2014", busNumber: "2014", busKind: "지선",
+            destinationStopID: "seongdongSportsCenter", destination: destination,
+            stops: 12, distanceMeters: 6_600
         )
         let tag = PreparationTag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand)
         return PreparedJourneyDetails(journey: journey, tag: tag, task: "책 읽기", sound: .bus)
@@ -28,6 +30,19 @@ final class BoardingPassContentTests: XCTestCase {
     func testAC3_출발과_도착_이름을_표시한다() {
         XCTAssertEqual(content().originName, "성수역")
         XCTAssertEqual(content().destinationName, "성동구민체육센터")
+    }
+
+    // 깨짐: 버스 문구가 종류를 빠뜨리거나 번호 대신 노선 id를 쓰면 실패
+    func testAC3_버스_문구는_종류_번호_순서다() {
+        let journey = JourneySelection(
+            originStopID: "seongsu", originName: "성수역", boundLabel: nil, minutes: 60,
+            busID: "302", busNumber: "강남02", busKind: "마을",
+            destinationStopID: "ttukseom", destination: "뚝섬역", stops: 8, distanceMeters: 4_000
+        )
+        let tag = PreparationTag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand)
+        let details = PreparedJourneyDetails(journey: journey, tag: tag, task: "책 읽기", sound: .bus)
+
+        XCTAssertEqual(BoardingPassContent(details: details, now: BoardingFixtures.boardedAt, timeZone: utc).busText, "마을 강남02번 버스")
     }
 
     // 깨짐: 정류장 수 문구를 "12"나 "12정거장"으로 바꾸면 실패

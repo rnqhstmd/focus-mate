@@ -31,7 +31,7 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
         let saver = FakeProgressSaver(results: results)
         let gateway = RecordingLiveActivityGateway(existing: existing)
         let journey = BoardingFixtures.journey(
-            minutes: 60, busID: "421", phase: .departed, elapsedSeconds: elapsed, paused: paused
+            minutes: 60, busID: "421", busNumber: "343", busKind: "간선", phase: .departed, elapsedSeconds: elapsed, paused: paused
         )
         let start = base
         let sync = try XCTUnwrap(JourneyLiveActivitySync(

@@ -8,6 +8,8 @@ final class FakeJourneyAbandoner: JourneyAbandoning {
     private var results: [LifecycleActionResult]
     private var last: LifecycleActionResult = .rejected
     private(set) var calls: [Bool] = []
+    /// JourneyAbandoning.canEndActiveJourney. 테스트에서 바꿔 로딩 중(false) 상황을 만든다.
+    var canEndActiveJourney = true
 
     init(results: [LifecycleActionResult]) {
         self.results = results

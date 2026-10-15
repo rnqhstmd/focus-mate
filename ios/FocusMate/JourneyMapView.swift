@@ -64,7 +64,7 @@ struct JourneyMapView: View {
                 .allowsHitTesting(false)
                 .accessibilityElement()
                 .accessibilityLabel(JourneyMapDisplay.mapLabel)
-                .accessibilityValue(JourneyMapDisplay.mapValue(next: JourneyCourse.stops[map.nextStopIndex].name,
+                .accessibilityValue(JourneyMapDisplay.mapValue(next: map.nextStop.name,
                                                                destination: map.destinationStop.name))
                 .accessibilityIdentifier("journey.map")
         }

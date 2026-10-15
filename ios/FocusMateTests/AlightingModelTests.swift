@@ -7,14 +7,14 @@ import XCTest
 final class AlightingModelTests: XCTestCase {
     private typealias F = BoardingFixtures
 
-    private static let station = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
-    private static let gate = StationSnapshot(id: "seoulForestGate", name: "서울숲 입구", direction: 1)
+    private static let station = StationSnapshot(id: "seongsu", name: "성수역")
+    private static let gate = StationSnapshot(id: "seoulForestGate", name: "서울숲 입구")
     private static let fixedNow = Date(timeIntervalSince1970: 1_791_883_500.5) // 2026-10-13T09:25:00.500Z
     private static let seoul = TimeZone(identifier: "Asia/Seoul")!
 
     private func active(elapsed: Int = 1500, phase: JourneySnapshot.Phase = .departed) -> JourneySnapshot {
         F.journey(
-            minutes: 25, destinationStopID: "seoulForestGate", task: "논문",
+            minutes: 25, destinationStopID: "seoulForestGate", destinationName: "서울숲 입구", task: "논문",
             phase: phase, elapsedSeconds: elapsed, paused: true
         )
     }
@@ -45,7 +45,8 @@ final class AlightingModelTests: XCTestCase {
         let model = AppModel(
             store: localStore,
             journeyFactory: ActiveJourneyFactory(makeID: { "new-journey" }, now: { F.boardedAt }),
-            recordClock: RecordClock(now: { Self.fixedNow }, timeZone: { Self.seoul })
+            recordClock: RecordClock(now: { Self.fixedNow }, timeZone: { Self.seoul }),
+            routeData: BoardingFixtures.readyRouteData()
         )
         model.loadIfNeeded()
         XCTAssertEqual(model.launchState, .ready(.main))

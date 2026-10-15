@@ -6,11 +6,11 @@ import XCTest
 final class JourneyLifecycleModelTests: XCTestCase {
     private typealias F = BoardingFixtures
 
-    private static let station = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
+    private static let station = StationSnapshot(id: "seongsu", name: "성수역")
 
     private func active(elapsed: Int, paused: Bool = true, phase: JourneySnapshot.Phase = .departed) -> JourneySnapshot {
         F.journey(
-            minutes: 25, destinationStopID: "seoulForestGate",
+            minutes: 25, destinationStopID: "seoulForestGate", destinationName: "서울숲 입구",
             phase: phase, elapsedSeconds: elapsed, paused: paused
         )
     }
@@ -37,7 +37,7 @@ final class JourneyLifecycleModelTests: XCTestCase {
             writeData: { data, _ in try probe.record(data) }
         )
         let factory = ActiveJourneyFactory(makeID: { "new-journey" }, now: { F.boardedAt })
-        let model = AppModel(store: store, journeyFactory: factory)
+        let model = AppModel(store: store, journeyFactory: factory, routeData: BoardingFixtures.readyRouteData())
         model.loadIfNeeded()
         XCTAssertEqual(model.launchState, .ready(.main))
         return model
@@ -182,7 +182,7 @@ final class JourneyLifecycleModelTests: XCTestCase {
 
         XCTAssertEqual(probe.writes.count, 1)
         let saved = try lastSaved(probe)
-        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "ttukseom", name: "뚝섬역", direction: 1))
+        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "ttukseom", name: "뚝섬역"))
         XCTAssertNil(saved.journey.active)
         XCTAssertEqual(saved.records.items.count, 1)
         XCTAssertEqual(model.path, [.time])
@@ -334,7 +334,7 @@ final class JourneyLifecycleModelTests: XCTestCase {
 
         XCTAssertEqual(probe.writes.count, 1)
         let saved = try lastSaved(probe)
-        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "ttukseom", name: "뚝섬역", direction: 1))
+        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "ttukseom", name: "뚝섬역"))
         XCTAssertNil(saved.journey.active)
         XCTAssertEqual(saved.records.items.count, 1)
         XCTAssertEqual(model.path, [])

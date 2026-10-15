@@ -59,7 +59,7 @@ final class StorageRecoveryFlowTests: XCTestCase {
 
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("main.currentStation", in: app), "서울숲")
-        XCTAssertEqual(try value("main.direction", in: app), "역방향")
+        XCTAssertTrue(app.waitForBound("성동구민체육센터 방면"), "main.bound 값이 채워지지 않음")
         XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), original)
         XCTAssertEqual(try backups(in: app), [:])
     }

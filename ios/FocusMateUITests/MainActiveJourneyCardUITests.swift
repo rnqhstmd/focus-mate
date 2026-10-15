@@ -107,7 +107,7 @@ final class MainActiveJourneyCardUITests: XCTestCase {
     // 깨짐: 손상 여정(분 361)이 카드로 되살아나거나 시작 버튼이 "새 여정 시작"이 된다.
     func testAC25_손상_여정은_카드도_새_여정_문구도_없다() throws {
         let h = FocusMateUIHarness.launch(
-            seed: "v3InvalidMinutes", extraArguments: FocusMateUIHarness.manualClockArguments
+            seed: "invalidMinutesJourney", extraArguments: FocusMateUIHarness.manualClockArguments
         )
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.element("main.activeJourney").exists)
@@ -118,7 +118,7 @@ final class MainActiveJourneyCardUITests: XCTestCase {
     // 깨짐: 웹식 "불러오지 못했어요" 안내나 옛 임시 안내가 손상 여정에 나온다.
     func testAC25_손상_여정에_불러오기_실패_문구가_없다() throws {
         let h = FocusMateUIHarness.launch(
-            seed: "v3InvalidMinutes", extraArguments: FocusMateUIHarness.manualClockArguments
+            seed: "invalidMinutesJourney", extraArguments: FocusMateUIHarness.manualClockArguments
         )
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.app.staticTexts["이전 여정을 불러오지 못했어요."].exists)
@@ -128,7 +128,7 @@ final class MainActiveJourneyCardUITests: XCTestCase {
     // 깨짐: 손상 여정을 버리면서 완료 기록을 지우거나 현재 정류장 표시가 저장값과 어긋난다.
     func testAC25_손상_여정_버림은_기록_수와_현재_정류장을_바꾸지_않는다() throws {
         let h = FocusMateUIHarness.launch(
-            seed: "v3InvalidMinutes", extraArguments: FocusMateUIHarness.manualClockArguments
+            seed: "invalidMinutesJourney", extraArguments: FocusMateUIHarness.manualClockArguments
         )
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         let station = h.element("main.currentStation")

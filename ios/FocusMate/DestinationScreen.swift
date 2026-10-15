@@ -24,6 +24,8 @@ struct DestinationScreen: View {
             AlightingSummaryView(model: model, services: services)
         } else if destination == .records {
             RecordsView(model: model, services: services)
+        } else if destination == .dataSource {
+            DataSourceView(model: model)
         } else {
             placeholderOrTime
         }

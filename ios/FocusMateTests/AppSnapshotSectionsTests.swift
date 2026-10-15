@@ -3,8 +3,8 @@ import XCTest
 @testable import FocusMate
 
 final class AppSnapshotSectionsTests: XCTestCase {
-    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
-    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수")
+    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲")
 
     private static var readySnapshot: AppSnapshot { stage(true, initialStation, currentStation) }
 
@@ -26,8 +26,8 @@ final class AppSnapshotSectionsTests: XCTestCase {
         )
 
         XCTAssertTrue(updated.cardIssued)
-        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수"))
+        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲"))
     }
 
     // 깨짐: updatingStage가 영역을 .empty로 새로 만들어 원본 영역을 버리면(동등성 비교로는 W00에서 못 잡지만 영역 필드 교체 시) 실패
@@ -48,7 +48,7 @@ final class AppSnapshotSectionsTests: XCTestCase {
         let inconsistent = Self.stage(false, Self.initialStation, nil)
 
         XCTAssertFalse(inconsistent.cardIssued)
-        XCTAssertEqual(inconsistent.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
+        XCTAssertEqual(inconsistent.initialStation, StationSnapshot(id: "seongsu", name: "성수"))
         XCTAssertNil(inconsistent.currentStation)
     }
 
@@ -57,8 +57,8 @@ final class AppSnapshotSectionsTests: XCTestCase {
         let updated = Self.readySnapshot.updating(cards: CardSection.empty)
 
         XCTAssertTrue(updated.cardIssued)
-        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수"))
+        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲"))
     }
 
     // 깨짐: updating(journey:)가 단계 필드를 초기화하면 실패
@@ -66,8 +66,8 @@ final class AppSnapshotSectionsTests: XCTestCase {
         let updated = Self.readySnapshot.updating(journey: JourneySection.empty)
 
         XCTAssertTrue(updated.cardIssued)
-        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수"))
+        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲"))
     }
 
     // 깨짐: updating(records:)가 단계 필드를 초기화하면 실패
@@ -75,8 +75,8 @@ final class AppSnapshotSectionsTests: XCTestCase {
         let updated = Self.readySnapshot.updating(records: RecordSection.empty)
 
         XCTAssertTrue(updated.cardIssued)
-        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
-        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+        XCTAssertEqual(updated.initialStation, StationSnapshot(id: "seongsu", name: "성수"))
+        XCTAssertEqual(updated.currentStation, StationSnapshot(id: "seoulForest", name: "서울숲"))
     }
 
     // 깨짐: updating(cards:)가 다른 두 영역을 건드리면 실패

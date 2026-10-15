@@ -23,8 +23,9 @@ struct FocusMateApp: App {
             #if DEBUG
             let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
             testBootstrap = bootstrap
-            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL),
-                                 soundPreview: bootstrap?.makeSoundPreview())
+            let model = bootstrap.map {
+                AppModel(store: $0.modelStore, soundPreview: $0.makeSoundPreview(), routeData: $0.makeRouteCatalogStore())
+            } ?? AppModel(store: LocalSnapshotStore(fileURL: operationalURL))
             _model = State(initialValue: model)
             if let bootstrap {
                 let recorder = bootstrap.makeFeedbackRecorder()
@@ -73,9 +74,9 @@ struct FocusMateApp: App {
         WindowGroup {
             #if DEBUG
             RootView(model: model, issuance: issuance, services: journeyServices, testBootstrap: testBootstrap, testRecorder: testRecorder,
-                     testGate: testGate, testHoldGate: testHoldGate, testSetupError: testSetupError).task { start() }
+                     testGate: testGate, testHoldGate: testHoldGate, testSetupError: testSetupError).task { await start() }
             #else
-            RootView(model: model, issuance: issuance).task { start() }
+            RootView(model: model, issuance: issuance).task { await start() }
             #endif
         }
     }
@@ -89,7 +90,7 @@ struct FocusMateApp: App {
         CardIssuanceController(issuer: model, haptics: CoreHapticsIssuancePlayer(), announcer: SystemAccessibilityAnnouncer())
     }
 
-    private func start() {
+    private func start() async {
         guard !hasStarted else { return }
         hasStarted = true
         #if DEBUG
@@ -99,12 +100,19 @@ struct FocusMateApp: App {
         #endif
         model.start()
         #if DEBUG
+        let routeLoading = testBootstrap?.startsRouteData == false ? nil : model.startRouteData()
+        #else
+        model.startRouteData()
+        #endif
+        cleanUpLiveActivities()
+        #if DEBUG
         do {
             try testBootstrap?.applySaveScenario(to: model)
+            // 승차 경로는 시간 선택 후보가 필요하므로 정류장 데이터를 다 읽은 뒤 쌓는다.
+            if testBootstrap?.route == "boarding" { await routeLoading?.value }
             try testBootstrap?.applyRoute(to: model)
         } catch { testSetupError = String(describing: error) }
         #endif
-        cleanUpLiveActivities()
     }
 
     /// 이전 실행이 남긴 앱 밖 표시를 저장 상태에 맞춘다. 읽기 실패는 "여행 없음"이 아니므로 건드리지 않는다.

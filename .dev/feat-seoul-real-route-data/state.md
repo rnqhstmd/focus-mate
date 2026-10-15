@@ -20,7 +20,7 @@ auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 1
 simulator: FM-W16 680F8A78-9875-4E68-8FC1-95CDFEA87139
-current-step: "W16b RGR T3: RED (인터페이스 명세 w16b-t3-interfaces.md 작성 완료, red-writer 디스패치 전)"
+current-step: "W16b T3~T7 구현 완료 → 커밋 후 phase-review"
 user-scope: "W16b — 설계 12~27단계(앱 연결). W09a 머지(#23 6542996) 위에서 진행. ±1분 규칙 유지(사용자 결정 2026-10-15)"
 phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed, w16b: { design-delta: completed, implement: in_progress } }
 execution-log:
@@ -56,3 +56,9 @@ steps:
   - { phase: w16b, task: T1, result: "스크립트 보안 보강·출처 URL·번들 JSON 배치. python 108→전체 OK. 리뷰 R0 Important 3 동작결함 → 재현 RED R1 → 수정, R1 PASS (Minor 4 유예)" }
   - { phase: w16b, task: T2, result: "RouteCatalogStore·검증·DEBUG 픽스처. focused Swift 87 pass. 리뷰 PASS (Minor 5 유예). 커밋 33e7386" }
   - { phase: w16b, task: T3, result: "인터페이스 명세 작성(w16b-t3-interfaces.md). 다음: red-writer A(새 동작 테스트) → B(기존 테스트 새 API로 이전) → 세션 구현" }
+  - { phase: w16b, task: T3, result: "RED A(신규 7파일 109) + B(기존 이전) → 구현. 테스트 결함 3건 red-writer 수정(도착 새여정·v5 손상 여정·ready 정류장 id) + 오케스트레이터 1건(completedAt Date). 단위 1233/0, 경고 기준선 유지, 예시 데이터 grep 0" }
+  - { phase: w16b, task: T3-review, result: "SPEC PASS, QUALITY FAIL Important 3 → I1 부트스트랩 승차 경로 로딩 대기, I2 재현 RED→retryLoad 이전 저장 수정, I3 검색 1회화, Minor 정류장 확정 시 시간 초안 초기화(재현 RED). 단위 1246/0" }
+  - { phase: w16b, task: T4, result: "데이터 출처 화면. RED 단위 11·UI 4 → 구현, focused 41 pass, UI 4 pass" }
+  - { phase: w16b, task: T5, result: "UI 테스트 이전 + RouteDataUITests 11 pass, 승차 경로 시드 2014-r 수정 후 BoardingTag pass. 전체 UI는 verify에서" }
+  - { phase: w16b, task: T6, result: "실데이터 9 pass(검색 0.01s, 후보 0.0005s, 로드 0.17s, 1.69MB, 0건 9%)" }
+  - { phase: w16b, task: T7, result: "glossary·architecture·status·plan.md 정정" }

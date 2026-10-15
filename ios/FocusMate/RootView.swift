@@ -187,8 +187,9 @@ struct RootView: View {
             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
             if let station = model.snapshot?.currentStation {
                 Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
-                Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
-                    .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
+                // 정류장 데이터를 읽기 전에는 비어 있다가 준비되면 채워진다(AC-42).
+                Text(model.currentStationBound ?? " ").foregroundStyle(.secondary)
+                    .accessibilityValue(model.currentStationBound ?? "").accessibilityIdentifier("main.bound")
             }
             if let stationName = model.abandonNotice {
                 MainAbandonNoticeView(stationName: stationName)

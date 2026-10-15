@@ -19,9 +19,10 @@ struct ArrivalBriefingContent: Equatable {
     let routeText: String
     let sentences: [String]
 
-    init?(journey: JourneySnapshot) {
-        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
-        routeText = "\(bus.number) · \(destination) 도착"
+    /// 저장된 이름만 쓰므로 지도 일관성(BR-12)과 무관하게 늘 만든다.
+    init(journey: JourneySnapshot) {
+        let destination = journey.destinationName
+        routeText = "\(journey.busNumber) · \(destination) 도착"
         sentences = ["곧 \(destination)에 도착합니다", "버스가 멈추면 일어나주세요", "카드를 찍고 내려주세요"]
     }
 }

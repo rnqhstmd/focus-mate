@@ -1,6 +1,6 @@
 import Foundation
 
-/// 최초 정류장 검색 결과 한 건(서울 전체 데이터). 기존 예시 데이터의 `StationOption`을 대신할 타입이다.
+/// 최초 정류장 검색 결과 한 건(서울 전체 데이터).
 struct StopSearchOption: Identifiable, Equatable {
     let id: String
     let stopIndex: Int

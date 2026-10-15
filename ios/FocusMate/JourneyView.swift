@@ -27,6 +27,8 @@ struct JourneyView: View {
             ensureTimer()
         }
         .onChange(of: model.activeJourney?.phase) { _, _ in ensureTimer() }
+        // 정류장 데이터가 화면을 연 뒤에 준비되면 그때 지도를 붙인다.
+        .onChange(of: model.routeCatalog != nil) { _, _ in ensureMap() }
         // 정상 경로에서는 이탈이 없다. 재생성될 때 일시정지 규칙과 저장을 맞추기 위한 방어다.
         .onDisappear {
             timer?.leave()
@@ -43,11 +45,17 @@ struct JourneyView: View {
                                        clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
                                        observer: liveActivity)
         if resumed { services.announcer.announce(JourneyLifecycleText.resumeAnnouncement) }
-        if let timer, let content = ArrivalBriefingContent(journey: journey) {
-            arrival = ArrivalBriefingController(content: content, progress: timer, confirmer: model, sleep: services.sleep)
+        if let timer {
+            arrival = ArrivalBriefingController(content: ArrivalBriefingContent(journey: journey), progress: timer,
+                                                confirmer: model, sleep: services.sleep)
         }
-        // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
-        if let timer, let course = CourseJourney(journey: journey) {
+        ensureMap()
+    }
+
+    /// 정류장 데이터가 없거나 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다(BR-12).
+    private func ensureMap() {
+        guard map == nil, let timer, let journey = model.activeJourney, let catalog = model.routeCatalog else { return }
+        if let course = CourseJourney(journey: journey, catalog: catalog) {
             map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,
                                        reduceMotion: services.reduceMotion(system: systemReduceMotion))
         }

@@ -8,6 +8,8 @@ enum LifecycleActionResult: Equatable { case done, rejected, saveFailed }
 @MainActor
 protocol JourneyAbandoning: AnyObject {
     func abandonJourney(timerPaused: Bool) -> LifecycleActionResult
+    /// 정류장 데이터를 읽는 중이면 false. 포기 버튼을 잠근다(AC-44).
+    var canEndActiveJourney: Bool { get }
 }
 
 /// 포기 확인 흐름. 확정은 `isConfirming`에 의존하지 않는다 — alert 바인딩 해제와 버튼 동작의 호출 순서가 보장되지 않기 때문이다.

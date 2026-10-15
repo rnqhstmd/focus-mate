@@ -5,13 +5,13 @@ import XCTest
 final class AppFoundationTests: XCTestCase {
     private enum ProbeError: Error { case expected }
 
-    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
-    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수")
+    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲")
 
     private static let readySnapshot = stage(true, initialStation, currentStation)
     private static let cardOnlySnapshot = stage(true, nil, nil)
     private static let readyEnvelope = Data(
-        #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
+        #"{"version":5,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수"},"currentStation":{"id":"seoulForest","name":"서울숲"},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
     )
     private static let corruptBytes = Data("{broken".utf8)
     private static let unsupportedBytes = Data(#"{"version":999,"state":null}"#.utf8)
@@ -30,19 +30,16 @@ final class AppFoundationTests: XCTestCase {
     }
 
     func testValidationRejectsStageAndStationBoundaryViolationsInContractOrder() {
-        let blankID = StationSnapshot(id: " \n", name: "성수", direction: 1)
-        let blankName = StationSnapshot(id: "seongsu", name: "\n ", direction: 1)
-        let zeroDirection = StationSnapshot(id: "seongsu", name: "성수", direction: 0)
+        let blankID = StationSnapshot(id: " \n", name: "성수")
+        let blankName = StationSnapshot(id: "seongsu", name: "\n ")
         let cases: [(snapshot: AppSnapshot, issue: SnapshotValidationIssue)] = [
             (Self.stage(false, Self.initialStation, Self.currentStation), .inconsistentStage),
             (Self.stage(true, Self.initialStation, nil), .inconsistentStage),
             (Self.stage(true, nil, Self.currentStation), .inconsistentStage),
             (Self.stage(true, blankID, Self.currentStation), .emptyStationID),
             (Self.stage(true, blankName, Self.currentStation), .emptyStationName),
-            (Self.stage(true, zeroDirection, Self.currentStation), .invalidDirection(0)),
             (Self.stage(true, Self.initialStation, blankID), .emptyStationID),
             (Self.stage(true, Self.initialStation, blankName), .emptyStationName),
-            (Self.stage(true, Self.initialStation, zeroDirection), .invalidDirection(0)),
         ]
 
         for item in cases {
@@ -137,7 +134,7 @@ final class AppFoundationTests: XCTestCase {
         var writeCalls = 0
         let invalid = Self.stage(
             true,
-            StationSnapshot(id: " ", name: "성수", direction: 1),
+            StationSnapshot(id: " ", name: "성수"),
             Self.currentStation
         )
         let store = LocalSnapshotStore(

@@ -4,14 +4,14 @@ import XCTest
 
 @MainActor
 final class CardIssuanceModelTests: XCTestCase {
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수")
     private static let fixedNow = Date(timeIntervalSince1970: 1_791_882_000)
 
     private static let issuedV2 = Data(
         #"{"state":{"cardIssued":true,"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"}]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":2}"#.utf8
     )
-    private static let mainV2 = Data(
-        #"{"state":{"cardIssued":true,"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"}]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":2}"#.utf8
+    private static let mainV5 = Data(
+        #"{"state":{"cardIssued":true,"cards":{"items":[{"id":"FM-01234567","issuedAt":"2026-10-13T09:00:00Z"}]},"currentStation":{"id":"seongsu","name":"성수"},"initialStation":{"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":5}"#.utf8
     )
 
     private func factory(_ values: [UInt32]) -> CardSnapshotFactory {
@@ -113,7 +113,7 @@ final class CardIssuanceModelTests: XCTestCase {
 
     // 깨짐 명명: 이미 발급된 상태에서 가드 없이 다시 쓰면 실패.
     func testBR2_이미_발급된_상태에서는_발급이_거부되고_쓰기가_없다() {
-        for bytes in [Self.issuedV2, Self.mainV2] {
+        for bytes in [Self.issuedV2, Self.mainV5] {
             let fake = memoryStore(initial: bytes)
             let model = AppModel(store: fake.store, cardFactory: factory([55_555_555]))
             model.start()

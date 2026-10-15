@@ -338,4 +338,16 @@ final class AlightingFlowUITests: XCTestCase {
             XCTAssertTrue(!tool.exists || !tool.isEnabled, "지도 도구가 눌릴 수 있음: \(id)")
         }
     }
+
+    // 깨짐(AC-79): 하차 뒤 현재 정류장이 계산 값이나 출발지가 되어 저장된 도착 정류장(ttukseom/뚝섬역)과 달라진다.
+    func testAC79_하차하면_현재_정류장은_저장된_도착_정류장이다() throws {
+        let h = FocusMateUIHarness.launchLifecycle(seed: "alightMismatchArrived")
+        toSummary(h)
+
+        h.tap("summary.home")
+
+        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertEqual(try h.persistedCurrentStation().id, "ttukseom")
+        XCTAssertEqual(h.element("main.currentStation").value as? String, "뚝섬역")
+    }
 }

@@ -45,6 +45,7 @@
 - FR-10 / AC-12: W03(PR #14). 승인 번들 WAV4종과 소리 없음, 임시 선택의 저장/취소, 반복 미리듣기·시작/중지 페이드·오류 후 계속·늦은 재생 차단. 단위366+UI99=465 및 웹31+edge QA 실패0, 빌드 통과·경고0. 실제 시안7상태 대조91/pass. 실제 VoiceOver·실기기 청취는 W14 미검증.
 - FR-11 / AC-13: W04 PR #16 — 승차권·승차 태그·진행 여정 저장·출발 안내(시작) 구현, 실기기 VoiceOver·햅틱은 W14. FR-12 / AC-14: W09a — 아래 줄. W03은 기존 여정 선택과 준비 초안을 W04가 소비할 요청 경계에 제공한다.
 - FR-12 / AC-14: W09a — 도착 안내(여행 화면 위)·하차 태그(승차와 같은 조작, 뒤로가기 없음)·접촉 성공 1회 저장 1번(완료 기록·도착지를 현재 정류장으로·진행 여정 제거)·요약·메인 도착 카드(하차하기)를 구현했다. 저장 형식 v4 그대로, Live Activity(W15)는 변경 없음. 실기기 VoiceOver 첫 초점·햅틱은 W14.
+- FR-6·7·8 (W16): 예시 데이터(가상 정류장 9개·버스 3종)를 서울 전체 공공 데이터 번들(정류장 12,758·노선 712, 기준일 2026-09-02)로 바꿨다. 첫 출발 정류장은 이름·번호로 검색하고, 시간 선택 후보는 실제 노선의 구간 시간(±1분)으로, 지도는 실제 노선 구간으로 그린다. 저장 형식 v5(여정에 승차 당시 이름 저장, 정류장 `{id,name}`), v1~v4 파일은 정류장·진행 여정만 비우고 다시 고르기 안내. 데이터 출처 화면 추가. 단위 `RouteCatalogTests`·`StationSearchTests`·`RouteLegTests`·`RouteCandidatesTests`·`RouteDataMigrationTests`·`RouteDataLifecycleModelTests`·`RouteDataBundleTests`·`RouteDataOfflineTests`·`DataSourceContentTests`, UI `RouteDataUITests`·`DataSourceUITests`. GPS·실시간 API는 쓰지 않는다.
 
 [현재 동작](../../docs/CURRENT-STATE.md) · [화면 계약](../../docs/FLOWS.md) · [개발 단계](../../docs/DEVELOPMENT-PHASES.md). 현재 요구사항 원장은 코드와 마지막 직접 VM 검사로 작성했으며 자동 git 동기화는 아직 실행하지 않았습니다.
 

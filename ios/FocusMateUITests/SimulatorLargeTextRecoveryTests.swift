@@ -72,7 +72,8 @@ final class SimulatorLargeTextRecoveryTests: XCTestCase {
 
         record("launch 후")
         XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
-        let result = h.element("search.result.seongsu:1")
+        h.app.typeStationQuery("성수역")
+        let result = h.element("search.result.seongsu")
         let resultExists = result.waitForExistence(timeout: timeout)
         record("search result 확인 전")
         XCTAssertTrue(resultExists)

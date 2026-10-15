@@ -125,43 +125,23 @@ final class JourneyTimerLifecycleUITests: XCTestCase {
         XCTAssertEqual(try h.memoryActive()?["paused"] as? Bool, true)
     }
 
-    // MARK: V6 (AC-24, 25, 26)
+    // MARK: V6 (AC-26) + 서울 전체 데이터 이전(AC-46)
 
-    // 깨짐: v3 출발 완료 여정이 일시정지·0초로 읽히지 않거나 재개 후 v4로 저장되지 않는다.
-    func testV6_AC24_v3_출발_완료_여정은_일시정지로_읽히고_재개하면_v4로_저장된다() throws {
-        let h = FocusMateUIHarness.launchJourney(seed: "v3Departed")
-        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
-        XCTAssertEqual(try h.memoryActive()?["paused"] as? Bool, true)
-        XCTAssertEqual(try h.memoryElapsed(), 0)
+    // 깨짐: 옛 형식(v3) 여정이 해석되어 되살아나거나, 이전 때 카드가 함께 사라지거나, 최초 정류장 화면이 열리지 않는다.
+    // (옛 v3 출발 완료·출발 대기·카탈로그 밖 정류장 테스트 3건은 삭제: W16b에서 v1~v4 진행 여정은 내용을 해석하지 않고
+    //  정류장·여정을 비우므로 "일시정지로 읽힘·v4 저장·출발 안내 유지·카탈로그 밖 정류장 판정"이라는 전제가 사라졌다.)
+    func testV6_AC46_v3_여정은_해석되지_않고_비워지며_카드는_유지되고_최초_정류장_화면이_열린다() throws {
+        let h = FocusMateUIHarness.launch(seed: "v3Departed", extraArguments: FocusMateUIHarness.manualClockArguments)
 
-        h.tap("journey.timer.resume")
-        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
-
-        XCTAssertEqual(try h.persistedJourney().version, 4)
-        XCTAssertEqual(try h.persistedPaused(), false)
+        XCTAssertTrue(h.element("screen.initialStationEntry").waitForExistence(timeout: timeout))
+        XCTAssertFalse(h.element("screen.main").exists)
+        XCTAssertNil(try h.memoryActive())
+        XCTAssertGreaterThan(try h.cardCount(), 0)
     }
 
-    // 깨짐: v3 출발 대기 여정이 유지되지 않거나 시작 버튼이 보이지 않는다.
-    func testV6_AC25_v3_출발_대기_여정은_출발_안내의_시작_버튼을_보여준다() throws {
-        let h = FocusMateUIHarness.launchJourney(seed: "v3Awaiting")
-
-        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
-        XCTAssertTrue(h.element("journey.start").waitForExistence(timeout: 10))
-        XCTAssertEqual(try h.memoryActive()?["phase"] as? String, "awaitingDeparture")
-    }
-
-    // 깨짐: 361분 v3 여정이 버려지지 않거나 카드가 함께 사라진다.
-    func testV6_AC26_v3_361분_여정은_여정만_버려지고_카드는_유지된다() throws {
-        try assertInvalidV3JourneyDropped(seed: "v3InvalidMinutes")
-    }
-
-    // 깨짐: 카탈로그에 없는 정류장 v3 여정이 버려지지 않거나 카드가 함께 사라진다.
-    func testV6_AC26_v3_카탈로그_밖_정류장_여정은_여정만_버려지고_카드는_유지된다() throws {
-        try assertInvalidV3JourneyDropped(seed: "v3UnknownStop")
-    }
-
-    private func assertInvalidV3JourneyDropped(seed: String) throws {
-        let h = FocusMateUIHarness.launch(seed: seed, extraArguments: FocusMateUIHarness.manualClockArguments)
+    // 깨짐: 현재 버전(v5)의 361분 손상 여정이 버려지지 않거나 카드·정류장이 함께 사라진다.
+    func testV6_AC26_v5_361분_여정은_여정만_버려지고_카드는_유지된다() throws {
+        let h = FocusMateUIHarness.launch(seed: "invalidMinutesJourney", extraArguments: FocusMateUIHarness.manualClockArguments)
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.element("main.activeJourney").exists)
         XCTAssertNil(try h.memoryActive())

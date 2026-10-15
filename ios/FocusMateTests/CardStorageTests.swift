@@ -3,7 +3,7 @@ import XCTest
 @testable import FocusMate
 
 final class CardStorageTests: XCTestCase {
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수")
     private static let issuedAt = Date(timeIntervalSince1970: 1_791_882_000) // 2026-10-13T09:00:00Z
 
     private static let stations = #""currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
@@ -18,7 +18,7 @@ final class CardStorageTests: XCTestCase {
 
     private static let nullStations = #""currentStation":null,"initialStation":null"#
 
-    // 깨짐 명명: id를 숫자로 바꿔 앞자리 0을 잃거나, 날짜를 다른 형식으로 쓰거나, 재저장 바이트가 달라지거나, v3 필수 style을 누락하면 실패.
+    // 깨짐 명명: id를 숫자로 바꿔 앞자리 0을 잃거나, 날짜를 다른 형식으로 쓰거나, 재저장 바이트가 달라지거나, 필수 style을 누락하면 실패.
     func testAC13_카드항목은_저장_로드_재저장해도_값과_바이트가_같다() throws {
         try withTemporaryFile { fileURL in
             let snapshot = Self.stage(true, Self.seongsu, Self.seongsu)
@@ -36,7 +36,7 @@ final class CardStorageTests: XCTestCase {
             XCTAssertEqual(try Data(contentsOf: fileURL), firstBytes)
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             let cards = try XCTUnwrap(state["cards"] as? [String: Any])
             let items = try XCTUnwrap(cards["items"] as? [[String: Any]])

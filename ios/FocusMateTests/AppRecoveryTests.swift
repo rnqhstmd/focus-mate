@@ -9,12 +9,12 @@ final class AppRecoveryTests: XCTestCase {
     private static let backupUUID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
     private static let corruptBytes = Data("{broken".utf8)
     private static let changedBytes = Data("{changed".utf8)
-    private static let readyV1Bytes = Data(
-        #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
+    private static let readyV5Bytes = Data(
+        #"{"version":5,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수"},"currentStation":{"id":"seoulForest","name":"서울숲"},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
     )
-    private static let unsupportedV5Bytes = Data(#"{"version":5,"state":null}"#.utf8)
-    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
-    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+    private static let unsupportedV6Bytes = Data(#"{"version":6,"state":null}"#.utf8)
+    private static let initialStation = StationSnapshot(id: "seongsu", name: "성수")
+    private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲")
     private static let readySnapshot = stage(true, initialStation, currentStation)
 
     // 깨짐 명명: retryLoad가 실제 재읽기를 생략하거나 성공 route/snapshot을 갱신하지 않거나 저장을 수행하면 실패.
@@ -28,7 +28,7 @@ final class AppRecoveryTests: XCTestCase {
             readData: { _ in
                 readCalls += 1
                 if readCalls == 1 { throw CocoaError(.fileReadNoPermission) }
-                return Self.readyV1Bytes
+                return Self.readyV5Bytes
             },
             createDirectory: { _ in directoryCalls += 1 },
             writeData: { _, _ in writeCalls += 1 },
@@ -57,7 +57,7 @@ final class AppRecoveryTests: XCTestCase {
             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
             readData: { _ in
                 readCalls += 1
-                return readCalls == 1 ? Self.corruptBytes : Self.unsupportedV5Bytes
+                return readCalls == 1 ? Self.corruptBytes : Self.unsupportedV6Bytes
             },
             writeData: { _, _ in writeCalls += 1 },
             removeData: { _ in removeCalls += 1 }
@@ -67,7 +67,7 @@ final class AppRecoveryTests: XCTestCase {
 
         model.retryLoad()
 
-        XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(5)))
+        XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(6)))
         XCTAssertNil(model.snapshot)
         XCTAssertEqual(model.path, [])
         XCTAssertEqual(readCalls, 2)
@@ -188,7 +188,7 @@ final class AppRecoveryTests: XCTestCase {
         var readyRemoves = 0
         let readyStore = LocalSnapshotStore(
             fileURL: URL(fileURLWithPath: "/unused/ready.json"),
-            readData: { _ in readyReads += 1; return Self.readyV1Bytes },
+            readData: { _ in readyReads += 1; return Self.readyV5Bytes },
             backupID: { Self.backupUUID },
             writeBackup: { _, _ in readyBackups += 1 },
             removeData: { _ in readyRemoves += 1 }
@@ -375,7 +375,7 @@ final class AppRecoveryTests: XCTestCase {
             let model = AppModel(store: store)
             model.loadIfNeeded()
             model.requestCleanup()
-            try self.seed(fileURL, Self.readyV1Bytes)
+            try self.seed(fileURL, Self.readyV5Bytes)
 
             XCTAssertFalse(model.confirmCleanup())
 
@@ -383,7 +383,7 @@ final class AppRecoveryTests: XCTestCase {
             XCTAssertEqual(model.recoveryFailure, .notRequired)
             XCTAssertFalse(model.isRecovering)
             XCTAssertEqual(activeReadCalls, 3)
-            XCTAssertEqual(try Data(contentsOf: fileURL), Self.readyV1Bytes)
+            XCTAssertEqual(try Data(contentsOf: fileURL), Self.readyV5Bytes)
             XCTAssertFalse(FileManager.default.fileExists(atPath: self.backupURL(for: fileURL).path))
         }
     }

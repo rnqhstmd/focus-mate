@@ -19,10 +19,8 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
     private var startFailed = false
     private var lastSent: SentKey?
 
-    /// 버스·도착지를 모르는 여행은 표시하지 않는다.
-    init?(journey: JourneySnapshot, gateway: LiveActivityGateway, now: @escaping @MainActor () -> Date = { Date() }) {
-        guard let attributes = JourneyLiveActivityPolicy.attributes(for: journey) else { return nil }
-        self.attributes = attributes
+    init(journey: JourneySnapshot, gateway: LiveActivityGateway, now: @escaping @MainActor () -> Date = { Date() }) {
+        attributes = JourneyLiveActivityPolicy.attributes(for: journey)
         self.gateway = gateway
         self.now = now
     }

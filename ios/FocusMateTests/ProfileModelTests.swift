@@ -6,10 +6,10 @@ import XCTest
 @MainActor
 final class ProfileModelTests: XCTestCase {
     private static let seoul = TimeZone(identifier: "Asia/Seoul")!
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
+    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수역")
 
-    private static let emptyV2 = Data(
-        #"{"version":2,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
+    private static let emptyV5 = Data(
+        #"{"version":5,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수"},"currentStation":{"id":"seoulForest","name":"서울숲"},"cards":{"items":[]},"journey":{"active":null},"records":{"items":[]}}}"#.utf8
     )
 
     private final class Probe {
@@ -103,7 +103,7 @@ final class ProfileModelTests: XCTestCase {
     func testAC17_25분_하차_완료_뒤_profileStats는_1건_25분이다() throws {
         try withTemporaryFile { fileURL in
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Self.emptyV2.write(to: fileURL)
+            try Self.emptyV5.write(to: fileURL)
             let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
             model.loadIfNeeded()
             XCTAssertEqual(model.profileStats, .loaded(RecordLifetimeSummary(count: 0, minutes: 0)))
@@ -206,6 +206,42 @@ final class ProfileModelTests: XCTestCase {
         XCTAssertFalse(model.openFromProfile(.settings))
 
         XCTAssertEqual(model.path, [.profile, .settings])
+    }
+
+    // 깨짐 명명: 데이터 출처 진입이 .dataSource를 쌓지 않으면 실패.
+    func testAC49_프로필에서_데이터출처를_열면_dataSource가_쌓인다() throws {
+        let model = try readyModel()
+        model.open(.profile)
+
+        XCTAssertTrue(model.openFromProfile(.dataSource))
+
+        XCTAssertEqual(model.path, [.profile, .dataSource])
+    }
+
+    // 깨짐 명명: 프로필이 최상단이 아닌데 push를 허용하면 실패.
+    func testAC49_경로_마지막이_프로필이_아니면_데이터출처는_false이고_경로는_불변이다() throws {
+        let model = try readyModel()
+
+        XCTAssertFalse(model.openFromProfile(.dataSource))
+
+        XCTAssertEqual(model.path, [])
+    }
+
+    // 깨짐 명명: 데이터 출처가 최상단인데 중복 push를 허용하면 실패.
+    func testAC49_데이터출처가_최상단이면_중복push는_false이다() throws {
+        let model = try readyModel()
+        model.open(.profile)
+        XCTAssertTrue(model.openFromProfile(.dataSource))
+
+        XCTAssertFalse(model.openFromProfile(.dataSource))
+
+        XCTAssertEqual(model.path, [.profile, .dataSource])
+    }
+
+    // 깨짐 명명: 메뉴 항목이 잘못된 목적지로 매핑되거나 제목이 달라지면 실패.
+    func testAC49_데이터출처_메뉴는_데이터출처_목적지로_이어진다() {
+        XCTAssertEqual(ProfileMenuItem.dataSource.destination, .dataSource)
+        XCTAssertEqual(Destination.dataSource.title, "데이터 출처")
     }
 
     // MARK: AC-28 메인 메뉴

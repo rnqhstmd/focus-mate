@@ -46,7 +46,7 @@ struct LegacySnapshotV2: Decodable {
 
 /// 저장 파일 바이트와 `AppSnapshot` 사이의 변환. 판정 순서는 헤더 → 버전 → 구조 → 내용이다.
 enum SnapshotCodec {
-    static let currentVersion = 3
+    static let currentVersion = 4
 
     private struct VersionHeader: Decodable { let version: Int }
     private struct EnvelopeV2: Decodable { let state: LegacySnapshotV2 }
@@ -62,6 +62,11 @@ enum SnapshotCodec {
             switch header.version {
             case 1: state = migrateV1(try JSONDecoder().decode(EnvelopeV1.self, from: data).state)
             case 2: state = migrateV2(try JSONDecoder().decode(EnvelopeV2.self, from: data).state)
+            case 3:
+                // v3는 진행 여정의 paused 키만 다르다. 같은 Envelope를 v3 해석으로 읽는다.
+                let decoder = JSONDecoder()
+                decoder.userInfo[.journeyFormat] = JourneySnapshot.Format.v3
+                state = try decoder.decode(Envelope.self, from: data).state
             case currentVersion: state = try JSONDecoder().decode(Envelope.self, from: data).state
             default: throw StorageIssue.unsupportedVersion(header.version)
             }

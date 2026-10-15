@@ -12,7 +12,7 @@ final class AppRecoveryTests: XCTestCase {
     private static let readyV1Bytes = Data(
         #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
     )
-    private static let unsupportedV4Bytes = Data(#"{"version":4,"state":null}"#.utf8)
+    private static let unsupportedV5Bytes = Data(#"{"version":5,"state":null}"#.utf8)
     private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
     private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
     private static let readySnapshot = stage(true, initialStation, currentStation)
@@ -57,7 +57,7 @@ final class AppRecoveryTests: XCTestCase {
             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
             readData: { _ in
                 readCalls += 1
-                return readCalls == 1 ? Self.corruptBytes : Self.unsupportedV4Bytes
+                return readCalls == 1 ? Self.corruptBytes : Self.unsupportedV5Bytes
             },
             writeData: { _, _ in writeCalls += 1 },
             removeData: { _ in removeCalls += 1 }
@@ -67,7 +67,7 @@ final class AppRecoveryTests: XCTestCase {
 
         model.retryLoad()
 
-        XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(4)))
+        XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(5)))
         XCTAssertNil(model.snapshot)
         XCTAssertEqual(model.path, [])
         XCTAssertEqual(readCalls, 2)

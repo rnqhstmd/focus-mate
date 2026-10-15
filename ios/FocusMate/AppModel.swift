@@ -179,7 +179,9 @@ final class AppModel {
 
     private func loadSnapshot() {
         do {
-            let restored = try store.load() ?? .empty
+            let loaded = try store.load() ?? .empty
+            // 앱 종료는 여정이 끊긴 것으로 본다. 진행 중이던 여정은 메모리에서만 일시정지로 두고 파일은 다음 저장 때 바뀐다.
+            let restored = loaded.journey.active.map { loaded.updating(journey: JourneySection(active: $0.restingForLaunch())) } ?? loaded
             let route = try restored.launchRoute()
             snapshot = restored
             launchState = .ready(route)
@@ -261,12 +263,14 @@ final class AppModel {
     func open(_ destination: Destination) {
         guard launchState == .ready(.main) else { return }
         // 승차권·승차 태그는 확정된 준비가 있을 때만 열린다(어떤 경로로도 미완성 준비로 들어가지 않는다).
-        if destination == .board || destination == .boarding, confirmedPreparation == nil { return }
+        if destination == .board || destination == .boarding, confirmedPreparation == nil || hasDepartedJourney { return }
         if destination == .journey, activeJourney == nil { return }
         path.append(destination)
     }
     func goBack() {
         guard launchState == .ready(.main), !path.isEmpty else { return }
+        // 출발한 여행 화면에서는 메인으로 돌아가지 않는다(나가기는 W07).
+        if path.last == .journey, hasDepartedJourney { return }
         path.removeLast()
     }
 }

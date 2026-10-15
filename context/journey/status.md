@@ -17,7 +17,7 @@
 | FR-3 | [웹] 승하차 접촉 | AC-3: 승차 접촉 체크포인트·하차 완료를 각각 1회만 반영한다. 승차만 인식 1400ms·페이드 450ms이고 하차는 기존 타이밍이다. 중복·장면/숨김 지연 전환 취소를 유지한다. | ✅ | 코드 기준선 [54dde93](https://github.com/rnqhstmd/next-step/commit/54dde93280f41bd6c8a497625869e42e904e389b) |
 | FR-4 | [웹] 진행·중단·재개 | AC-4: 30초 압축 시연에서 일시정지·포기·수동 재개를 지원하고 앱 밖 시간은 진도에 더하지 않는다. | ✅ | 코드 기준선 [54dde93](https://github.com/rnqhstmd/next-step/commit/54dde93280f41bd6c8a497625869e42e904e389b) |
 | NFR-1 | [웹/VM] 상태·비동기 안전 | AC-5: 21장면·441 포커스·882 취소 및 정/역방향·늦은 오디오 decode 회귀가 종료 코드 0이다. | ✅ | 코드 기준선 [54dde93](https://github.com/rnqhstmd/next-step/commit/54dde93280f41bd6c8a497625869e42e904e389b) |
-| FR-5 | [iOS·P3] 실제 분 타이머 | AC-6: 선택한 실제 분을 진행하며 pause/resume 및 로컬 체크포인트를 구현한다. | ⬜ | - |
+| FR-5 | [iOS·P3] 실제 분 타이머 | AC-6: 선택한 실제 분을 진행하며 pause/resume 및 로컬 체크포인트를 구현한다. | ✅ | [#17](https://github.com/rnqhstmd/focus-mate/pull/17) |
 | FR-6 | [iOS·P3] MapKit 가상 코스 | AC-7: 기본 지도와 승인된 앱 내 가상 코스를 표시한다. 실제 GPS·버스 API는 범위 밖이다. | ⬜ | - |
 | NFR-2 | [iOS·P3/P6] 생명주기 안전 | AC-8: 잠금·종료·복귀에서 저장 손실·중복·앱 밖 진도 증가가 없는지 실기기로 검증한다. P3는 Simulator 구현·검사, P6는 실기기 검증이다. | ⬜ | - |
 | FR-7 | [iOS·P2] 첫 출발 정류장 | AC-9: 최초 설정에서만 가상 정류장을 검색해 이름·방면을 선택하고 현재 정류장으로 저장한다. 결과 없음은 선택 불가이며 이후 앱 안 재검색·초기화는 없다. | ✅ | [#11](https://github.com/rnqhstmd/focus-mate/pull/11) |
@@ -35,7 +35,7 @@
 - FR-3 / AC-3: completeFareTag / 신규 VM hold 회귀.
 - FR-4 / AC-4: tick / checkpointJourney / resumePreviousJourney.
 - NFR-1 / AC-5: prototype-edge-qa.cjs 직접 실행 결과.
-- FR-5 / AC-6: 네이티브 구현 전.
+- FR-5 / AC-6: W05 PR #17 — 실제 분 타이머·일시정지·10초 체크포인트·저장 v4 구현. 백그라운드에서도 진행(사용자 결정), 종료 후 일시정지 복원. 이어가기·나가기는 W07, 실기기 확인은 W14.
 - FR-6 / AC-7: 네이티브 구현 전.
 - NFR-2 / AC-8: 실기기 검사 전.
 - FR-7 / AC-9: W02(PR #11). `InitialStationSearchView`·`StationSearchState`·`StationCatalog`(가상 정류장 3건, 이름·별칭·방면 검색), `AppModel+JourneyStart.confirmInitialStation`이 최초 정류장 화면에서만 1회 저장. 단위 `StationCatalogTests`·`StationSearchStateTests`·`JourneyStartModelTests`, UI `FirstStationSearchUITests`·`StationSaveFailureUITests`·`PreparationFlowUITests`(재실행 후 재검색 진입점 없음).

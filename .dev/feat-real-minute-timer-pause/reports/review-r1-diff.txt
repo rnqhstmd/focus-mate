@@ -1,0 +1,115 @@
+diff --git a/ios/FocusMate/JourneyTimerController.swift b/ios/FocusMate/JourneyTimerController.swift
+index fee75a4..38b5d4f 100644
+--- a/ios/FocusMate/JourneyTimerController.swift
++++ b/ios/FocusMate/JourneyTimerController.swift
+@@ -154,6 +154,7 @@ final class JourneyTimerController {
+ 
+     private func stopForSaveFailure() {
+         halt()
++        showsTransitionFailure = false
+         showsSaveWarning = true
+         announcer.announce(JourneyTimerDisplay.checkpointWarningText)
+     }
+@@ -164,6 +165,7 @@ final class JourneyTimerController {
+         runAnchor = nil
+         ticker.stop()
+         status = .arrived
++        showsTransitionFailure = false
+         refresh()
+         arrivalPersisted = save(totalSeconds, paused: true)
+         showsSaveWarning = !arrivalPersisted
+diff --git a/ios/FocusMate/JourneyTimerView.swift b/ios/FocusMate/JourneyTimerView.swift
+index 078e14f..c2d365b 100644
+--- a/ios/FocusMate/JourneyTimerView.swift
++++ b/ios/FocusMate/JourneyTimerView.swift
+@@ -9,6 +9,9 @@ struct JourneyTimerView: View {
+     var path: [Destination] = []
+     #endif
+     @AccessibilityFocusState private var remainingFocused: Bool
++    /// 일시정지↔재개 버튼이 같은 자리에서 바뀌므로, 연타의 두 번째 탭이 반대 전환으로 들어가지 않게 잠깐 무시한다.
++    @State private var lastControlTap: ContinuousClock.Instant?
++    private static let tapGuard: Duration = .milliseconds(500)
+ 
+     private var minutesText: String { JourneyTimerDisplay.text(minutes: controller.remainingMinutes) }
+ 
+@@ -58,7 +61,12 @@ struct JourneyTimerView: View {
+     }
+ 
+     private func controlButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
+-        Button(action: action) {
++        Button {
++            let now = ContinuousClock.now
++            if let last = lastControlTap, last.duration(to: now) < Self.tapGuard { return }
++            lastControlTap = now
++            action()
++        } label: {
+             Label(title, systemImage: systemImage)
+                 .font(.headline).foregroundStyle(.black)
+                 .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
+diff --git a/ios/FocusMateTests/JourneyTimerControllerTests.swift b/ios/FocusMateTests/JourneyTimerControllerTests.swift
+index 7b40a96..430dc1e 100644
+--- a/ios/FocusMateTests/JourneyTimerControllerTests.swift
++++ b/ios/FocusMateTests/JourneyTimerControllerTests.swift
+@@ -479,4 +479,33 @@ final class JourneyTimerControllerTests: XCTestCase {
+         rig.clock.advance(by: .seconds(1))
+         assertWrites(rig.saver, [(10, false), (10, false), (20, false)])
+     }
++
++    // MARK: 리뷰 fix 라운드 1 재현
++
++    // 깨짐: 도착 시 전환 실패 안내를 지우지 않으면 arrived인데 showsTransitionFailure가 true로 남는다.
++    func testRV3_전환_실패_후_도착하면_전환_실패_안내가_사라진다() {
++        let rig = running(elapsed: 1440, results: [false])
++
++        rig.controller.pause()
++        XCTAssertTrue(rig.controller.showsTransitionFailure)
++
++        rig.clock.advance(by: .seconds(60))
++
++        XCTAssertEqual(rig.controller.status, .arrived)
++        XCTAssertFalse(rig.controller.showsTransitionFailure)
++    }
++
++    // 깨짐: 체크포인트 실패로 멈출 때 전환 실패 안내를 지우지 않으면 경고와 안내가 동시에 true가 된다.
++    func testRV3_전환_실패_후_체크포인트_실패로_멈추면_저장_경고만_남는다() {
++        let rig = running(results: [false, false])
++
++        rig.controller.pause()
++        XCTAssertTrue(rig.controller.showsTransitionFailure)
++
++        rig.clock.advance(by: .seconds(10))
++
++        XCTAssertEqual(rig.controller.status, .paused)
++        XCTAssertTrue(rig.controller.showsSaveWarning)
++        XCTAssertFalse(rig.controller.showsTransitionFailure)
++    }
+ }
+diff --git a/ios/FocusMateUITests/JourneyTimerUITests.swift b/ios/FocusMateUITests/JourneyTimerUITests.swift
+index b28bb0f..e9e0831 100644
+--- a/ios/FocusMateUITests/JourneyTimerUITests.swift
++++ b/ios/FocusMateUITests/JourneyTimerUITests.swift
+@@ -107,18 +107,20 @@ final class JourneyTimerUITests: XCTestCase {
+         let pause = h.element("journey.timer.pause")
+         XCTAssertTrue(pause.waitForExistence(timeout: timeout))
+ 
+-        pause.tap()
+-        if pause.exists { pause.tap() }
++        pause.doubleTap()
+         XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++        XCTAssertEqual(try h.timerDiagnostic()["status"] as? String, "paused")
+         XCTAssertEqual(try h.persistedPaused(), true)
+         XCTAssertEqual(try h.persistedElapsed(), 95)
+         let afterPause = try h.persistedBytes()
+ 
+         h.advance(60)
+         let resume = h.element("journey.timer.resume")
+-        resume.tap()
+-        if resume.exists && resume.isHittable { resume.tap() }
++        resume.doubleTap()
+         XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++        XCTAssertEqual(try h.timerDiagnostic()["status"] as? String, "running")
+         XCTAssertNotEqual(try h.persistedBytes(), afterPause)
+         XCTAssertEqual(try h.persistedPaused(), false)
+         XCTAssertEqual(try h.persistedElapsed(), 95)

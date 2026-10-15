@@ -28,16 +28,17 @@ enum BoardingFixtures {
         direction: Int = 1,
         minutes: Int = 60,
         busID: String = "2014",
-        destinationStopID: String = "seongsu-dest",
+        destinationStopID: String = "seongdongSportsCenter",
         tag: JourneySnapshot.Tag = JourneySnapshot.Tag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand),
         task: String = "책 읽기",
         phase: JourneySnapshot.Phase = .awaitingDeparture,
-        elapsedSeconds: Int = 0
+        elapsedSeconds: Int = 0,
+        paused: Bool = false
     ) -> JourneySnapshot {
         JourneySnapshot(
             id: id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
             busID: busID, destinationStopID: destinationStopID, tag: tag, task: task, sound: .bus,
-            boardedAt: boardedAt, phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsedSeconds)
+            boardedAt: boardedAt, phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsedSeconds), paused: paused
         )
     }
 

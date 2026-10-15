@@ -17,6 +17,8 @@ struct UITestBootstrap {
     let forcedReduceMotion: Bool
     let route: String?
     let boardingSaveFailure: UITestCardSaveFailure
+    let manualClock: Bool
+    let nextSaveFailure = UITestNextSaveFailure()
     enum IssueHold { case standard, manual }
     private let recoveryScenario: String?
     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
@@ -56,7 +58,10 @@ struct UITestBootstrap {
         guard reduce == nil || reduce == "on" else { throw SetupIssue.invalidArguments }
         forcedReduceMotion = reduce == "on"
         route = try argument("--fm-ui-route")
-        guard route == nil || (route == "boarding" && seed == "ready") else { throw SetupIssue.invalidArguments }
+        guard route == nil || (route == "boarding" && seed == "ready") || route == "journey" else { throw SetupIssue.invalidArguments }
+        let clock = try argument("--fm-ui-clock")
+        guard clock == nil || clock == "manual" else { throw SetupIssue.invalidArguments }
+        manualClock = clock == "manual"
         let sound = try argument("--fm-ui-sound")
         guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
         shouldFailSound = sound == "fail"
@@ -139,7 +144,8 @@ struct UITestBootstrap {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"]).union(rawSeeds.keys)
+    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
+        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds)
 
     func prepare() throws {
         guard let seed else { return }
@@ -152,6 +158,11 @@ struct UITestBootstrap {
         case "activeJourney":
             try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard)
                 .updating(journey: JourneySection(active: Self.seededJourney)))
+        case let name where Self.timerSeeds[name] != nil:
+            try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
+        case let name where Self.v3Seeds.contains(name):
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Self.v3Bytes(name).write(to: fileURL, options: .atomic)
         default:
             guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -165,6 +176,7 @@ struct UITestBootstrap {
         let failSave = shouldFailSave
         let cardFailure = cardSaveFailure
         let boardingFailure = boardingSaveFailure
+        let nextFailure = nextSaveFailure
         var activeReads = 0
         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
             if url == activeURL {
@@ -175,7 +187,7 @@ struct UITestBootstrap {
             }
             return try Data(contentsOf: url)
         }, writeData: { data, url in
-            if failSave || cardFailure.consume() || boardingFailure.consume() { throw StorageIssue.writeFailed }
+            if failSave || cardFailure.consume() || boardingFailure.consume() || nextFailure.consume() { throw StorageIssue.writeFailed }
             try data.write(to: url, options: .atomic)
         }, writeBackup: { data, url in
             if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
@@ -198,6 +210,12 @@ struct UITestBootstrap {
 
     /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
     @MainActor func applyRoute(to model: AppModel) throws {
+        if route == "journey" {
+            // 진단용 진입. 실제 재진입(이어가기)은 W07이다.
+            guard model.launchState == .ready(.main), model.activeJourney != nil else { throw SetupIssue.invalidSaveState }
+            model.open(.journey)
+            return
+        }
         guard route == "boarding" else { return }
         guard model.launchState == .ready(.main), let origin = model.journeyOrigin else { throw SetupIssue.invalidSaveState }
         model.journeyPlan.setMinutes(60)
@@ -217,6 +235,14 @@ struct UITestBootstrap {
         services.forcedReduceMotion = forcedReduceMotion
         let failure = boardingSaveFailure
         services.makeBoarder = { ArmingBoarder(base: $0, failure: failure) }
+        services.failNextSave = nextSaveFailure
+        if manualClock {
+            let clock = ManualJourneyClock()
+            services.clock = clock
+            services.makeTicker = { clock }
+            services.beforeForeground = { clock.applyArmedForegroundAdvance() }
+            services.testClock = clock
+        }
         return (services, gate)
     }
 
@@ -239,7 +265,39 @@ struct UITestBootstrap {
         id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
         destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
         tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
-        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start)
+        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start, paused: false)
+
+    /// 타이머 시드: 25분, 서울숲역 출발, 출발 완료·일시정지. 값은 경과 초.
+    private static let timerSeeds: [String: Int] = ["timerPaused90": 90, "timerNearArrival": 1440, "timerArrived": 1500]
+    private static let v3Seeds: Set<String> = ["v3Awaiting", "v3Departed", "v3InvalidMinutes", "v3UnknownStop"]
+
+    private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot {
+        JourneySnapshot(
+            id: "seed-timer", cardID: fixedCard.id, originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
+            destinationStopID: "seongdongSportsCenter",
+            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "타이머 시드",
+            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: phase,
+            progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)
+    }
+
+    private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot {
+        readySnapshot.issuingCard(fixedCard)
+            .updating(journey: JourneySection(active: timerJourney(phase: .departed, elapsed: elapsed, paused: true)))
+    }
+
+    /// v4로 만든 뒤 version을 3으로 바꾸고 paused 키를 지운다. 손상 시드는 그 위에서 값만 바꾼다.
+    private static func v3Bytes(_ name: String) throws -> Data {
+        let journey = timerJourney(phase: name == "v3Awaiting" ? .awaitingDeparture : .departed, elapsed: 0, paused: name != "v3Awaiting")
+        let data = try SnapshotCodec.encode(readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: journey)))
+        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
+              var active = section["active"] as? [String: Any] else { throw SetupIssue.invalidSaveState }
+        active.removeValue(forKey: "paused")
+        if name == "v3InvalidMinutes" { active["minutes"] = 361 }
+        if name == "v3UnknownStop" { active["originStopID"] = "gone-stop" }
+        section["active"] = active; state["journey"] = section; root["state"] = state; root["version"] = 3
+        return try JSONSerialization.data(withJSONObject: root, options: .sortedKeys)
+    }
 
     private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
 
@@ -322,6 +380,17 @@ final class UITestHoldGate {
         let pending = waiters
         waiters = []
         pending.forEach { $0.resume() }
+    }
+}
+
+/// 여행 화면의 `test.failNextSave`: 누를 때마다 다음 쓰기 1건을 실패시킨다. 수동 시계에는 자율 쓰기가 없어 실패 대상이 결정적이다.
+final class UITestNextSaveFailure {
+    private var pending = 0
+    func arm() { pending += 1 }
+    func consume() -> Bool {
+        guard pending > 0 else { return false }
+        pending -= 1
+        return true
     }
 }
 

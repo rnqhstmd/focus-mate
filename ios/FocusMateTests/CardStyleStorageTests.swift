@@ -132,7 +132,7 @@ final class CardStyleStorageTests: XCTestCase {
             XCTAssertEqual(restored.currentCard?.id, "FM-01234567")
             XCTAssertEqual(restored.currentCard?.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 3)
+            XCTAssertEqual(root["version"] as? Int, 4)
         }
     }
 

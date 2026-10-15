@@ -1,0 +1,850 @@
+diff --git a/ios/FocusMate/JourneySnapshot.swift b/ios/FocusMate/JourneySnapshot.swift
+index 16a0917..3dbac8e 100644
+--- a/ios/FocusMate/JourneySnapshot.swift
++++ b/ios/FocusMate/JourneySnapshot.swift
+@@ -1,9 +1,12 @@
+ import Foundation
+ 
+ /// 승차 인식 순간 저장하는 진행 여정. 사용자가 고른 입력만 담고, 정류장 이름·정류장 수·거리처럼 다시 계산할 수 있는 값은 저장하지 않는다.
+-/// 정류장·버스 id는 W04 시점 `RouteStops`/`BusLine` 카탈로그 기준 값이다. 카탈로그가 바뀌어도 저장은 유효하며, 표시 조회는 실패하면 nil이다.
++/// 정류장·버스 id는 `RouteStops`/`BusLine` 카탈로그 값이어야 한다(BR-3). 카탈로그가 바뀌면 그 여정은 읽을 때 버려진다.
+ struct JourneySnapshot: Equatable {
+     enum Phase: String, Codable { case awaitingDeparture, departed }
++    /// 저장 파일 버전별 해석. v3에는 `paused` 키가 없다.
++    enum Format { case v3, v4 }
++    static let maximumMinutes = 360
+ 
+     /// 준비 초안의 태그는 메모리에만 있으므로 정의 전체를 복사해 둔다.
+     struct Tag: Codable, Equatable {
+@@ -31,6 +34,8 @@ struct JourneySnapshot: Equatable {
+     let boardedAt: Date
+     let phase: Phase
+     let progress: Progress
++    /// 출발 뒤 일시정지 여부. 출발 대기에서는 항상 false다.
++    let paused: Bool
+ 
+     static func boarding(details: PreparedJourneyDetails, cardID: String, id: String, boardedAt: Date) -> JourneySnapshot {
+         let origin = details.journey.origin
+@@ -41,46 +46,66 @@ struct JourneySnapshot: Equatable {
+             destinationStopID: destination.id,
+             tag: Tag(id: details.tag.id, name: details.tag.name, icon: details.tag.icon, color: details.tag.color),
+             task: details.task, sound: details.sound, boardedAt: boardedAt,
+-            phase: .awaitingDeparture, progress: .start
++            phase: .awaitingDeparture, progress: .start, paused: false
+         )
+     }
+ 
+-    func confirmingDeparture() -> JourneySnapshot {
++    func confirmingDeparture() -> JourneySnapshot { with(phase: .departed, progress: progress, paused: false) }
++
++    var totalSeconds: Int { minutes * 60 }
++    var isArrived: Bool { phase == .departed && progress.elapsedSeconds == totalSeconds }
++
++    func updatingProgress(elapsedSeconds: Int, paused: Bool) -> JourneySnapshot {
++        with(phase: phase, progress: Progress(elapsedSeconds: elapsedSeconds), paused: paused)
++    }
++
++    /// 앱 종료는 여정이 끊긴 것으로 본다. 진행 중이던 여정은 실행 시 일시정지로 읽는다.
++    func restingForLaunch() -> JourneySnapshot {
++        phase == .departed && !paused ? with(phase: phase, progress: progress, paused: true) : self
++    }
++
++    private func with(phase: Phase, progress: Progress, paused: Bool) -> JourneySnapshot {
+         JourneySnapshot(id: id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
+                         busID: busID, destinationStopID: destinationStopID, tag: tag, task: task, sound: sound,
+-                        boardedAt: boardedAt, phase: .departed, progress: progress)
++                        boardedAt: boardedAt, phase: phase, progress: progress, paused: paused)
+     }
+ 
+     var originName: String? { RouteStops.all.first { $0.id == originStopID }?.name }
+     var destinationName: String? { RouteStops.all.first { $0.id == destinationStopID }?.name }
+     var bus: BusLine? { BusLine.all.first { $0.id == busID } }
+ 
+-    /// 구조만 본다. 카탈로그 대조를 넣으면 노선 데이터가 바뀔 때 임시 데이터 때문에 저장 파일 전체가 막힌다.
++    /// 구조와 카탈로그를 본다. 손상 여정은 `SnapshotCodec.dropInvalidActiveJourney`가 여정만 버린다.
+     func validate(currentCardID: String?) throws {
+         let required = [("id", id), ("cardID", cardID), ("originStopID", originStopID), ("busID", busID),
+                         ("destinationStopID", destinationStopID), ("tag.id", tag.id)]
+         if let empty = required.first(where: { $0.1.isEmpty }) { throw ActiveJourneyValidationIssue.emptyField(empty.0) }
+         guard cardID == currentCardID else { throw ActiveJourneyValidationIssue.cardMismatch }
+         guard direction == 1 || direction == -1 else { throw ActiveJourneyValidationIssue.invalidDirection(direction) }
+-        guard minutes > 0 else { throw ActiveJourneyValidationIssue.invalidMinutes(minutes) }
++        guard (1...Self.maximumMinutes).contains(minutes) else { throw ActiveJourneyValidationIssue.invalidMinutes(minutes) }
++        for stop in [originStopID, destinationStopID] where !RouteStops.all.contains(where: { $0.id == stop }) {
++            throw ActiveJourneyValidationIssue.unknownStop(stop)
++        }
++        guard BusLine.all.contains(where: { $0.id == busID }) else { throw ActiveJourneyValidationIssue.unknownBus(busID) }
+         // 준비 초안과 같은 규칙: 할 일은 다듬어진 값 그대로·UTF-16 80 이하, 태그 이름은 20 이하.
+         guard task == task.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty, task.utf16.count <= 80
+         else { throw ActiveJourneyValidationIssue.invalidTask }
+         let tagName = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+         guard !tagName.isEmpty, tag.name.utf16.count <= 20 else { throw ActiveJourneyValidationIssue.invalidTag }
+-        guard progress.elapsedSeconds >= 0, phase == .departed || progress.elapsedSeconds == 0
++        guard (0...totalSeconds).contains(progress.elapsedSeconds), phase == .departed || progress.elapsedSeconds == 0
+         else { throw ActiveJourneyValidationIssue.invalidProgress }
++        guard phase == .departed || !paused else { throw ActiveJourneyValidationIssue.invalidPausedState }
+     }
+ }
+ 
+ enum ActiveJourneyValidationIssue: Error, Equatable {
+     case emptyField(String), cardMismatch, invalidDirection(Int), invalidMinutes(Int)
+     case invalidTask, invalidTag, invalidProgress
++    case unknownStop(String), unknownBus(String), invalidPausedState
+ }
+ 
+ extension JourneySnapshot: Codable {
+     private enum CodingKeys: String, CodingKey {
+-        case id, cardID, originStopID, direction, minutes, busID, destinationStopID, tag, task, sound, boardedAt, phase, progress
++        case id, cardID, originStopID, direction, minutes, busID, destinationStopID, tag, task, sound, boardedAt, phase, progress, paused
+     }
+     init(from decoder: Decoder) throws {
+         let c = try decoder.container(keyedBy: CodingKeys.self)
+@@ -88,6 +113,10 @@ extension JourneySnapshot: Codable {
+         guard let date = try? Date(text, strategy: .iso8601) else {
+             throw DecodingError.dataCorruptedError(forKey: .boardedAt, in: c, debugDescription: "boardedAt is not ISO 8601")
+         }
++        let phase = try c.decode(Phase.self, forKey: .phase)
++        // v3 파일에는 paused가 없다. 그때 출발한 여정은 타이머가 돌지 않았으므로 일시정지로 읽는다.
++        let paused = decoder.userInfo[.journeyFormat] as? Format == .v3
++            ? phase == .departed : try c.decode(Bool.self, forKey: .paused)
+         self.init(id: try c.decode(String.self, forKey: .id), cardID: try c.decode(String.self, forKey: .cardID),
+                   originStopID: try c.decode(String.self, forKey: .originStopID),
+                   direction: try c.decode(Int.self, forKey: .direction), minutes: try c.decode(Int.self, forKey: .minutes),
+@@ -95,7 +124,7 @@ extension JourneySnapshot: Codable {
+                   destinationStopID: try c.decode(String.self, forKey: .destinationStopID),
+                   tag: try c.decode(Tag.self, forKey: .tag), task: try c.decode(String.self, forKey: .task),
+                   sound: try c.decode(JourneySound.self, forKey: .sound), boardedAt: date,
+-                  phase: try c.decode(Phase.self, forKey: .phase), progress: try c.decode(Progress.self, forKey: .progress))
++                  phase: phase, progress: try c.decode(Progress.self, forKey: .progress), paused: paused)
+     }
+     /// 날짜를 직접 문자열로 써서 인코더의 날짜 전략과 무관하게 같은 바이트를 낸다(CardSnapshot과 같은 이유).
+     func encode(to encoder: Encoder) throws {
+@@ -113,9 +142,14 @@ extension JourneySnapshot: Codable {
+         try c.encode(boardedAt.formatted(.iso8601), forKey: .boardedAt)
+         try c.encode(phase, forKey: .phase)
+         try c.encode(progress, forKey: .progress)
++        try c.encode(paused, forKey: .paused)
+     }
+ }
+ 
++extension CodingUserInfoKey {
++    static let journeyFormat = CodingUserInfoKey(rawValue: "focusmate.journeyFormat")!
++}
++
+ /// 승차 저장값 생성기. ID·시계를 주입해 테스트에서 결정적으로 만든다.
+ struct ActiveJourneyFactory {
+     private let makeID: () -> String
+diff --git a/ios/FocusMate/SnapshotCodec.swift b/ios/FocusMate/SnapshotCodec.swift
+index bb56eb3..6fd03a9 100644
+--- a/ios/FocusMate/SnapshotCodec.swift
++++ b/ios/FocusMate/SnapshotCodec.swift
+@@ -46,7 +46,7 @@ struct LegacySnapshotV2: Decodable {
+ 
+ /// 저장 파일 바이트와 `AppSnapshot` 사이의 변환. 판정 순서는 헤더 → 버전 → 구조 → 내용이다.
+ enum SnapshotCodec {
+-    static let currentVersion = 3
++    static let currentVersion = 4
+ 
+     private struct VersionHeader: Decodable { let version: Int }
+     private struct EnvelopeV2: Decodable { let state: LegacySnapshotV2 }
+@@ -62,6 +62,11 @@ enum SnapshotCodec {
+             switch header.version {
+             case 1: state = migrateV1(try JSONDecoder().decode(EnvelopeV1.self, from: data).state)
+             case 2: state = migrateV2(try JSONDecoder().decode(EnvelopeV2.self, from: data).state)
++            case 3:
++                // v3는 진행 여정의 paused 키만 다르다. 같은 Envelope를 v3 해석으로 읽는다.
++                let decoder = JSONDecoder()
++                decoder.userInfo[.journeyFormat] = JourneySnapshot.Format.v3
++                state = try decoder.decode(Envelope.self, from: data).state
+             case currentVersion: state = try JSONDecoder().decode(Envelope.self, from: data).state
+             default: throw StorageIssue.unsupportedVersion(header.version)
+             }
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index 586c270..9cedc7e 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -239,7 +239,7 @@ struct UITestBootstrap {
+         id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
+         destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
+         tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
+-        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start)
++        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start, paused: false)
+ 
+     private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
+ 
+diff --git a/ios/FocusMateTests/AppRecoveryTests.swift b/ios/FocusMateTests/AppRecoveryTests.swift
+index 00db830..17c2950 100644
+--- a/ios/FocusMateTests/AppRecoveryTests.swift
++++ b/ios/FocusMateTests/AppRecoveryTests.swift
+@@ -12,7 +12,7 @@ final class AppRecoveryTests: XCTestCase {
+     private static let readyV1Bytes = Data(
+         #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seoulForest","name":"서울숲","direction":-1}}}"#.utf8
+     )
+-    private static let unsupportedV4Bytes = Data(#"{"version":4,"state":null}"#.utf8)
++    private static let unsupportedV5Bytes = Data(#"{"version":5,"state":null}"#.utf8)
+     private static let initialStation = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+     private static let currentStation = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+     private static let readySnapshot = stage(true, initialStation, currentStation)
+@@ -57,7 +57,7 @@ final class AppRecoveryTests: XCTestCase {
+             fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
+             readData: { _ in
+                 readCalls += 1
+-                return readCalls == 1 ? Self.corruptBytes : Self.unsupportedV4Bytes
++                return readCalls == 1 ? Self.corruptBytes : Self.unsupportedV5Bytes
+             },
+             writeData: { _, _ in writeCalls += 1 },
+             removeData: { _ in removeCalls += 1 }
+@@ -67,7 +67,7 @@ final class AppRecoveryTests: XCTestCase {
+ 
+         model.retryLoad()
+ 
+-        XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(4)))
++        XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(5)))
+         XCTAssertNil(model.snapshot)
+         XCTAssertEqual(model.path, [])
+         XCTAssertEqual(readCalls, 2)
+diff --git a/ios/FocusMateTests/BoardingTestDoubles.swift b/ios/FocusMateTests/BoardingTestDoubles.swift
+index 2968e2b..a6e06d4 100644
+--- a/ios/FocusMateTests/BoardingTestDoubles.swift
++++ b/ios/FocusMateTests/BoardingTestDoubles.swift
+@@ -28,16 +28,17 @@ enum BoardingFixtures {
+         direction: Int = 1,
+         minutes: Int = 60,
+         busID: String = "2014",
+-        destinationStopID: String = "seongsu-dest",
++        destinationStopID: String = "seongdongSportsCenter",
+         tag: JourneySnapshot.Tag = JourneySnapshot.Tag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand),
+         task: String = "책 읽기",
+         phase: JourneySnapshot.Phase = .awaitingDeparture,
+-        elapsedSeconds: Int = 0
++        elapsedSeconds: Int = 0,
++        paused: Bool = false
+     ) -> JourneySnapshot {
+         JourneySnapshot(
+             id: id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
+             busID: busID, destinationStopID: destinationStopID, tag: tag, task: task, sound: .bus,
+-            boardedAt: boardedAt, phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsedSeconds)
++            boardedAt: boardedAt, phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsedSeconds), paused: paused
+         )
+     }
+ 
+diff --git a/ios/FocusMateTests/CardCustomizationAppModelTests.swift b/ios/FocusMateTests/CardCustomizationAppModelTests.swift
+index 1fac137..bbf887a 100644
+--- a/ios/FocusMateTests/CardCustomizationAppModelTests.swift
++++ b/ios/FocusMateTests/CardCustomizationAppModelTests.swift
+@@ -453,7 +453,7 @@ final class CardCustomizationAppModelTests: XCTestCase {
+             XCTAssertTrue(controller.save())
+             // Then: no seed on relaunch.
+             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 3)
++            XCTAssertEqual(root["version"] as? Int, 4)
+             let restarted = loadedModel(url)
+             XCTAssertEqual(restarted.currentCardStyle, CardStyle(background: Self.editedColor, photos: []))
+             assertIdentity(restarted.snapshot)
+diff --git a/ios/FocusMateTests/CardStorageTests.swift b/ios/FocusMateTests/CardStorageTests.swift
+index 3688423..06f5ff4 100644
+--- a/ios/FocusMateTests/CardStorageTests.swift
++++ b/ios/FocusMateTests/CardStorageTests.swift
+@@ -36,7 +36,7 @@ final class CardStorageTests: XCTestCase {
+             XCTAssertEqual(try Data(contentsOf: fileURL), firstBytes)
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 3)
++            XCTAssertEqual(root["version"] as? Int, 4)
+             let state = try XCTUnwrap(root["state"] as? [String: Any])
+             let cards = try XCTUnwrap(state["cards"] as? [String: Any])
+             let items = try XCTUnwrap(cards["items"] as? [[String: Any]])
+diff --git a/ios/FocusMateTests/CardStyleStorageTests.swift b/ios/FocusMateTests/CardStyleStorageTests.swift
+index 95dce97..1d24805 100644
+--- a/ios/FocusMateTests/CardStyleStorageTests.swift
++++ b/ios/FocusMateTests/CardStyleStorageTests.swift
+@@ -132,7 +132,7 @@ final class CardStyleStorageTests: XCTestCase {
+             XCTAssertEqual(restored.currentCard?.id, "FM-01234567")
+             XCTAssertEqual(restored.currentCard?.issuedAt, Date(timeIntervalSince1970: 1_791_882_000))
+             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 3)
++            XCTAssertEqual(root["version"] as? Int, 4)
+         }
+     }
+ 
+diff --git a/ios/FocusMateTests/CardSupplementTests.swift b/ios/FocusMateTests/CardSupplementTests.swift
+index 21fa322..31c8e82 100644
+--- a/ios/FocusMateTests/CardSupplementTests.swift
++++ b/ios/FocusMateTests/CardSupplementTests.swift
+@@ -30,7 +30,7 @@ final class CardSupplementTests: XCTestCase {
+ 
+         let saved = try decode(fake.bytes())
+         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(fake.bytes())) as? [String: Any])
+-        XCTAssertEqual(root["version"] as? Int, 3)
++        XCTAssertEqual(root["version"] as? Int, 4)
+         XCTAssertEqual(saved.cards.items.count, 1)
+         assertCardID(saved.currentCard?.id)
+         XCTAssertEqual(saved.initialStation, Self.seongsu)
+diff --git a/ios/FocusMateTests/JourneySnapshotStorageTests.swift b/ios/FocusMateTests/JourneySnapshotStorageTests.swift
+index dc837c8..7882005 100644
+--- a/ios/FocusMateTests/JourneySnapshotStorageTests.swift
++++ b/ios/FocusMateTests/JourneySnapshotStorageTests.swift
+@@ -38,13 +38,13 @@ final class JourneySnapshotStorageTests: XCTestCase {
+         }
+     }
+ 
+-    // 깨짐: v3 파일의 active가 단일 객체가 아니거나 version이 3이 아니면 실패. (BR-8, currentVersion 3 유지)
+-    func testBR8_저장된_active는_단일_객체이고_version은_3이다() throws {
++    // 깨짐: v4 파일의 active가 단일 객체가 아니거나 version이 4가 아니거나 paused가 없으면 실패. (BR-8, BR-9)
++    func testBR8_저장된_active는_단일_객체이고_version은_4이며_paused는_false다() throws {
+         try withTemporaryFile { fileURL in
+             try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: F.awaiting()))
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 3)
++            XCTAssertEqual(root["version"] as? Int, 4)
+             let state = try XCTUnwrap(root["state"] as? [String: Any])
+             let journey = try XCTUnwrap(state["journey"] as? [String: Any])
+             let active = try XCTUnwrap(journey["active"] as? [String: Any])
+@@ -52,6 +52,7 @@ final class JourneySnapshotStorageTests: XCTestCase {
+             XCTAssertEqual(active["phase"] as? String, "awaitingDeparture")
+             XCTAssertEqual(active["boardedAt"] as? String, "2026-10-13T09:00:00Z")
+             XCTAssertEqual((active["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
++            XCTAssertEqual(active["paused"] as? Bool, false)
+             XCTAssertNil(active["stops"])
+         }
+     }
+diff --git a/ios/FocusMateTests/JourneySnapshotTests.swift b/ios/FocusMateTests/JourneySnapshotTests.swift
+index 75879f2..00846b3 100644
+--- a/ios/FocusMateTests/JourneySnapshotTests.swift
++++ b/ios/FocusMateTests/JourneySnapshotTests.swift
+@@ -72,16 +72,30 @@ final class JourneySnapshotTests: XCTestCase {
+         XCTAssertEqual(journey.bus?.id, "2014")
+     }
+ 
+-    // 깨짐: 카탈로그 밖 id에서 검증이 실패하거나 조회가 nil이 아니면 실패.
+-    func testAC11_카탈로그_밖_id는_검증을_통과하고_조회는_nil이다() throws {
++    // 깨짐: 카탈로그 밖 id를 검증이 통과시키거나 조회가 nil이 아니면 실패. (BR-3)
++    func testAC22_카탈로그_밖_id는_조회가_nil이다() {
+         let journey = F.journey(originStopID: "gone-stop", busID: "gone-bus", destinationStopID: "gone-dest")
+ 
+-        XCTAssertNoThrow(try journey.validate(currentCardID: F.cardID))
+         XCTAssertNil(journey.originName)
+         XCTAssertNil(journey.destinationName)
+         XCTAssertNil(journey.bus)
+     }
+ 
++    // 깨짐: 출발 정류장 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
++    func testAC22_카탈로그_밖_출발_id는_unknownStop으로_거절된다() {
++        assertIssue(.unknownStop("gone-stop"), F.journey(originStopID: "gone-stop"))
++    }
++
++    // 깨짐: 도착 정류장 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
++    func testAC22_카탈로그_밖_도착_id는_unknownStop으로_거절된다() {
++        assertIssue(.unknownStop("gone-dest"), F.journey(destinationStopID: "gone-dest"))
++    }
++
++    // 깨짐: 버스 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
++    func testAC22_카탈로그_밖_버스_id는_unknownBus로_거절된다() {
++        assertIssue(.unknownBus("gone-bus"), F.journey(busID: "gone-bus"))
++    }
++
+     // MARK: - 구조 검증 (설계 A-1)
+ 
+     // 깨짐: 유효한 대기 상태 여정을 검증이 거절하면 실패.
+@@ -125,6 +139,12 @@ final class JourneySnapshotTests: XCTestCase {
+         XCTAssertNoThrow(try F.journey(minutes: 1).validate(currentCardID: F.cardID))
+     }
+ 
++    // 깨짐: 분 상한 360을 넘는 361을 통과시키거나 360을 거절하면 실패. (AC-20, BR-2)
++    func testAC20_분이_361이면_거절되고_360은_허용된다() {
++        assertIssue(.invalidMinutes(361), F.journey(minutes: 361))
++        XCTAssertNoThrow(try F.journey(minutes: 360).validate(currentCardID: F.cardID))
++    }
++
+     // 깨짐: 할 일 trim 불일치·빈 값·UTF-16 80 초과 중 하나라도 통과시키면 실패.
+     func testA1_할일이_공백포함_빈값_80초과면_거절된다() {
+         assertIssue(.invalidTask, F.journey(task: " 책 읽기"))
+@@ -215,7 +235,7 @@ private extension JourneySnapshot {
+         BoardingFixtures.journey(
+             id: self.id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
+             busID: busID, destinationStopID: id, tag: tag, task: task, phase: phase,
+-            elapsedSeconds: progress.elapsedSeconds
++            elapsedSeconds: progress.elapsedSeconds, paused: paused
+         )
+     }
+ }
+diff --git a/ios/FocusMateTests/JourneySnapshotV4StorageTests.swift b/ios/FocusMateTests/JourneySnapshotV4StorageTests.swift
+new file mode 100644
+index 0000000..fd26a90
+--- /dev/null
++++ b/ios/FocusMateTests/JourneySnapshotV4StorageTests.swift
+@@ -0,0 +1,337 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 저장 형식 v4: 검증 강화(분·카탈로그·paused), 왕복, v3 읽기. 모킹 없이 실제 LocalSnapshotStore를 쓴다.
++final class JourneySnapshotV4StorageTests: XCTestCase {
++    private typealias F = BoardingFixtures
++
++    private func departed(
++        minutes: Int = 25, elapsed: Int = 0, paused: Bool = true,
++        originStopID: String = "seoulForest", busID: String = "2014", destinationStopID: String = "seongdongSportsCenter"
++    ) -> JourneySnapshot {
++        F.journey(
++            originStopID: originStopID, minutes: minutes, busID: busID, destinationStopID: destinationStopID,
++            phase: .departed, elapsedSeconds: elapsed, paused: paused
++        )
++    }
++
++    // MARK: - 쓰기 거부 (AC-20 ~ AC-22, 이후 파일 바이트 불변)
++
++    // 깨짐: 분 하한/상한(1...360)을 쓰기에서 검증하지 않으면 0·361이 저장되어 실패. (AC-20)
++    func testAC20_분_0과_361은_쓰기가_거부되고_파일이_바뀌지_않는다() throws {
++        for (minutes, issue) in [(0, ActiveJourneyValidationIssue.invalidMinutes(0)), (361, .invalidMinutes(361))] {
++            try withTemporaryFile { fileURL in
++                let store = LocalSnapshotStore(fileURL: fileURL)
++                try store.save(F.snapshot(active: F.awaiting()))
++                let before = try Data(contentsOf: fileURL)
++
++                assertStorageIssue(.invalidState(.invalidActiveJourney(issue))) {
++                    try store.save(F.snapshot(active: self.departed(minutes: minutes)))
++                }
++                XCTAssertEqual(try Data(contentsOf: fileURL), before)
++            }
++        }
++    }
++
++    // 깨짐: 상한을 360 미만(예: 359)이나 하한을 2로 잘못 잡으면 1·360 저장이 거절되어 실패. (AC-20)
++    func testAC20_분_1과_360은_쓰기가_허용된다() throws {
++        for minutes in [1, 360] {
++            try withTemporaryFile { fileURL in
++                try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: departed(minutes: minutes)))
++
++                let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++                XCTAssertEqual(loaded.journey.active?.minutes, minutes)
++            }
++        }
++    }
++
++    // 깨짐: 경과 상한(분×60)·하한(0)을 쓰기에서 검증하지 않으면 -1·1501이 저장되어 실패. (AC-21)
++    func testAC21_경과_음수1과_1501은_쓰기가_거부되고_파일이_바뀌지_않는다() throws {
++        for elapsed in [-1, 1501] {
++            try withTemporaryFile { fileURL in
++                let store = LocalSnapshotStore(fileURL: fileURL)
++                try store.save(F.snapshot(active: departed()))
++                let before = try Data(contentsOf: fileURL)
++
++                assertStorageIssue(.invalidState(.invalidActiveJourney(.invalidProgress))) {
++                    try store.save(F.snapshot(active: self.departed(elapsed: elapsed)))
++                }
++                XCTAssertEqual(try Data(contentsOf: fileURL), before)
++            }
++        }
++    }
++
++    // 깨짐: 경계를 미만(<)으로 검증해 0·1500이 거절되면 실패. (AC-21)
++    func testAC21_경과_0과_1500은_쓰기가_허용된다() throws {
++        for elapsed in [0, 1500] {
++            try withTemporaryFile { fileURL in
++                try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: departed(elapsed: elapsed)))
++
++                let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++                XCTAssertEqual(loaded.journey.active?.progress.elapsedSeconds, elapsed)
++            }
++        }
++    }
++
++    // 깨짐: 출발 정류장 카탈로그 대조가 없으면 저장되어 실패. (AC-22)
++    func testAC22_카탈로그_밖_출발_정류장은_쓰기가_거부된다() throws {
++        try assertWriteRejected(departed(originStopID: "gone-stop"), .unknownStop("gone-stop"))
++    }
++
++    // 깨짐: 도착 정류장 카탈로그 대조가 없으면 저장되어 실패. (AC-22)
++    func testAC22_카탈로그_밖_도착_정류장은_쓰기가_거부된다() throws {
++        try assertWriteRejected(departed(destinationStopID: "gone-dest"), .unknownStop("gone-dest"))
++    }
++
++    // 깨짐: 버스 카탈로그 대조가 없으면 저장되어 실패. (AC-22)
++    func testAC22_카탈로그_밖_버스는_쓰기가_거부된다() throws {
++        try assertWriteRejected(departed(busID: "gone-bus"), .unknownBus("gone-bus"))
++    }
++
++    // 깨짐: 출발 대기인데 paused=true를 통과시키면 실패. (BR-5 계열 검증, invalidPausedState)
++    func testPaused_출발대기_여정에_paused_true는_쓰기가_거부된다() throws {
++        try assertWriteRejected(
++            F.journey(phase: .awaitingDeparture, elapsedSeconds: 0, paused: true), .invalidPausedState
++        )
++    }
++
++    // MARK: - 읽기: 여정만 버림 (AC-20 ~ AC-22)
++
++    // 깨짐: 분 361 파일을 읽어 살리거나 파일 전체를 거절/카드까지 버리면 실패. (AC-20)
++    func testAC20_분_361_파일은_여정만_버리고_카드는_유지된다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["minutes"] = 361 })
++    }
++
++    // 깨짐: 분 0 파일을 읽어 살리면 실패. (AC-20)
++    func testAC20_분_0_파일은_여정만_버리고_카드는_유지된다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["minutes"] = 0 })
++    }
++
++    // 깨짐: 경과 1501(25분 초과) 파일을 읽어 살리면 실패. (AC-21)
++    func testAC21_경과_1501_파일은_여정만_버리고_카드는_유지된다() throws {
++        try assertReadDropsJourneyOnly(patch: {
++            $0["minutes"] = 25
++            $0["progress"] = ["elapsedSeconds": 1501]
++        }, departedPaused: true)
++    }
++
++    // 깨짐: 경과 음수 파일을 읽어 살리면 실패. (AC-21)
++    func testAC21_경과_음수_파일은_여정만_버리고_카드는_유지된다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["progress"] = ["elapsedSeconds": -1] }, departedPaused: true)
++    }
++
++    // 깨짐: 출발 정류장 카탈로그 대조가 읽기에 없으면 실패. (AC-22)
++    func testAC22_카탈로그_밖_출발_정류장_파일은_여정만_버린다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["originStopID"] = "gone-stop" })
++    }
++
++    // 깨짐: 도착 정류장 카탈로그 대조가 읽기에 없으면 실패. (AC-22)
++    func testAC22_카탈로그_밖_도착_정류장_파일은_여정만_버린다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["destinationStopID"] = "gone-dest" })
++    }
++
++    // 깨짐: 버스 카탈로그 대조가 읽기에 없으면 실패. (AC-22)
++    func testAC22_카탈로그_밖_버스_파일은_여정만_버린다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["busID"] = "gone-bus" })
++    }
++
++    // 깨짐: 출발 대기 + paused=true 파일을 읽어 살리면 실패. (invalidPausedState)
++    func testPaused_출발대기_paused_true_파일은_여정만_버린다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0["paused"] = true })
++    }
++
++    // 깨짐: v4에서 paused 키 누락을 기본값으로 채워 살리거나 파일 전체를 corrupt로 던지면 실패. (BR-9)
++    func testBR9_v4에서_paused_키가_없으면_여정만_버리고_카드는_유지된다() throws {
++        try assertReadDropsJourneyOnly(patch: { $0.removeValue(forKey: "paused") })
++    }
++
++    // MARK: - v4 왕복 (AC-23)
++
++    // 깨짐: paused 또는 경과를 인코드/디코드에서 빠뜨리면 실패. (AC-23)
++    func testAC23_paused_true_경과300은_버전4로_저장되고_같은_값으로_읽힌다() throws {
++        try withTemporaryFile { fileURL in
++            let journey = departed(elapsed: 300, paused: true)
++            try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: journey))
++
++            let root = try rootObject(fileURL)
++            XCTAssertEqual(root["version"] as? Int, 4)
++            XCTAssertEqual(try activeObject(fileURL)["paused"] as? Bool, true)
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++            XCTAssertEqual(loaded.journey.active, journey)
++            XCTAssertEqual(loaded.journey.active?.progress.elapsedSeconds, 300)
++            XCTAssertEqual(loaded.journey.active?.paused, true)
++        }
++    }
++
++    // 깨짐: paused=false를 true로 바꿔 읽으면(v4에서 phase로 추정) 실패. (AC-23)
++    func testAC23_paused_false_경과300은_그대로_읽힌다() throws {
++        try withTemporaryFile { fileURL in
++            let journey = departed(elapsed: 300, paused: false)
++            try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: journey))
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++            XCTAssertEqual(loaded.journey.active?.paused, false)
++        }
++    }
++
++    // MARK: - v3 읽기 (AC-24 ~ AC-26)
++
++    // 깨짐: v3 departed를 paused=false로 읽으면(키 없음을 false로 채우면) 실패. (AC-24)
++    func testAC24_v3_출발완료_여정은_paused_true_경과0으로_읽힌다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false))
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            let active = try XCTUnwrap(loaded.journey.active)
++            XCTAssertEqual(active.phase, .departed)
++            XCTAssertEqual(active.paused, true)
++            XCTAssertEqual(active.progress.elapsedSeconds, 0)
++        }
++    }
++
++    // 깨짐: v3 진도를 버리거나 0으로 초기화하면 실패. (AC-24)
++    func testAC24_v3_출발완료_여정의_경과는_보존된다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: departed(elapsed: 300, paused: false))
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertEqual(loaded.journey.active?.progress.elapsedSeconds, 300)
++        }
++    }
++
++    // 깨짐: v3를 읽은 뒤 재저장이 버전 3 그대로거나 paused 키가 없으면 실패. (AC-24)
++    func testAC24_v3를_읽고_다시_저장하면_버전4이고_paused_키가_있다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false))
++            let store = LocalSnapshotStore(fileURL: fileURL)
++            let loaded = try XCTUnwrap(try store.load())
++
++            try store.save(loaded)
++
++            XCTAssertEqual(try rootObject(fileURL)["version"] as? Int, 4)
++            XCTAssertEqual(try activeObject(fileURL)["paused"] as? Bool, true)
++        }
++    }
++
++    // 깨짐: v3 awaiting을 paused=true로 읽거나 버리면 실패. (AC-25 저장 측면)
++    func testAC25_v3_출발대기_여정은_awaiting_paused_false로_유지된다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: F.awaiting())
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            let active = try XCTUnwrap(loaded.journey.active)
++            XCTAssertEqual(active.phase, .awaitingDeparture)
++            XCTAssertEqual(active.paused, false)
++            XCTAssertEqual(active, F.awaiting())
++        }
++    }
++
++    // 깨짐: v3에 새 분 검증(361)을 적용하지 않으면 실패. (AC-26)
++    func testAC26_v3_분_361_파일은_여정만_버리고_카드는_유지된다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false), patch: { $0["minutes"] = 361 })
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
++        }
++    }
++
++    // 깨짐: v3에 카탈로그 검증을 적용하지 않으면 실패. (AC-26)
++    func testAC26_v3_카탈로그_밖_정류장_파일은_여정만_버리고_카드는_유지된다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false), patch: { $0["originStopID"] = "gone-stop" })
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
++        }
++    }
++
++    // 깨짐: v3 버스 id 카탈로그 검증을 적용하지 않으면 실패. (AC-26)
++    func testAC26_v3_카탈로그_밖_버스_파일은_여정만_버린다() throws {
++        try withTemporaryFile { fileURL in
++            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false), patch: { $0["busID"] = "gone-bus" })
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++        }
++    }
++
++    // MARK: - helpers
++
++    private func assertWriteRejected(
++        _ journey: JourneySnapshot, _ issue: ActiveJourneyValidationIssue,
++        file: StaticString = #filePath, line: UInt = #line
++    ) throws {
++        try withTemporaryFile { fileURL in
++            let store = LocalSnapshotStore(fileURL: fileURL)
++            try store.save(F.snapshot(active: F.awaiting()))
++            let before = try Data(contentsOf: fileURL)
++
++            assertStorageIssue(.invalidState(.invalidActiveJourney(issue)), file: file, line: line) {
++                try store.save(F.snapshot(active: journey))
++            }
++            XCTAssertEqual(try Data(contentsOf: fileURL), before, file: file, line: line)
++        }
++    }
++
++    /// 유효한 v4 파일을 저장한 뒤 active를 patch로 손상시키고, 읽으면 여정만 버려지는지 확인한다.
++    private func assertReadDropsJourneyOnly(
++        patch: (inout [String: Any]) -> Void, departedPaused: Bool = false,
++        file: StaticString = #filePath, line: UInt = #line
++    ) throws {
++        try withTemporaryFile { fileURL in
++            let source = departedPaused ? departed(minutes: 25, elapsed: 0, paused: true) : F.awaiting()
++            try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: source))
++            try rewriteActive(fileURL, version: nil, patch: patch)
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load(), file: file, line: line)
++
++            XCTAssertNil(loaded.journey.active, file: file, line: line)
++            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID], file: file, line: line)
++            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1), file: file, line: line)
++        }
++    }
++
++    /// v4로 저장한 뒤 version을 3으로, active.paused를 지워 v3 파일을 만든다.
++    private func seedV3(
++        _ fileURL: URL, journey: JourneySnapshot, patch: ((inout [String: Any]) -> Void)? = nil
++    ) throws {
++        try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: journey))
++        try rewriteActive(fileURL, version: 3) { active in
++            active.removeValue(forKey: "paused")
++            patch?(&active)
++        }
++    }
++
++    private func rewriteActive(_ fileURL: URL, version: Int?, patch: (inout [String: Any]) -> Void) throws {
++        var root = try rootObject(fileURL)
++        var state = try XCTUnwrap(root["state"] as? [String: Any])
++        var journey = try XCTUnwrap(state["journey"] as? [String: Any])
++        var active = try XCTUnwrap(journey["active"] as? [String: Any])
++        patch(&active)
++        journey["active"] = active
++        state["journey"] = journey
++        root["state"] = state
++        if let version { root["version"] = version }
++        try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys]).write(to: fileURL)
++    }
++
++    private func rootObject(_ fileURL: URL) throws -> [String: Any] {
++        try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
++    }
++
++    private func activeObject(_ fileURL: URL) throws -> [String: Any] {
++        let state = try XCTUnwrap(try rootObject(fileURL)["state"] as? [String: Any])
++        let journey = try XCTUnwrap(state["journey"] as? [String: Any])
++        return try XCTUnwrap(journey["active"] as? [String: Any])
++    }
++}
+diff --git a/ios/FocusMateTests/RecordStorageTests.swift b/ios/FocusMateTests/RecordStorageTests.swift
+index d5d6937..faf1f5a 100644
+--- a/ios/FocusMateTests/RecordStorageTests.swift
++++ b/ios/FocusMateTests/RecordStorageTests.swift
+@@ -66,20 +66,20 @@ final class RecordStorageTests: XCTestCase {
+         try assertProtected(bytes, loadIssue: issue, saveIssue: .writeBlocked(issue))
+     }
+ 
+-    // 깨짐 명명: 미지원 v4에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
++    // 깨짐 명명: 미지원 v5에서 완료·메모 저장이 파일을 쓰거나 원인을 잃으면 실패.
+     @MainActor
+     func testAC12_미지원버전_AppModel은_완료와_메모저장을_차단하고_원본을_보존한다() throws {
+-        let bytes = Data(#"{"version":4,"state":null}"#.utf8)
++        let bytes = Data(#"{"version":5,"state":null}"#.utf8)
+         try withTemporaryFile { fileURL in
+             try seed(fileURL, bytes)
+             let model = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
+             model.loadIfNeeded()
+-            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(4)))
++            XCTAssertEqual(model.launchState, .failed(.unsupportedVersion(5)))
+ 
+             XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
+-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(4)))
++            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(5)))
+             XCTAssertFalse(model.saveRecordMemo("메모", forJourneyID: "journey-001"))
+-            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(4)))
++            XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(5)))
+             XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
+         }
+     }
+@@ -94,7 +94,7 @@ final class RecordStorageTests: XCTestCase {
+             XCTAssertTrue(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 3)
++            XCTAssertEqual(root["version"] as? Int, 4)
+             let state = try XCTUnwrap(root["state"] as? [String: Any])
+             XCTAssertEqual(state["cardIssued"] as? Bool, true)
+             XCTAssertEqual(((state["cards"] as? [String: Any])?["items"] as? [Any])?.count, 0)
+diff --git a/ios/FocusMateTests/SnapshotCodecTests.swift b/ios/FocusMateTests/SnapshotCodecTests.swift
+index c8f449c..ee3f595 100644
+--- a/ios/FocusMateTests/SnapshotCodecTests.swift
++++ b/ios/FocusMateTests/SnapshotCodecTests.swift
+@@ -34,7 +34,7 @@ final class SnapshotCodecTests: XCTestCase {
+         let out = try SnapshotCodec.encode(AppSnapshot.empty)
+         XCTAssertEqual(
+             String(decoding: out, as: UTF8.self),
+-            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":3}"#
++            #"{"state":{"cardIssued":false,"cards":{"items":[]},"currentStation":null,"initialStation":null,"journey":{"active":null},"records":{"items":[]}},"version":4}"#
+         )
+     }
+ 
+@@ -43,7 +43,7 @@ final class SnapshotCodecTests: XCTestCase {
+         let out = try SnapshotCodec.encode(try SnapshotCodec.decode(data(Self.v1Issued)))
+         XCTAssertEqual(
+             String(decoding: out, as: UTF8.self),
+-            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":3}"#
++            #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":4}"#
+         )
+     }
+ 
+@@ -65,9 +65,9 @@ final class SnapshotCodecTests: XCTestCase {
+         XCTAssertEqual(first, second)
+     }
+ 
+-    func testCurrentVersionIsThree() {
+-        // 깨짐 명명: currentVersion이 3이 아니면 실패한다.
+-        XCTAssertEqual(SnapshotCodec.currentVersion, 3)
++    func testCurrentVersionIsFour() {
++        // 깨짐 명명: currentVersion이 4가 아니면 실패한다.
++        XCTAssertEqual(SnapshotCodec.currentVersion, 4)
+     }
+ 
+     // 깨짐 명명: 헤더/버전 검사 순서나 분류가 틀리면 해당 입력에서 실패한다.
+@@ -81,7 +81,7 @@ final class SnapshotCodecTests: XCTestCase {
+             (#"{"state":{}}"#, .corrupt),
+             (#"{"version":0,"state":{}}"#, .unsupportedVersion(0)),
+             (#"{"version":-1,"state":{}}"#, .unsupportedVersion(-1)),
+-            (#"{"version":4,"state":{}}"#, .unsupportedVersion(4)),
++            (#"{"version":5,"state":{}}"#, .unsupportedVersion(5)),
+             (#"{"version":999}"#, .unsupportedVersion(999)),
+         ]
+         for (input, issue) in cases {
+diff --git a/ios/FocusMateTests/StorageRecoveryTests.swift b/ios/FocusMateTests/StorageRecoveryTests.swift
+index a45f7fb..ed46d0d 100644
+--- a/ios/FocusMateTests/StorageRecoveryTests.swift
++++ b/ios/FocusMateTests/StorageRecoveryTests.swift
+@@ -397,7 +397,7 @@ final class StorageRecoveryTests: XCTestCase {
+     func testAC8_오류버전은_원본바이트_그대로_백업에_보존된다() throws {
+         let cases: [(name: String, bytes: Data)] = [
+             ("version 0", Data(#"{"version":0,"state":null}"#.utf8)),
+-            ("version 4", Data(#"{"version":4,"state":null}"#.utf8)),
++            ("version 5", Data(#"{"version":5,"state":null}"#.utf8)),
+             ("string version", Data(#"{"version":"2","state":null}"#.utf8)),
+         ]
+ 
+diff --git a/ios/FocusMateTests/StorageV2Tests.swift b/ios/FocusMateTests/StorageV2Tests.swift
+index 4bdc7c3..4154ebb 100644
+--- a/ios/FocusMateTests/StorageV2Tests.swift
++++ b/ios/FocusMateTests/StorageV2Tests.swift
+@@ -63,7 +63,7 @@ final class StorageV2Tests: XCTestCase {
+             let firstBytes = try Data(contentsOf: fileURL)
+ 
+             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
+-            XCTAssertEqual(root["version"] as? Int, 3)
++            XCTAssertEqual(root["version"] as? Int, 4)
+             let state = try XCTUnwrap(root["state"] as? [String: Any])
+             XCTAssertEqual(
+                 Set(state.keys),
+@@ -78,7 +78,7 @@ final class StorageV2Tests: XCTestCase {
+     }
+ 
+     // 깨짐 명명: v1 로드 실패 또는 저장 바이트가 v3 기대값과 다르면(키 누락·version 1/2·정류장 값 손실) 실패.
+-    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v3바이트가_기록된다() throws {
++    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v4바이트가_기록된다() throws {
+         try withTemporaryFile { fileURL in
+             try seed(fileURL, Self.v1Seongsu)
+             let store = LocalSnapshotStore(fileURL: fileURL)
+@@ -86,7 +86,7 @@ final class StorageV2Tests: XCTestCase {
+ 
+             try store.save(loaded)
+ 
+-            XCTAssertEqual(try Data(contentsOf: fileURL), Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":3}"#.utf8))
++            XCTAssertEqual(try Data(contentsOf: fileURL), Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":4}"#.utf8))
+             let reloaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
+             XCTAssertEqual(reloaded, Self.stage(true, Self.seongsu, Self.seongsu))
+         }
+@@ -164,7 +164,7 @@ final class StorageV2Tests: XCTestCase {
+     }
+ 
+     private static let protectedCases: [(name: String, bytes: Data, issue: StorageIssue)] = [
+-        ("버전 4", Data(#"{"version":4,"state":null}"#.utf8), .unsupportedVersion(4)),
++        ("버전 5", Data(#"{"version":5,"state":null}"#.utf8), .unsupportedVersion(5)),
+         ("버전 999", Data(#"{"version":999,"state":null}"#.utf8), .unsupportedVersion(999)),
+         ("버전 0", Data(#"{"version":0,"state":null}"#.utf8), .unsupportedVersion(0)),
+         ("빈 파일", Data(), .corrupt),

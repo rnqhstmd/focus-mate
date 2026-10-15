@@ -37,7 +37,7 @@ final class DepartureBriefingUITests: XCTestCase {
     }
 
     // 깨짐: 문장 순차 표시·시작 버튼 노출/초점, 정류장·버스·분 비노출, 시작 후 상태 전이, 뒤로가기 규칙 중 하나가 깨진다.
-    func testU4_AC17_19_20_출발_안내가_끝나면_시작을_누르고_임시_화면에서_뒤로_메인으로_돌아온다() throws {
+    func testU4_AC17_19_20_출발_안내가_끝나면_시작을_누르고_타이머_화면에_머문다() throws {
         let h = launchBoarding()
         enterJourney(h)
         XCTAssertTrue(h.element("journey.briefing").waitForExistence(timeout: timeout))
@@ -67,15 +67,14 @@ final class DepartureBriefingUITests: XCTestCase {
 
         start.tap()
 
-        XCTAssertTrue(h.element("journey.placeholder").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("journey.timer.remaining").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.element("journey.briefing").exists)
         let after = try activeJourney(h)
         XCTAssertEqual(after["phase"] as? String, "departed")
         XCTAssertEqual((after["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
 
-        h.app.navigationBars.buttons.firstMatch.tap()
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
-        XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
+        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
+        XCTAssertTrue(h.element("screen.journey").exists)
     }
 
     // 깨짐: 동작 줄이기에서 세 문장이 한 번에 보이지 않거나 시작 버튼이 즉시 나오지 않는다.

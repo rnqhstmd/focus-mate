@@ -1,0 +1,44 @@
+ context/journey/architecture.md                    |   2 +-
+ context/journey/status.md                          |   4 +-
+ docs/CURRENT-STATE.md                              |   4 +
+ docs/FLOWS.md                                      |  12 +
+ ios/FocusMate/AppModel+Boarding.swift              |  12 +-
+ ios/FocusMate/AppModel+JourneyTimer.swift          |  20 +
+ ios/FocusMate/AppModel.swift                       |   8 +-
+ ios/FocusMate/JourneyClock.swift                   |  86 ++++
+ ios/FocusMate/JourneyServices.swift                |  15 +-
+ ios/FocusMate/JourneySnapshot.swift                |  52 ++-
+ ios/FocusMate/JourneyTimerController.swift         | 191 ++++++++
+ ios/FocusMate/JourneyTimerDisplay.swift            |  22 +
+ ios/FocusMate/JourneyTimerView.swift               | 110 +++++
+ ios/FocusMate/JourneyView.swift                    |  87 +++-
+ ios/FocusMate/NavigationPopBlocker.swift           |  35 ++
+ ios/FocusMate/SnapshotCodec.swift                  |   7 +-
+ ios/FocusMate/UITestBootstrap.swift                |  77 +++-
+ ios/FocusMateTests/AppRecoveryTests.swift          |   6 +-
+ ios/FocusMateTests/BoardingModelTests.swift        |  42 ++
+ ios/FocusMateTests/BoardingTestDoubles.swift       |   7 +-
+ .../CardCustomizationAppModelTests.swift           |   2 +-
+ ios/FocusMateTests/CardStorageTests.swift          |   2 +-
+ ios/FocusMateTests/CardStyleStorageTests.swift     |   2 +-
+ ios/FocusMateTests/CardSupplementTests.swift       |   2 +-
+ ios/FocusMateTests/JourneyClockTests.swift         | 192 ++++++++
+ .../JourneySnapshotStorageTests.swift              |   7 +-
+ ios/FocusMateTests/JourneySnapshotTests.swift      |  28 +-
+ .../JourneySnapshotV4StorageTests.swift            | 337 ++++++++++++++
+ .../JourneyTimerControllerTests.swift              | 511 +++++++++++++++++++++
+ ios/FocusMateTests/JourneyTimerDisplayTests.swift  |  60 +++
+ ios/FocusMateTests/JourneyTimerModelTests.swift    | 266 +++++++++++
+ ios/FocusMateTests/JourneyTimerTestDoubles.swift   |  41 ++
+ ios/FocusMateTests/RecordStorageTests.swift        |  12 +-
+ ios/FocusMateTests/SnapshotCodecTests.swift        |  12 +-
+ ios/FocusMateTests/StorageRecoveryTests.swift      |   2 +-
+ ios/FocusMateTests/StorageV2Tests.swift            |   8 +-
+ .../DepartureBriefingUITests.swift                 |   9 +-
+ .../JourneyTimerAccessibilityUITests.swift         | 101 ++++
+ .../JourneyTimerLifecycleUITests.swift             | 170 +++++++
+ ios/FocusMateUITests/JourneyTimerUITests.swift     | 195 ++++++++
+ ios/FocusMateUITests/UITestLaunchSupport.swift     | 123 ++++-
+ 41 files changed, 2795 insertions(+), 86 deletions(-)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라. 전체 diff 원문: .dev/feat-real-minute-timer-pause/diff-full.txt

@@ -38,13 +38,13 @@ final class JourneySnapshotStorageTests: XCTestCase {
         }
     }
 
-    // 깨짐: v3 파일의 active가 단일 객체가 아니거나 version이 3이 아니면 실패. (BR-8, currentVersion 3 유지)
-    func testBR8_저장된_active는_단일_객체이고_version은_3이다() throws {
+    // 깨짐: v4 파일의 active가 단일 객체가 아니거나 version이 4가 아니거나 paused가 없으면 실패. (BR-8, BR-9)
+    func testBR8_저장된_active는_단일_객체이고_version은_4이며_paused는_false다() throws {
         try withTemporaryFile { fileURL in
             try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: F.awaiting()))
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 3)
+            XCTAssertEqual(root["version"] as? Int, 4)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             let journey = try XCTUnwrap(state["journey"] as? [String: Any])
             let active = try XCTUnwrap(journey["active"] as? [String: Any])
@@ -52,6 +52,7 @@ final class JourneySnapshotStorageTests: XCTestCase {
             XCTAssertEqual(active["phase"] as? String, "awaitingDeparture")
             XCTAssertEqual(active["boardedAt"] as? String, "2026-10-13T09:00:00Z")
             XCTAssertEqual((active["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
+            XCTAssertEqual(active["paused"] as? Bool, false)
             XCTAssertNil(active["stops"])
         }
     }

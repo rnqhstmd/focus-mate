@@ -63,7 +63,7 @@ final class StorageV2Tests: XCTestCase {
             let firstBytes = try Data(contentsOf: fileURL)
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 3)
+            XCTAssertEqual(root["version"] as? Int, 4)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             XCTAssertEqual(
                 Set(state.keys),
@@ -78,7 +78,7 @@ final class StorageV2Tests: XCTestCase {
     }
 
     // 깨짐 명명: v1 로드 실패 또는 저장 바이트가 v3 기대값과 다르면(키 누락·version 1/2·정류장 값 손실) 실패.
-    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v3바이트가_기록된다() throws {
+    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v4바이트가_기록된다() throws {
         try withTemporaryFile { fileURL in
             try seed(fileURL, Self.v1Seongsu)
             let store = LocalSnapshotStore(fileURL: fileURL)
@@ -86,7 +86,7 @@ final class StorageV2Tests: XCTestCase {
 
             try store.save(loaded)
 
-            XCTAssertEqual(try Data(contentsOf: fileURL), Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":3}"#.utf8))
+            XCTAssertEqual(try Data(contentsOf: fileURL), Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":4}"#.utf8))
             let reloaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
             XCTAssertEqual(reloaded, Self.stage(true, Self.seongsu, Self.seongsu))
         }
@@ -164,7 +164,7 @@ final class StorageV2Tests: XCTestCase {
     }
 
     private static let protectedCases: [(name: String, bytes: Data, issue: StorageIssue)] = [
-        ("버전 4", Data(#"{"version":4,"state":null}"#.utf8), .unsupportedVersion(4)),
+        ("버전 5", Data(#"{"version":5,"state":null}"#.utf8), .unsupportedVersion(5)),
         ("버전 999", Data(#"{"version":999,"state":null}"#.utf8), .unsupportedVersion(999)),
         ("버전 0", Data(#"{"version":0,"state":null}"#.utf8), .unsupportedVersion(0)),
         ("빈 파일", Data(), .corrupt),

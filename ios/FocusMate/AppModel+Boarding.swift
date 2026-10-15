@@ -8,7 +8,8 @@ extension AppModel {
     /// 준비를 확정하고 승차권을 연다. 미완성이면 이동하지 않는다. 연달아 눌러도 한 번만 쌓인다.
     @discardableResult
     func showBoardingPass() -> Bool {
-        guard confirmPreparation() else { return false }
+        // 출발한 여정은 재승차로 덮어쓰지 않는다(확정값도 건드리지 않는다).
+        guard !hasDepartedJourney, confirmPreparation() else { return false }
         if path.last != .board { open(.board) }
         return true
     }
@@ -16,14 +17,14 @@ extension AppModel {
     /// 승차권에서 승차 태그로 간다. 저장하지 않는다.
     @discardableResult
     func openBoarding() -> Bool {
-        guard path.last == .board, confirmedPreparation != nil else { return false }
+        guard path.last == .board, confirmedPreparation != nil, !hasDepartedJourney else { return false }
         open(.boarding)
         return true
     }
 
     /// 접촉 인식 순간 진행 여정을 저장한다. 실패하면 snapshot은 그대로이고 `saveFailure`가 남는다.
     func boardJourney() -> Bool {
-        guard launchState == .ready(.main), let snapshot, let card = snapshot.currentCard,
+        guard launchState == .ready(.main), !hasDepartedJourney, let snapshot, let card = snapshot.currentCard,
               let details = boardingDetails else { return false }
         let journey = journeyFactory.make(details: details, cardID: card.id)
         return save(snapshot.updating(journey: JourneySection(active: journey)))
@@ -40,7 +41,10 @@ extension AppModel {
     func confirmDeparture() -> Bool {
         guard let snapshot, let active = snapshot.journey.active else { return false }
         guard active.phase == .awaitingDeparture else { return true }
-        return save(snapshot.updating(journey: JourneySection(active: active.confirmingDeparture())))
+        guard save(snapshot.updating(journey: JourneySection(active: active.confirmingDeparture()))) else { return false }
+        // 재승차의 근원인 남은 확정값을 출발과 함께 정리한다.
+        discardConfirmedPreparation()
+        return true
     }
 
     /// 메인 '여행 시작하기'. 진행 여정이 있으면 기록 없이 정리한 뒤 시간 선택으로 간다(W07 이어가기 전 임시 동작).

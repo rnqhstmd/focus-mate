@@ -17,6 +17,7 @@
 | W12 | [P5] 접근성·동작 설정 | preferences | preferences FR-3 | - | - | 폐기 |
 | W13 | [P5] 저장 오류 복구 | preferences | preferences FR-4 | W00 | codex/feat-storage-error-recovery | 완료 |
 | W14 | [P6] 실기기 QA·출시 준비 | 통합 | journey NFR-2(실기기), preferences NFR-2 | W04, W06, W07, W09, W10, W11, W13 | - | 대기 |
+| W15 | [P3] 다이나믹 아일랜드·잠금 화면 진행 표시(Live Activity) | journey | journey FR-5 보조(2026-10-15 사용자 요청) | W05 | - | 대기 |
 
 요구사항 ID는 `context/{도메인}/status.md`의 원장을 따른다. `[P2]`는 [개발 단계](../docs/DEVELOPMENT-PHASES.md)의 Phase다.
 
@@ -60,7 +61,8 @@
 
 완료 인계:
 - W04(승차권·승차 태그·출발 안내, feat/boarding-pass-tag): 준비 확정 → 승차권 → 승차 태그(30% 겹침 놓기 전 인식, 0.3초 뒤 진행 여정 1회 저장, 1.4초+0.45초 뒤 여행) → 출발 안내('시작' = 출발 확인 저장) → 임시 '여행' 화면. 메인 진행 여정 안내와 '여행 시작하기' 자동 폐기(임시 동작). 기준선에서 W10 사진 UI 9건 실패(픽스처가 저장소에 없음)를 함께 고쳤다. 상세는 [W04 리뷰 유예](feat-boarding-pass-tag/reports/review-deferred.md).
-  - W05: 진행 여정(`JourneySnapshot`, 버전 3 `journey.active`)에 새 필수 필드를 추가하면 currentVersion을 4로 올린다(W04 앱은 모르는 키를 버리고 다시 쓴다). 착수 전 처리할 것: ① 손상·검증 실패 active는 읽을 때 버려지고 다음 저장에서 사본 없이 사라짐 → 원본 `.backup` 보관 또는 안내 결정, ② 승차 성공 뒤에도 확정값이 남아 재승차가 진행 여정을 덮을 수 있음 → 진도가 생기기 전 정책 결정, ③ minutes·elapsedSeconds 상한과 카탈로그에 없는 정류장·버스 id 처리. 여행 임시 화면(`JourneyView` 시작 후 `journey.placeholder`)과 `DepartureBriefingController`의 '시작' 이후 자리에 실제 타이머를 넣는다.
+  - W05 완료 인계(2026-10-15): 저장 v4(`paused`), 타이머 `JourneyTimerController`. W07: 재실행 뒤 메인에서 타이머로 돌아오는 진입점(컨트롤러 autoStart=false로 생성 → 사용자가 재개)과 타이머 화면 나가기·포기를 만들고, 그때 `NavigationPopBlocker`·`AppModel.goBack`의 journey 가드 조건을 다시 정한다. 메인 '여행 시작하기'는 아직 진도가 있어도 기록 없이 정리한다(확인 단계는 W07). W06: 타이머 화면 위에 지도를 올린다(남은 시간 하단 좌측). W15: 컨트롤러의 status·remainingSeconds로 종료 시각을 계산해 Live Activity에 넘긴다(진도 계산은 바꾸지 않음).
+  - (W04 인계, 처리됨) W05: 진행 여정(`JourneySnapshot`, 버전 3 `journey.active`)에 새 필수 필드를 추가하면 currentVersion을 4로 올린다(W04 앱은 모르는 키를 버리고 다시 쓴다). 착수 전 처리할 것: ① 손상·검증 실패 active는 읽을 때 버려지고 다음 저장에서 사본 없이 사라짐 → 원본 `.backup` 보관 또는 안내 결정, ② 승차 성공 뒤에도 확정값이 남아 재승차가 진행 여정을 덮을 수 있음 → 진도가 생기기 전 정책 결정, ③ minutes·elapsedSeconds 상한과 카탈로그에 없는 정류장·버스 id 처리. 여행 임시 화면(`JourneyView` 시작 후 `journey.placeholder`)과 `DepartureBriefingController`의 '시작' 이후 자리에 실제 타이머를 넣는다.
   - W07: 메인 '여행 시작하기' 자동 폐기(`AppModel.startTripFromMain`)와 진행 여정 안내(`main.activeJourney`)를 이어가기·포기로 바꾼다. 카드 교체 기능이 생기면 `activeJourney.cardID == currentCard.id` 불변식 처리(폐기/갱신)를 함께 정한다.
   - W09: 승차 태그(`BoardingTagController`·`BoardingRules`·`BoardingTagView`)를 하차에 재사용할 수 있다. 하차 LCD는 카드 이름(FLOWS 2차).
   - W14: 실제 VoiceOver 포커스('시작' 버튼)·카드 활성화(VoiceOver/Full Keyboard Access)·승차 햅틱 체감, 제스처 시스템 취소 후 재태그, Release 산출물에 `fm-ui` 문자열 부재를 실기기에서 확인. Phase 0 '최신 승차 단말기' 브라우저 확인은 사용자 결정으로 보류.

@@ -72,14 +72,28 @@ final class JourneySnapshotTests: XCTestCase {
         XCTAssertEqual(journey.bus?.id, "2014")
     }
 
-    // 깨짐: 카탈로그 밖 id에서 검증이 실패하거나 조회가 nil이 아니면 실패.
-    func testAC11_카탈로그_밖_id는_검증을_통과하고_조회는_nil이다() throws {
+    // 깨짐: 카탈로그 밖 id를 검증이 통과시키거나 조회가 nil이 아니면 실패. (BR-3)
+    func testAC22_카탈로그_밖_id는_조회가_nil이다() {
         let journey = F.journey(originStopID: "gone-stop", busID: "gone-bus", destinationStopID: "gone-dest")
 
-        XCTAssertNoThrow(try journey.validate(currentCardID: F.cardID))
         XCTAssertNil(journey.originName)
         XCTAssertNil(journey.destinationName)
         XCTAssertNil(journey.bus)
+    }
+
+    // 깨짐: 출발 정류장 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
+    func testAC22_카탈로그_밖_출발_id는_unknownStop으로_거절된다() {
+        assertIssue(.unknownStop("gone-stop"), F.journey(originStopID: "gone-stop"))
+    }
+
+    // 깨짐: 도착 정류장 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
+    func testAC22_카탈로그_밖_도착_id는_unknownStop으로_거절된다() {
+        assertIssue(.unknownStop("gone-dest"), F.journey(destinationStopID: "gone-dest"))
+    }
+
+    // 깨짐: 버스 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
+    func testAC22_카탈로그_밖_버스_id는_unknownBus로_거절된다() {
+        assertIssue(.unknownBus("gone-bus"), F.journey(busID: "gone-bus"))
     }
 
     // MARK: - 구조 검증 (설계 A-1)
@@ -123,6 +137,12 @@ final class JourneySnapshotTests: XCTestCase {
         assertIssue(.invalidMinutes(0), F.journey(minutes: 0))
         assertIssue(.invalidMinutes(-5), F.journey(minutes: -5))
         XCTAssertNoThrow(try F.journey(minutes: 1).validate(currentCardID: F.cardID))
+    }
+
+    // 깨짐: 분 상한 360을 넘는 361을 통과시키거나 360을 거절하면 실패. (AC-20, BR-2)
+    func testAC20_분이_361이면_거절되고_360은_허용된다() {
+        assertIssue(.invalidMinutes(361), F.journey(minutes: 361))
+        XCTAssertNoThrow(try F.journey(minutes: 360).validate(currentCardID: F.cardID))
     }
 
     // 깨짐: 할 일 trim 불일치·빈 값·UTF-16 80 초과 중 하나라도 통과시키면 실패.
@@ -215,7 +235,7 @@ private extension JourneySnapshot {
         BoardingFixtures.journey(
             id: self.id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
             busID: busID, destinationStopID: id, tag: tag, task: task, phase: phase,
-            elapsedSeconds: progress.elapsedSeconds
+            elapsedSeconds: progress.elapsedSeconds, paused: paused
         )
     }
 }

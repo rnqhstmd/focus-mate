@@ -395,6 +395,48 @@ final class BoardingModelTests: XCTestCase {
         XCTAssertEqual(model.path, [.journey])
     }
 
+    // MARK: 출발 후 확정값 정리 (T4)
+
+    // 깨짐: confirmDeparture 성공 뒤에도 확정 준비가 남아 있으면 실패.
+    @MainActor
+    func testT4_출발을_확인하면_확정한_준비값이_정리된다() throws {
+        let model = try boardingModel(probe: Probe())
+        XCTAssertTrue(model.boardJourney())
+        XCTAssertNotNil(model.confirmedPreparation)
+
+        XCTAssertTrue(model.confirmDeparture())
+
+        XCTAssertNil(model.confirmedPreparation)
+    }
+
+    // 깨짐: 출발 확인 뒤 같은 확정값으로 다시 승차하면(가드·정리 없음) true가 되어 실패.
+    @MainActor
+    func testAC18_출발한_뒤에는_다시_승차할_수_없고_여정이_그대로다() throws {
+        let probe = Probe()
+        let model = try boardingModel(probe: probe)
+        XCTAssertTrue(model.boardJourney())
+        XCTAssertTrue(model.confirmDeparture())
+        let departedJourney = model.activeJourney
+        let writesBefore = probe.writes.count
+
+        XCTAssertFalse(model.boardJourney())
+
+        XCTAssertEqual(model.activeJourney, departedJourney)
+        XCTAssertEqual(probe.writes.count, writesBefore)
+    }
+
+    // 회귀 보호(현재 통과): awaiting 상태 재승차는 새 id로 교체되어야 한다. 가드가 과해지면 실패.
+    @MainActor
+    func testAC19_시작_전_대기상태에서는_다시_승차하면_새_id로_교체된다() throws {
+        let probe = Probe()
+        let model = try boardingModel(active: F.journey(id: "journey-A"), probe: probe)
+
+        XCTAssertTrue(model.boardJourney())
+
+        XCTAssertEqual(model.activeJourney?.id, "new-journey")
+        XCTAssertEqual(model.activeJourney?.phase, .awaitingDeparture)
+    }
+
     // MARK: 메인 버튼 라벨
 
     // 깨짐: mainMenuTitle이 준비 항목을 "여행 준비" 그대로 두거나 다른 항목 title을 바꾸면 실패.

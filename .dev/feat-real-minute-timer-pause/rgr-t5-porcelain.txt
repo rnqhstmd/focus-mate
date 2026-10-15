@@ -1,0 +1,30 @@
+ M .dev/plan.md
+ M ios/FocusMate/AppModel+Boarding.swift
+ M ios/FocusMate/AppModel.swift
+ M ios/FocusMate/JourneyServices.swift
+ M ios/FocusMate/JourneySnapshot.swift
+ M ios/FocusMate/SnapshotCodec.swift
+ M ios/FocusMate/UITestBootstrap.swift
+ M ios/FocusMateTests/AppRecoveryTests.swift
+ M ios/FocusMateTests/BoardingModelTests.swift
+ M ios/FocusMateTests/BoardingTestDoubles.swift
+ M ios/FocusMateTests/CardCustomizationAppModelTests.swift
+ M ios/FocusMateTests/CardStorageTests.swift
+ M ios/FocusMateTests/CardStyleStorageTests.swift
+ M ios/FocusMateTests/CardSupplementTests.swift
+ M ios/FocusMateTests/JourneySnapshotStorageTests.swift
+ M ios/FocusMateTests/JourneySnapshotTests.swift
+ M ios/FocusMateTests/RecordStorageTests.swift
+ M ios/FocusMateTests/SnapshotCodecTests.swift
+ M ios/FocusMateTests/StorageRecoveryTests.swift
+ M ios/FocusMateTests/StorageV2Tests.swift
+?? .dev/feat-real-minute-timer-pause/
+?? ios/FocusMate/AppModel+JourneyTimer.swift
+?? ios/FocusMate/JourneyClock.swift
+?? ios/FocusMate/JourneyTimerDisplay.swift
+?? ios/FocusMateTests/JourneyClockTests.swift
+?? ios/FocusMateTests/JourneySnapshotV4StorageTests.swift
+?? ios/FocusMateTests/JourneyTimerControllerTests.swift
+?? ios/FocusMateTests/JourneyTimerDisplayTests.swift
+?? ios/FocusMateTests/JourneyTimerModelTests.swift
+?? ios/FocusMateTests/JourneyTimerTestDoubles.swift

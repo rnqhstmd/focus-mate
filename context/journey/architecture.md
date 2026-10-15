@@ -14,7 +14,7 @@
 
 ## 향후 네이티브와 후순위
 
-SwiftUI 화면 상태와 실제 선택 분 타이머·앱 생명주기, MapKit 기본 지도/앱 내 가상 코스는 iOS MVP 예정. 실제 GPS·버스 API·실시간 위치·기기 간 재개는 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
+iOS 실제 분 타이머는 W05에서 구현됐다: `JourneyTimerController`(단조 시계 `JourneyClock`·틱 `JourneyTicker` 주입, 상태 running/paused/arrived)가 진도를 소유하고 `AppModel.saveJourneyProgress`로 저장한다(저장 형식 v4). 앱 생명주기(포기·이어가기)와 MapKit 기본 지도/앱 내 가상 코스는 iOS MVP 예정(W07·W06). 실제 GPS·버스 API·실시간 위치·기기 간 재개는 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
 
 ## 주제 문서
 

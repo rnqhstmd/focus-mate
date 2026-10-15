@@ -1,0 +1,1130 @@
+diff --git a/ios/FocusMate/JourneyServices.swift b/ios/FocusMate/JourneyServices.swift
+index a9f6a08..c1871e9 100644
+--- a/ios/FocusMate/JourneyServices.swift
++++ b/ios/FocusMate/JourneyServices.swift
+@@ -11,14 +11,25 @@ struct JourneyServices {
+     /// 시스템 설정과 OR로 합친다. DEBUG 인자로만 켜진다.
+     var forcedReduceMotion: Bool
+     var makeBoarder: (AppModel) -> JourneyBoarding
++    /// 여행 진도 시계. 화면이 다시 그려져도 같은 기준점을 쓰도록 컨트롤러가 생성 시점에 붙잡는다.
++    var clock: JourneyClock
++    /// 컨트롤러마다 따로 갖는다. `.live()`가 다시 평가될 수 있어 공유 인스턴스를 두지 않는다.
++    var makeTicker: @MainActor () -> JourneyTicker
++    /// 포그라운드 복귀 처리 직전에 부른다(UI 테스트가 백그라운드 경과를 재현한다).
++    var beforeForeground: @MainActor () -> Void
++    #if DEBUG
++    var testClock: ManualJourneyClock?
++    var failNextSave: UITestNextSaveFailure?
++    #endif
+ 
+     static func live() -> JourneyServices {
+         JourneyServices(haptics: CoreHapticsIssuancePlayer(), announcer: SystemAccessibilityAnnouncer(),
+                         sleep: { try? await Task.sleep(for: $0) }, boardingHoldSleep: nil,
+-                        forcedReduceMotion: false, makeBoarder: { $0 })
++                        forcedReduceMotion: false, makeBoarder: { $0 },
++                        clock: ContinuousJourneyClock(), makeTicker: { TaskJourneyTicker() }, beforeForeground: {})
+     }
+ 
+     func reduceMotion(system: Bool) -> Bool { system || forcedReduceMotion }
+ }
+ 
+-extension AppModel: JourneyBoarding, DepartureConfirming {}
++extension AppModel: JourneyBoarding, DepartureConfirming, JourneyProgressSaving {}
+diff --git a/ios/FocusMate/JourneyTimerView.swift b/ios/FocusMate/JourneyTimerView.swift
+new file mode 100644
+index 0000000..078e14f
+--- /dev/null
++++ b/ios/FocusMate/JourneyTimerView.swift
+@@ -0,0 +1,102 @@
++import SwiftUI
++
++/// 출발 뒤 타이머 화면. 남은 시간과 일시정지/재개만 둔다. 지도(W06)와 도착 안내(W09)는 이 위에 붙는다.
++@MainActor
++struct JourneyTimerView: View {
++    let controller: JourneyTimerController
++    let reduceMotion: Bool
++    #if DEBUG
++    var path: [Destination] = []
++    #endif
++    @AccessibilityFocusState private var remainingFocused: Bool
++
++    private var minutesText: String { JourneyTimerDisplay.text(minutes: controller.remainingMinutes) }
++
++    var body: some View {
++        VStack(spacing: 32) {
++            Spacer(minLength: 0)
++            remaining
++            control
++            notices
++            Spacer(minLength: 0)
++        }
++        .padding(24)
++        .frame(maxWidth: .infinity, maxHeight: .infinity)
++        .foregroundStyle(.white)
++        .background(Color.black.ignoresSafeArea())
++        .onAppear {
++            controller.appear()
++            remainingFocused = true
++        }
++        #if DEBUG
++        .overlay(alignment: .bottomLeading) { diagnostics }
++        #endif
++    }
++
++    private var remaining: some View {
++        Text(minutesText)
++            .font(.system(size: 64, weight: .bold))
++            .lineLimit(1).minimumScaleFactor(0.5)
++            .contentTransition(reduceMotion ? .identity : .numericText())
++            .animation(reduceMotion ? nil : .default, value: controller.remainingMinutes)
++            .accessibilityLabel(JourneyTimerDisplay.accessibilityLabel)
++            .accessibilityValue(JourneyTimerDisplay.accessibilityValue(minutes: controller.remainingMinutes))
++            .accessibilityIdentifier("journey.timer.remaining")
++            .accessibilityFocused($remainingFocused)
++    }
++
++    @ViewBuilder private var control: some View {
++        switch controller.status {
++        case .running:
++            controlButton(JourneyTimerDisplay.pauseLabel, systemImage: "pause.fill", id: "journey.timer.pause") { controller.pause() }
++        case .paused:
++            controlButton(JourneyTimerDisplay.resumeLabel, systemImage: "play.fill", id: "journey.timer.resume") { controller.resume() }
++        case .arrived:
++            // 임시 도착 상태. 도착 안내·하차 태그는 W09가 대체한다.
++            Text("도착했어요").font(.title2.bold()).accessibilityIdentifier("journey.arrived")
++        }
++    }
++
++    private func controlButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
++        Button(action: action) {
++            Label(title, systemImage: systemImage)
++                .font(.headline).foregroundStyle(.black)
++                .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
++                .background(Color(white: 0.95), in: Capsule())
++        }
++        .buttonStyle(.plain)
++        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
++        .accessibilityLabel(title)
++        .accessibilityIdentifier(id)
++    }
++
++    @ViewBuilder private var notices: some View {
++        if controller.showsTransitionFailure {
++            Text(JourneyTimerDisplay.transitionFailureText).font(.subheadline).foregroundStyle(.orange)
++                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
++                .accessibilityIdentifier("journey.timer.saveFailure")
++        }
++        if controller.showsSaveWarning {
++            Text(controller.status == .arrived ? JourneyTimerDisplay.arrivalWarningText : JourneyTimerDisplay.checkpointWarningText)
++                .font(.subheadline).foregroundStyle(.orange)
++                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
++                .accessibilityIdentifier("journey.timer.saveWarning")
++        }
++    }
++
++    #if DEBUG
++    private var diagnostics: some View {
++        let status = switch controller.status { case .running: "running"; case .paused: "paused"; case .arrived: "arrived" }
++        let object: [String: Any] = [
++            "status": status, "elapsed": controller.elapsedSeconds, "remainingMinutes": controller.remainingMinutes,
++            "text": minutesText, "showsSaveWarning": controller.showsSaveWarning,
++            "showsSaveFailure": controller.showsTransitionFailure, "focus": remainingFocused ? "remaining" : "none",
++            "path": path.map { "\($0)" },
++        ]
++        let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
++            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
++        return Text("타이머 진단").font(.system(size: 1)).foregroundStyle(.clear)
++            .accessibilityValue(json).accessibilityIdentifier("test.timer").allowsHitTesting(false)
++    }
++    #endif
++}
+diff --git a/ios/FocusMate/JourneyView.swift b/ios/FocusMate/JourneyView.swift
+index 5bbf7ef..f771bd2 100644
+--- a/ios/FocusMate/JourneyView.swift
++++ b/ios/FocusMate/JourneyView.swift
+@@ -1,22 +1,34 @@
+ import SwiftUI
+ 
+-/// 여행 화면. 출발 확인 전에는 출발 안내(시안 DO8HO)만 보이고, '시작' 뒤에는 실제 여행 화면(W05) 자리표시를 둔다.
++/// 여행 화면. 출발 확인 전에는 출발 안내(시안 DO8HO)만 보이고, '시작' 뒤에는 실제 분 타이머를 둔다.
++/// 출발한 여행 화면에서는 메인으로 돌아가지 않는다(뒤로가기 숨김·스와이프 차단·모델 가드). 나가기는 W07이다.
+ @MainActor
+ struct JourneyView: View {
+     @Bindable var model: AppModel
+     let services: JourneyServices
+-    /// 출발 안내 컨트롤러는 화면이 처음 나타날 때 한 번만 만든다.
++    /// 출발 안내·타이머 컨트롤러는 화면이 처음 나타날 때 한 번만 만든다.
+     @State private var briefing: DepartureBriefingController?
++    @State private var timer: JourneyTimerController?
+ 
+     var body: some View {
+         Group {
+-            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing) }
++            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing, timer: timer) }
+             else { Color.clear }
+         }
+         .onAppear {
+-            guard briefing == nil else { return }
+-            briefing = DepartureBriefingController(confirmer: model, sleep: services.sleep)
++            if briefing == nil { briefing = DepartureBriefingController(confirmer: model, sleep: services.sleep) }
++            ensureTimer()
+         }
++        .onChange(of: model.activeJourney?.phase) { _, _ in ensureTimer() }
++        // 정상 경로에서는 이탈이 없다. 재생성될 때 일시정지 규칙과 저장을 맞추기 위한 방어다.
++        .onDisappear { timer?.leave() }
++    }
++
++    /// '시작'을 이 화면에서 직접 본 경우에만 바로 진행한다. 저장된 진행 상태만으로는 자동 시작하지 않는다.
++    private func ensureTimer() {
++        guard timer == nil, let journey = model.activeJourney, journey.phase == .departed else { return }
++        timer = JourneyTimerController(journey: journey, autoStart: briefing?.isConfirmed == true, saver: model,
++                                       clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer)
+     }
+ }
+ 
+@@ -25,6 +37,7 @@ private struct JourneyScreen: View {
+     @Bindable var model: AppModel
+     let services: JourneyServices
+     let briefing: DepartureBriefingController
++    let timer: JourneyTimerController?
+     @AccessibilityFocusState private var startFocused: Bool
+     @Environment(\.scenePhase) private var scenePhase
+     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+@@ -35,24 +48,41 @@ private struct JourneyScreen: View {
+     var body: some View {
+         // Group은 수식어를 자식마다 나눠 붙여 안쪽 식별자를 덮으므로, 컨테이너 하나로 감싼다.
+         ZStack {
+-            if awaitingDeparture { departureBriefing } else { placeholder }
++            if awaitingDeparture { departureBriefing }
++            else if let timer {
++                #if DEBUG
++                JourneyTimerView(controller: timer, reduceMotion: reduceMotion, path: model.path)
++                #else
++                JourneyTimerView(controller: timer, reduceMotion: reduceMotion)
++                #endif
++            } else { Color.clear }
+         }
+         .accessibilityElement(children: .contain)
+         .accessibilityIdentifier("screen.journey")
+         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+-        .navigationBarBackButtonHidden(awaitingDeparture)
+-        .toolbar(awaitingDeparture ? .hidden : .automatic, for: .navigationBar)
++        .navigationBarBackButtonHidden(true)
++        .toolbar(.hidden, for: .navigationBar)
++        .background(NavigationPopBlocker())
+         .task { if awaitingDeparture { await briefing.begin(reduceMotion: reduceMotion) } }
++        // 생명주기는 여기 한 곳에서 단계별로 나눈다. 비활성(제어 센터 등)은 무시하고 시간은 계속 흐른다.
+         .onChange(of: scenePhase) { _, phase in
+-            guard awaitingDeparture else { return }
+-            if phase == .background { briefing.reset() }
+-            else if phase == .active, !briefing.showsStart {
+-                Task { await briefing.begin(reduceMotion: reduceMotion) }
++            if awaitingDeparture {
++                if phase == .background { briefing.reset() }
++                else if phase == .active, !briefing.showsStart {
++                    Task { await briefing.begin(reduceMotion: reduceMotion) }
++                }
++            } else if let timer {
++                if phase == .background { timer.enterBackground() }
++                else if phase == .active {
++                    services.beforeForeground()
++                    timer.returnToForeground()
++                }
+             }
+         }
+         .onChange(of: briefing.focusTarget) { _, target in startFocused = target == .startButton }
+         #if DEBUG
+         .overlay(alignment: .topLeading) { diagnostics }
++        .safeAreaInset(edge: .top) { testControls }
+         #endif
+     }
+ 
+@@ -110,16 +140,35 @@ private struct JourneyScreen: View {
+         }
+     }
+ 
+-    /// W05가 실제 분 타이머·지도로 교체한다. 지금은 제목만 두고 뒤로가기로 메인에 간다.
+-    private var placeholder: some View {
+-        VStack(alignment: .leading, spacing: 16) {
+-            Text(Destination.journey.title).font(.largeTitle.bold()).accessibilityIdentifier("journey.placeholder")
+-            Spacer()
++    #if DEBUG
++    /// 수동 시계일 때만 상단 한 줄에 둔다. 레이아웃이 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다.
++    @ViewBuilder private var testControls: some View {
++        if let clock = services.testClock {
++            HStack(spacing: 0) {
++                testButton("1초 진행", id: "test.clock.advance1") { clock.advance(by: .seconds(1)) }
++                testButton("10초 진행", id: "test.clock.advance10") { clock.advance(by: .seconds(10)) }
++                testButton("60초 진행", id: "test.clock.advance60") { clock.advance(by: .seconds(60)) }
++                testButton("600초 진행", id: "test.clock.advance600") { clock.advance(by: .seconds(600)) }
++                testButton("복귀 시 600초", id: "test.clock.armForeground600") { clock.armForegroundAdvance(by: .seconds(600)) }
++                if let failure = services.failNextSave {
++                    testButton("다음 저장 실패", id: "test.failNextSave") { failure.arm() }
++                }
++                Spacer(minLength: 0)
++            }
++            .frame(height: 44)
+         }
+-        .padding(24).frame(maxWidth: .infinity, alignment: .leading)
+     }
+ 
+-    #if DEBUG
++    private func testButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
++        // 거의 투명한 opacity는 히트 테스트에서 빠질 수 있어, 불투명 뷰에 글자만 투명하게 두고 터치 영역을 명시한다.
++        Button(action: action) {
++            Text(label).font(.system(size: 1)).foregroundStyle(.clear)
++                .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
++        }
++        .accessibilityLabel(label)
++        .accessibilityIdentifier(id)
++    }
++
+     private var diagnostics: some View {
+         let object: [String: Any] = ["index": briefing.visibleIndex, "showsAll": briefing.showsAll,
+                                      "showsStart": briefing.showsStart,
+diff --git a/ios/FocusMate/NavigationPopBlocker.swift b/ios/FocusMate/NavigationPopBlocker.swift
+new file mode 100644
+index 0000000..536c556
+--- /dev/null
++++ b/ios/FocusMate/NavigationPopBlocker.swift
+@@ -0,0 +1,35 @@
++import SwiftUI
++import UIKit
++
++/// 여행 화면에서 스와이프 뒤로가기를 막는다. 뒤로가기 버튼 숨김만으로는 iOS 26의 화면 전체 스와이프가 남는다.
++/// 내비게이션 컨트롤러는 시간 선택·준비 화면과 공유하므로 사라질 때 원래 값으로 되돌린다.
++struct NavigationPopBlocker: UIViewControllerRepresentable {
++    func makeUIViewController(context: Context) -> Controller { Controller() }
++    func updateUIViewController(_ controller: Controller, context: Context) {}
++    static func dismantleUIViewController(_ controller: Controller, coordinator: ()) { controller.restore() }
++
++    final class Controller: UIViewController {
++        private var saved: [(UIGestureRecognizer, Bool)] = []
++
++        override func viewDidAppear(_ animated: Bool) {
++            super.viewDidAppear(animated)
++            guard saved.isEmpty, let navigation = navigationController else { return }
++            var recognizers = [navigation.interactivePopGestureRecognizer]
++            if #available(iOS 26, *) { recognizers.append(navigation.interactiveContentPopGestureRecognizer) }
++            for recognizer in recognizers.compactMap({ $0 }) {
++                saved.append((recognizer, recognizer.isEnabled))
++                recognizer.isEnabled = false
++            }
++        }
++
++        override func viewWillDisappear(_ animated: Bool) {
++            super.viewWillDisappear(animated)
++            restore()
++        }
++
++        func restore() {
++            saved.forEach { $0.0.isEnabled = $0.1 }
++            saved = []
++        }
++    }
++}
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index 586c270..1d90f2b 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -17,6 +17,8 @@ struct UITestBootstrap {
+     let forcedReduceMotion: Bool
+     let route: String?
+     let boardingSaveFailure: UITestCardSaveFailure
++    let manualClock: Bool
++    let nextSaveFailure = UITestNextSaveFailure()
+     enum IssueHold { case standard, manual }
+     private let recoveryScenario: String?
+     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
+@@ -56,7 +58,10 @@ struct UITestBootstrap {
+         guard reduce == nil || reduce == "on" else { throw SetupIssue.invalidArguments }
+         forcedReduceMotion = reduce == "on"
+         route = try argument("--fm-ui-route")
+-        guard route == nil || (route == "boarding" && seed == "ready") else { throw SetupIssue.invalidArguments }
++        guard route == nil || (route == "boarding" && seed == "ready") || route == "journey" else { throw SetupIssue.invalidArguments }
++        let clock = try argument("--fm-ui-clock")
++        guard clock == nil || clock == "manual" else { throw SetupIssue.invalidArguments }
++        manualClock = clock == "manual"
+         let sound = try argument("--fm-ui-sound")
+         guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
+         shouldFailSound = sound == "fail"
+@@ -139,7 +144,8 @@ struct UITestBootstrap {
+         return String(decoding: data, as: UTF8.self)
+     }
+ 
+-    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"]).union(rawSeeds.keys)
++    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
++        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds)
+ 
+     func prepare() throws {
+         guard let seed else { return }
+@@ -152,6 +158,11 @@ struct UITestBootstrap {
+         case "activeJourney":
+             try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard)
+                 .updating(journey: JourneySection(active: Self.seededJourney)))
++        case let name where Self.timerSeeds[name] != nil:
++            try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
++        case let name where Self.v3Seeds.contains(name):
++            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
++            try Self.v3Bytes(name).write(to: fileURL, options: .atomic)
+         default:
+             guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
+             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+@@ -165,6 +176,7 @@ struct UITestBootstrap {
+         let failSave = shouldFailSave
+         let cardFailure = cardSaveFailure
+         let boardingFailure = boardingSaveFailure
++        let nextFailure = nextSaveFailure
+         var activeReads = 0
+         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
+             if url == activeURL {
+@@ -175,7 +187,7 @@ struct UITestBootstrap {
+             }
+             return try Data(contentsOf: url)
+         }, writeData: { data, url in
+-            if failSave || cardFailure.consume() || boardingFailure.consume() { throw StorageIssue.writeFailed }
++            if failSave || cardFailure.consume() || boardingFailure.consume() || nextFailure.consume() { throw StorageIssue.writeFailed }
+             try data.write(to: url, options: .atomic)
+         }, writeBackup: { data, url in
+             if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
+@@ -198,6 +210,12 @@ struct UITestBootstrap {
+ 
+     /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
+     @MainActor func applyRoute(to model: AppModel) throws {
++        if route == "journey" {
++            // 진단용 진입. 실제 재진입(이어가기)은 W07이다.
++            guard model.launchState == .ready(.main), model.activeJourney != nil else { throw SetupIssue.invalidSaveState }
++            model.open(.journey)
++            return
++        }
+         guard route == "boarding" else { return }
+         guard model.launchState == .ready(.main), let origin = model.journeyOrigin else { throw SetupIssue.invalidSaveState }
+         model.journeyPlan.setMinutes(60)
+@@ -217,6 +235,14 @@ struct UITestBootstrap {
+         services.forcedReduceMotion = forcedReduceMotion
+         let failure = boardingSaveFailure
+         services.makeBoarder = { ArmingBoarder(base: $0, failure: failure) }
++        services.failNextSave = nextSaveFailure
++        if manualClock {
++            let clock = ManualJourneyClock()
++            services.clock = clock
++            services.makeTicker = { clock }
++            services.beforeForeground = { clock.applyArmedForegroundAdvance() }
++            services.testClock = clock
++        }
+         return (services, gate)
+     }
+ 
+@@ -239,7 +265,39 @@ struct UITestBootstrap {
+         id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
+         destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
+         tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
+-        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start)
++        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start, paused: false)
++
++    /// 타이머 시드: 25분, 서울숲역 출발, 출발 완료·일시정지. 값은 경과 초.
++    private static let timerSeeds: [String: Int] = ["timerPaused90": 90, "timerNearArrival": 1440, "timerArrived": 1500]
++    private static let v3Seeds: Set<String> = ["v3Awaiting", "v3Departed", "v3InvalidMinutes", "v3UnknownStop"]
++
++    private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot {
++        JourneySnapshot(
++            id: "seed-timer", cardID: fixedCard.id, originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
++            destinationStopID: "seongdongSportsCenter",
++            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "타이머 시드",
++            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: phase,
++            progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)
++    }
++
++    private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot {
++        readySnapshot.issuingCard(fixedCard)
++            .updating(journey: JourneySection(active: timerJourney(phase: .departed, elapsed: elapsed, paused: true)))
++    }
++
++    /// v4로 만든 뒤 version을 3으로 바꾸고 paused 키를 지운다. 손상 시드는 그 위에서 값만 바꾼다.
++    private static func v3Bytes(_ name: String) throws -> Data {
++        let journey = timerJourney(phase: name == "v3Awaiting" ? .awaitingDeparture : .departed, elapsed: 0, paused: name != "v3Awaiting")
++        let data = try SnapshotCodec.encode(readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: journey)))
++        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
++              var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
++              var active = section["active"] as? [String: Any] else { throw SetupIssue.invalidSaveState }
++        active.removeValue(forKey: "paused")
++        if name == "v3InvalidMinutes" { active["minutes"] = 361 }
++        if name == "v3UnknownStop" { active["originStopID"] = "gone-stop" }
++        section["active"] = active; state["journey"] = section; root["state"] = state; root["version"] = 3
++        return try JSONSerialization.data(withJSONObject: root, options: .sortedKeys)
++    }
+ 
+     private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
+ 
+@@ -325,6 +383,17 @@ final class UITestHoldGate {
+     }
+ }
+ 
++/// 여행 화면의 `test.failNextSave`: 누를 때마다 다음 쓰기 1건을 실패시킨다. 수동 시계에는 자율 쓰기가 없어 실패 대상이 결정적이다.
++final class UITestNextSaveFailure {
++    private var pending = 0
++    func arm() { pending += 1 }
++    func consume() -> Bool {
++        guard pending > 0 else { return false }
++        pending -= 1
++        return true
++    }
++}
++
+ /// `--fm-ui-save fail-once-boarding`: 승차 저장 직전에만 한 번 실패를 건다.
+ @MainActor
+ final class ArmingBoarder: JourneyBoarding {
+diff --git a/ios/FocusMateUITests/DepartureBriefingUITests.swift b/ios/FocusMateUITests/DepartureBriefingUITests.swift
+index 660f567..f9b4953 100644
+--- a/ios/FocusMateUITests/DepartureBriefingUITests.swift
++++ b/ios/FocusMateUITests/DepartureBriefingUITests.swift
+@@ -37,7 +37,7 @@ final class DepartureBriefingUITests: XCTestCase {
+     }
+ 
+     // 깨짐: 문장 순차 표시·시작 버튼 노출/초점, 정류장·버스·분 비노출, 시작 후 상태 전이, 뒤로가기 규칙 중 하나가 깨진다.
+-    func testU4_AC17_19_20_출발_안내가_끝나면_시작을_누르고_임시_화면에서_뒤로_메인으로_돌아온다() throws {
++    func testU4_AC17_19_20_출발_안내가_끝나면_시작을_누르고_타이머_화면에_머문다() throws {
+         let h = launchBoarding()
+         enterJourney(h)
+         XCTAssertTrue(h.element("journey.briefing").waitForExistence(timeout: timeout))
+@@ -67,15 +67,14 @@ final class DepartureBriefingUITests: XCTestCase {
+ 
+         start.tap()
+ 
+-        XCTAssertTrue(h.element("journey.placeholder").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("journey.timer.remaining").waitForExistence(timeout: timeout))
+         XCTAssertFalse(h.element("journey.briefing").exists)
+         let after = try activeJourney(h)
+         XCTAssertEqual(after["phase"] as? String, "departed")
+         XCTAssertEqual((after["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
+ 
+-        h.app.navigationBars.buttons.firstMatch.tap()
+-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+-        XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
++        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
++        XCTAssertTrue(h.element("screen.journey").exists)
+     }
+ 
+     // 깨짐: 동작 줄이기에서 세 문장이 한 번에 보이지 않거나 시작 버튼이 즉시 나오지 않는다.
+diff --git a/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift b/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+new file mode 100644
+index 0000000..031a181
+--- /dev/null
++++ b/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+@@ -0,0 +1,101 @@
++import Foundation
++import XCTest
++
++/// 실제 분 타이머 접근성 UI 테스트 V7 (--fm-ui-clock manual).
++@MainActor
++final class JourneyTimerAccessibilityUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // 깨짐: 낭독 값(남은 시간 N분)·라벨(타이머)·보이는 텍스트(N min) 중 하나가 어긋난다.
++    func testV7_AC27_남은_시간은_라벨_타이머와_값_남은_시간_24분으로_낭독된다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        let remaining = h.element("journey.timer.remaining")
++        XCTAssertTrue(remaining.waitForExistence(timeout: timeout))
++
++        XCTAssertEqual(remaining.label, "타이머")
++        XCTAssertEqual(remaining.value as? String, "남은 시간 24분")
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
++    }
++
++    // 깨짐: 0초 도달 때 낭독 값이 "남은 시간 0분"이 아니다.
++    func testV7_AC27_도착하면_낭독_값은_남은_시간_0분이다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
++        let remaining = h.element("journey.timer.remaining")
++        XCTAssertTrue(remaining.waitForExistence(timeout: timeout))
++
++        XCTAssertEqual(remaining.value as? String, "남은 시간 0분")
++    }
++
++    // 깨짐: 버튼 라벨이 상태와 어긋나거나, 전환 알림이 1회가 아니거나, 시간이 흐르는 동안 알림이 생긴다.
++    func testV7_AC28_전환할_때만_일시정지됨_재개됨을_한_번씩_알리고_시간이_흘러도_알리지_않는다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        let resume = h.element("journey.timer.resume")
++        XCTAssertTrue(resume.waitForExistence(timeout: timeout))
++        XCTAssertEqual(resume.label, "재개")
++        let initial = try h.diagnostic("test.announcements")
++
++        resume.tap()
++        let pause = h.element("journey.timer.pause")
++        XCTAssertTrue(pause.waitForExistence(timeout: timeout))
++        XCTAssertEqual(pause.label, "일시정지")
++        let afterResume = try h.diagnostic("test.announcements")
++        XCTAssertEqual(afterResume.components(separatedBy: "재개됨").count - 1, 1, afterResume)
++
++        h.advance(60)
++        XCTAssertEqual(try h.diagnostic("test.announcements"), afterResume)
++
++        pause.tap()
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        let afterPause = try h.diagnostic("test.announcements")
++        XCTAssertEqual(afterPause.components(separatedBy: "일시정지됨").count - 1, 1, afterPause)
++        XCTAssertNotEqual(afterPause, initial)
++    }
++
++    // 깨짐: 최대 글자 크기에서 남은 시간·버튼이 가려지거나 44pt 미만이거나 스크롤해야 닿는다.
++    func testV7_AC29_가장_큰_글자에서도_남은_시간과_버튼이_스크롤_없이_닿는다() throws {
++        let h = FocusMateUIHarness.launchJourney(
++            seed: "timerPaused90",
++            extraArguments: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
++        )
++        XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
++        let remaining = h.element("journey.timer.remaining")
++        XCTAssertTrue(remaining.waitForExistence(timeout: timeout))
++        XCTAssertTrue(remaining.isHittable)
++        let resume = h.element("journey.timer.resume")
++        XCTAssertTrue(resume.waitForExistence(timeout: timeout))
++        XCTAssertTrue(resume.isHittable)
++        XCTAssertGreaterThanOrEqual(resume.frame.width, 44)
++        XCTAssertGreaterThanOrEqual(resume.frame.height, 44)
++
++        resume.tap()
++        let pause = h.element("journey.timer.pause")
++        XCTAssertTrue(pause.waitForExistence(timeout: timeout))
++        XCTAssertTrue(pause.isHittable)
++        XCTAssertGreaterThanOrEqual(pause.frame.width, 44)
++        XCTAssertGreaterThanOrEqual(pause.frame.height, 44)
++        XCTAssertEqual(h.app.scrollViews.count, 0)
++    }
++
++    // 깨짐: 동작 줄이기에서 일시정지·재개 결과(분 표기·경과)가 꺼졌을 때와 달라진다.
++    func testV7_AC30_동작_줄이기에서도_일시정지_재개_결과가_같다() throws {
++        let h = FocusMateUIHarness.launchJourney(
++            seed: "timerPaused90",
++            extraArguments: ["--fm-ui-reduce-motion", "on"]
++        )
++        XCTAssertTrue(h.element("journey.timer.remaining").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
++
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        h.advance(60)
++
++        XCTAssertEqual(try h.timerDiagnostic()["elapsed"] as? Int, 150)
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "23 min")
++        XCTAssertEqual(h.element("journey.timer.remaining").value as? String, "남은 시간 23분")
++    }
++}
+diff --git a/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift b/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift
+new file mode 100644
+index 0000000..6d1eb56
+--- /dev/null
++++ b/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift
+@@ -0,0 +1,170 @@
++import Foundation
++import XCTest
++
++/// 실제 분 타이머 UI 테스트 V4, V5, V6 (모두 --fm-ui-clock manual).
++@MainActor
++final class JourneyTimerLifecycleUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    private var journeyArguments: [String] {
++        FocusMateUIHarness.manualClockArguments + ["--fm-ui-route", "journey"]
++    }
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    private func runningFrom(_ seed: String) -> FocusMateUIHarness {
++        let h = FocusMateUIHarness.launchJourney(seed: seed)
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        return h
++    }
++
++    // MARK: V4 (AC-15, 16)
++
++    // 깨짐: 전환 저장 실패인데 일시정지가 적용되거나 안내가 없거나 저장값이 바뀌고, 재시도로 정지되지 않는다.
++    func testV4_AC15_일시정지_저장이_실패하면_계속_진행되고_안내가_나오며_다시_누르면_멈춘다() throws {
++        let h = runningFrom("timerPaused90")
++
++        h.failNextSave { h.tap("journey.timer.pause") }
++
++        XCTAssertTrue(h.element("journey.timer.saveFailure").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("journey.timer.pause").exists)
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++        XCTAssertEqual(try h.persistedPaused(), false)
++        XCTAssertEqual(try h.persistedElapsed(), 90)
++
++        h.tap("journey.timer.pause")
++
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.persistedPaused(), true)
++    }
++
++    // 깨짐: 체크포인트 실패 시 자동 일시정지·경고가 없거나 시계가 계속 흐르고, 재개 성공 후 경고가 남는다.
++    func testV4_AC16_체크포인트_저장이_실패하면_일시정지하고_경고하며_재개하면_경고가_사라진다() throws {
++        let h = runningFrom("timerPaused90")
++        h.advance(1, times: 9)
++
++        h.failNextSave { h.advance(1) }
++
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("journey.timer.saveWarning").exists)
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++        let frozen = try XCTUnwrap(try h.timerDiagnostic()["text"] as? String)
++        h.advance(600)
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, frozen)
++
++        h.tap("journey.timer.resume")
++
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.timer.saveWarning").exists)
++        XCTAssertEqual(try h.persistedPaused(), false)
++        XCTAssertEqual(try h.persistedElapsed(), 100)
++    }
++
++    // 깨짐: 재개 저장 실패인데 진행 상태로 바뀌거나 경고가 사라진다.
++    func testV4_AC16_재개_저장도_실패하면_일시정지와_경고가_유지된다() throws {
++        let h = runningFrom("timerPaused90")
++        h.advance(1, times: 9)
++        h.failNextSave { h.advance(1) }
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++
++        h.failNextSave { h.tap("journey.timer.resume") }
++
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("journey.timer.saveWarning").exists)
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++    }
++
++    // MARK: V5 (AC-7, 8, 11)
++
++    // 깨짐: 백그라운드 진입 시 저장을 안 하거나 복귀 시 흐른 600초를 반영하지 않거나 진행이 멈춘 채로 남는다.
++    func testV5_AC7_백그라운드에서_600초가_지나도_복귀하면_진행_상태로_700초다() throws {
++        let h = runningFrom("timerPaused90")
++        h.advance(10)
++        h.tap("test.clock.armForeground600")
++
++        h.goBackground()
++
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        // 진입 시점 (100,false) 저장은 단위 테스트 T5 AC-7이 검증한다. UI에서는 복귀 후 값만 본다.
++        // 복귀 시 tick 1회로 흐른 600초가 체크포인트로 즉시 저장된다.
++        XCTAssertEqual(try h.persistedElapsed(), 700)
++        XCTAssertEqual(try h.persistedPaused(), false)
++        XCTAssertEqual(try h.timerDiagnostic()["elapsed"] as? Int, 700)
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "14 min")
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++    }
++
++    // 깨짐: 백그라운드 중 도착을 복귀 때 반영하지 않거나 버튼이 남거나 경과가 1500을 넘는다.
++    func testV5_AC8_백그라운드_중_도착하면_복귀할_때_도착_상태가_된다() throws {
++        let h = runningFrom("timerNearArrival")
++        h.tap("test.clock.armForeground600")
++
++        h.goBackground()
++
++        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.persistedElapsed(), 1500)
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++        XCTAssertEqual(try h.recordCount(), 0)
++    }
++
++    // 깨짐: 종료 후 재실행이 메인이 아닌 곳으로 가거나, 미저장 5초·종료 중 시간이 반영되거나 paused로 복원되지 않는다.
++    func testV5_AC11_종료_뒤_재실행하면_메인에서_마지막_체크포인트가_일시정지로_복원된다() throws {
++        let h = runningFrom("timerPaused90")
++        h.advance(10, times: 3)
++        h.advance(1, times: 5)
++
++        h.relaunch()
++
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.memoryElapsed(), 120)
++        XCTAssertEqual(try h.memoryActive()?["paused"] as? Bool, true)
++    }
++
++    // MARK: V6 (AC-24, 25, 26)
++
++    // 깨짐: v3 출발 완료 여정이 일시정지·0초로 읽히지 않거나 재개 후 v4로 저장되지 않는다.
++    func testV6_AC24_v3_출발_완료_여정은_일시정지로_읽히고_재개하면_v4로_저장된다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "v3Departed")
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.memoryActive()?["paused"] as? Bool, true)
++        XCTAssertEqual(try h.memoryElapsed(), 0)
++
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++
++        XCTAssertEqual(try h.persistedJourney().version, 4)
++        XCTAssertEqual(try h.persistedPaused(), false)
++    }
++
++    // 깨짐: v3 출발 대기 여정이 유지되지 않거나 시작 버튼이 보이지 않는다.
++    func testV6_AC25_v3_출발_대기_여정은_출발_안내의_시작_버튼을_보여준다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "v3Awaiting")
++
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("journey.start").waitForExistence(timeout: 10))
++        XCTAssertEqual(try h.memoryActive()?["phase"] as? String, "awaitingDeparture")
++    }
++
++    // 깨짐: 361분 v3 여정이 버려지지 않거나 카드가 함께 사라진다.
++    func testV6_AC26_v3_361분_여정은_여정만_버려지고_카드는_유지된다() throws {
++        try assertInvalidV3JourneyDropped(seed: "v3InvalidMinutes")
++    }
++
++    // 깨짐: 카탈로그에 없는 정류장 v3 여정이 버려지지 않거나 카드가 함께 사라진다.
++    func testV6_AC26_v3_카탈로그_밖_정류장_여정은_여정만_버려지고_카드는_유지된다() throws {
++        try assertInvalidV3JourneyDropped(seed: "v3UnknownStop")
++    }
++
++    private func assertInvalidV3JourneyDropped(seed: String) throws {
++        let h = FocusMateUIHarness.launch(seed: seed, extraArguments: FocusMateUIHarness.manualClockArguments)
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("main.activeJourney").exists)
++        XCTAssertNil(try h.memoryActive())
++        XCTAssertGreaterThan(try h.cardCount(), 0)
++    }
++}
+diff --git a/ios/FocusMateUITests/JourneyTimerUITests.swift b/ios/FocusMateUITests/JourneyTimerUITests.swift
+new file mode 100644
+index 0000000..b28bb0f
+--- /dev/null
++++ b/ios/FocusMateUITests/JourneyTimerUITests.swift
+@@ -0,0 +1,193 @@
++import Foundation
++import XCTest
++
++/// 실제 분 타이머 UI 테스트 V1, V2, V3, V8 (모두 --fm-ui-clock manual).
++@MainActor
++final class JourneyTimerUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    private let briefingTimeout: TimeInterval = 10
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    private func launchBoardingWithManualClock() -> FocusMateUIHarness {
++        FocusMateUIHarness.launch(
++            seed: "ready",
++            extraArguments: FocusMateUIHarness.manualClockArguments + ["--fm-ui-route", "boarding"]
++        )
++    }
++
++    private func reachStartButton(_ h: FocusMateUIHarness) -> XCUIElement {
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++        h.tap("test.activateBoardingCard", timeout: timeout)
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++        let start = h.element("journey.start")
++        XCTAssertTrue(start.waitForExistence(timeout: briefingTimeout))
++        return start
++    }
++
++    // MARK: V1 (AC-1, 2, 17)
++
++    // 깨짐: 시작이 타이머를 띄우지 않거나, 남은 분을 잘못 계산하거나, 출발 완료·미일시정지·0초 저장을 하지 않는다.
++    func testV1_AC1_시작을_누르면_60분_타이머가_진행_상태로_시작한다() throws {
++        let h = launchBoardingWithManualClock()
++        reachStartButton(h).tap()
++
++        XCTAssertTrue(h.element("journey.timer.remaining").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "60 min")
++        let active = try XCTUnwrap(try h.memoryActive())
++        XCTAssertEqual(active["phase"] as? String, "departed")
++        XCTAssertEqual(active["paused"] as? Bool, false)
++        XCTAssertEqual(try h.memoryElapsed(), 0)
++        XCTAssertTrue(h.element("journey.timer.pause").exists)
++        XCTAssertFalse(h.element("journey.placeholder").exists)
++    }
++
++    // 깨짐: 시작 저장 실패인데 타이머 화면으로 넘어가거나 실패 안내가 없거나 저장값이 바뀐다.
++    func testV1_AC17_시작_저장이_실패하면_타이머로_넘어가지_않고_실패_안내가_나온다() throws {
++        let h = launchBoardingWithManualClock()
++        let start = reachStartButton(h)
++
++        h.failNextSave { start.tap() }
++
++        XCTAssertTrue(h.element("journey.saveFailure").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.timer.remaining").exists)
++        let active = try XCTUnwrap(try h.memoryActive())
++        XCTAssertEqual(active["phase"] as? String, "awaitingDeparture")
++        XCTAssertEqual(try h.memoryElapsed(), 0)
++    }
++
++    // MARK: V2 (AC-4, 5, 6, 10)
++
++    // 깨짐: 일시정지 중 시간이 흐르거나, 일시정지·재개 버튼 노출이 반대로 되거나, 재개 후 분 계산이 어긋난다.
++    func testV2_AC4_5_일시정지하면_시간이_멈추고_재개하면_다시_흐른다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        XCTAssertTrue(h.element("journey.timer.remaining").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
++        XCTAssertTrue(h.element("journey.timer.resume").exists)
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++
++        h.advance(600)
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
++        XCTAssertEqual(try h.memoryElapsed(), 90)
++
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++        h.advance(60)
++
++        XCTAssertEqual(try h.timerDiagnostic()["elapsed"] as? Int, 150)
++        XCTAssertEqual(try h.memoryActive()?["paused"] as? Bool, false)
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "23 min")
++    }
++
++    // 깨짐: 9초에 저장하거나 10초째에 체크포인트를 저장하지 않는다.
++    func testV2_AC10_체크포인트는_10초째에_저장된다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.persistedElapsed(), 90)
++
++        h.advance(1, times: 9)
++        XCTAssertEqual(try h.persistedElapsed(), 90)
++        XCTAssertEqual(try h.timerDiagnostic()["elapsed"] as? Int, 99)
++
++        h.advance(1)
++        XCTAssertEqual(try h.persistedElapsed(), 100)
++        XCTAssertEqual(try h.persistedPaused(), false)
++    }
++
++    // 깨짐: 연타가 전환을 중복 저장하거나 경과를 이중 가산한다(쓰기 횟수는 저장 바이트 변화로 확인).
++    func testV2_AC6_일시정지와_재개를_연타해도_전환은_한_번씩만_일어난다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        h.tap("journey.timer.resume")
++        h.advance(1, times: 5)
++        let pause = h.element("journey.timer.pause")
++        XCTAssertTrue(pause.waitForExistence(timeout: timeout))
++
++        pause.tap()
++        if pause.exists { pause.tap() }
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.persistedPaused(), true)
++        XCTAssertEqual(try h.persistedElapsed(), 95)
++        let afterPause = try h.persistedBytes()
++
++        h.advance(60)
++        let resume = h.element("journey.timer.resume")
++        resume.tap()
++        if resume.exists && resume.isHittable { resume.tap() }
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        XCTAssertNotEqual(try h.persistedBytes(), afterPause)
++        XCTAssertEqual(try h.persistedPaused(), false)
++        XCTAssertEqual(try h.persistedElapsed(), 95)
++        XCTAssertEqual(try h.timerDiagnostic()["elapsed"] as? Int, 95)
++    }
++
++    // MARK: V3 (AC-12, 13, 14, 31)
++
++    // 깨짐: 0분 도달 시 도착 표시가 없거나 버튼이 남거나 기록이 생기거나 재실행 뒤 도착 상태가 복원되지 않는다.
++    func testV3_AC12_13_31_남은_1분이_지나면_도착하고_재실행해도_도착_상태다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerNearArrival")
++        h.tap("journey.timer.resume")
++        h.advance(60)
++
++        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "0 min")
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++        XCTAssertEqual(try h.persistedElapsed(), 1500)
++        XCTAssertEqual(try h.recordCount(), 0)
++
++        h.advance(600)
++        XCTAssertEqual(try h.persistedElapsed(), 1500)
++
++        h.relaunch(extraArguments: FocusMateUIHarness.manualClockArguments + ["--fm-ui-route", "journey"])
++
++        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.timer.pause").exists)
++        XCTAssertFalse(h.element("journey.timer.resume").exists)
++        XCTAssertEqual(try h.memoryElapsed(), 1500)
++        XCTAssertEqual(try h.recordCount(), 0)
++    }
++
++    // MARK: V8 (AC-9)
++
++    private func assertStaysOnJourneyAfterSwipes(_ h: FocusMateUIHarness) throws {
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
++
++        let edge = h.app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
++        edge.press(forDuration: 0.1, thenDragTo: h.app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
++        let center = h.app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
++        center.press(forDuration: 0.1, thenDragTo: h.app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)))
++
++        XCTAssertTrue(h.element("screen.journey").exists)
++        XCTAssertFalse(h.element("screen.main").exists)
++        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
++        XCTAssertEqual(try h.timerDiagnostic()["path"] as? [String], ["journey"])
++    }
++
++    // 깨짐: 일시정지 화면에 뒤로가기 버튼이 보이거나 스와이프로 메인에 돌아간다.
++    func testV8_AC9_일시정지_화면은_뒤로가기와_스와이프로_나갈_수_없다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        try assertStaysOnJourneyAfterSwipes(h)
++    }
++
++    // 깨짐: 진행 중 화면에 뒤로가기 버튼이 보이거나 스와이프로 메인에 돌아간다.
++    func testV8_AC9_진행_중_화면은_뒤로가기와_스와이프로_나갈_수_없다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        try assertStaysOnJourneyAfterSwipes(h)
++    }
++
++    // 깨짐: 도착 화면에 뒤로가기 버튼이 보이거나 스와이프로 메인에 돌아간다.
++    func testV8_AC9_도착_화면은_뒤로가기와_스와이프로_나갈_수_없다() throws {
++        let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
++        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        try assertStaysOnJourneyAfterSwipes(h)
++    }
++}
+diff --git a/ios/FocusMateUITests/UITestLaunchSupport.swift b/ios/FocusMateUITests/UITestLaunchSupport.swift
+index bb5ff49..bb56a7b 100644
+--- a/ios/FocusMateUITests/UITestLaunchSupport.swift
++++ b/ios/FocusMateUITests/UITestLaunchSupport.swift
+@@ -28,11 +28,11 @@ struct FocusMateUIHarness {
+         return FocusMateUIHarness(app: app, testID: testID)
+     }
+ 
+-    /// 앱을 끄고 같은 저장소로 인자 없이 다시 연다.
++    /// 앱을 끄고 같은 저장소로 다시 연다. 추가 인자가 없으면 인자 없이 연다.
+     @MainActor
+-    func relaunch() {
++    func relaunch(extraArguments: [String] = []) {
+         app.terminate()
+-        app.launchArguments = ["--fm-ui-test-id", testID.uuidString]
++        app.launchArguments = ["--fm-ui-test-id", testID.uuidString] + extraArguments
+         app.launch()
+     }
+ 
+@@ -55,3 +55,120 @@ struct FocusMateUIHarness {
+         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+     }
+ }
++
++/// 여행 타이머 UI 테스트 공용 도우미 (수동 시계 전제).
++extension FocusMateUIHarness {
++    static let manualClockArguments = ["--fm-ui-clock", "manual"]
++
++    /// 수동 시계 + 여행 화면 진입 경로로 시드 상태에서 연다.
++    @MainActor
++    static func launchJourney(seed: String, extraArguments: [String] = []) -> FocusMateUIHarness {
++        launch(
++            seed: seed,
++            extraArguments: manualClockArguments + ["--fm-ui-route", "journey"] + extraArguments
++        )
++    }
++
++    @MainActor
++    func timerDiagnostic() throws -> [String: Any] {
++        let raw = try diagnostic("test.timer")
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++
++    /// 메모리 상태의 진행 여정(test.snapshot). 없으면 nil.
++    @MainActor
++    func memoryActive() throws -> [String: Any]? {
++        let journey = try XCTUnwrap(try snapshot()["journey"] as? [String: Any])
++        return journey["active"] as? [String: Any]
++    }
++
++    @MainActor
++    func memoryElapsed() throws -> Int? {
++        let progress = try memoryActive()?["progress"] as? [String: Any]
++        return progress?["elapsedSeconds"] as? Int
++    }
++
++    /// 파일에 저장된 바이트 문자열(test.persistedBytes) 원문.
++    @MainActor
++    func persistedBytes() throws -> String {
++        try diagnostic("test.persistedBytes")
++    }
++
++    /// 저장된 바이트를 JSON으로 읽어 "active" 사전과 최상위 version을 찾는다.
++    @MainActor
++    func persistedJourney() throws -> (version: Int?, active: [String: Any]?) {
++        let raw = try persistedBytes()
++        // persistedBytes는 파일 바이트의 base64 문자열이다("absent"/"unreadable"은 디코드 실패로 드러난다).
++        let data = try XCTUnwrap(Data(base64Encoded: raw), "persistedBytes가 base64가 아님: \(raw)")
++        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++        func find(_ node: Any) -> [String: Any]? {
++            guard let dict = node as? [String: Any] else { return nil }
++            if let active = dict["active"] as? [String: Any] { return active }
++            for value in dict.values { if let found = find(value) { return found } }
++            return nil
++        }
++        return (root["version"] as? Int, find(root))
++    }
++
++    @MainActor
++    func persistedElapsed() throws -> Int? {
++        let progress = try persistedJourney().active?["progress"] as? [String: Any]
++        return progress?["elapsedSeconds"] as? Int
++    }
++
++    @MainActor
++    func persistedPaused() throws -> Bool? {
++        try persistedJourney().active?["paused"] as? Bool
++    }
++
++    @MainActor
++    func tap(_ identifier: String, timeout: TimeInterval = FocusMateUIHarness.timeout) {
++        let target = element(identifier)
++        XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing: \(identifier)")
++        target.tap()
++    }
++
++    /// 다음 저장 1건을 실패시키고 곧바로 action을 실행한다(수동 시계에는 자율 쓰기가 없어 결정적이다).
++    @MainActor
++    func failNextSave(then action: () -> Void) {
++        tap("test.failNextSave")
++        action()
++    }
++
++    @MainActor
++    func advance(_ seconds: Int, times: Int = 1) {
++        for _ in 0..<times { tap("test.clock.advance\(seconds)") }
++    }
++
++    @MainActor
++    func waitForTimerText(_ text: String, timeout: TimeInterval = FocusMateUIHarness.timeout) -> Bool {
++        let deadline = Date().addingTimeInterval(timeout)
++        while Date() < deadline {
++            if (try? timerDiagnostic()["text"] as? String) == text { return true }
++            Thread.sleep(forTimeInterval: 0.1)
++        }
++        return false
++    }
++
++    @MainActor
++    func goBackground() {
++        XCUIDevice.shared.press(.home)
++        Thread.sleep(forTimeInterval: 1)
++        app.activate()
++    }
++}
++
++extension FocusMateUIHarness {
++    @MainActor
++    func recordCount() throws -> Int {
++        let records = try XCTUnwrap(try snapshot()["records"] as? [String: Any])
++        return try XCTUnwrap(records["items"] as? [Any]).count
++    }
++
++    @MainActor
++    func cardCount() throws -> Int {
++        let cards = try XCTUnwrap(try snapshot()["cards"] as? [String: Any])
++        return try XCTUnwrap(cards["items"] as? [Any]).count
++    }
++}

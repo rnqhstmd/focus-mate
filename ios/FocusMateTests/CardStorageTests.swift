@@ -36,7 +36,7 @@ final class CardStorageTests: XCTestCase {
             XCTAssertEqual(try Data(contentsOf: fileURL), firstBytes)
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 3)
+            XCTAssertEqual(root["version"] as? Int, 4)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             let cards = try XCTUnwrap(state["cards"] as? [String: Any])
             let items = try XCTUnwrap(cards["items"] as? [[String: Any]])

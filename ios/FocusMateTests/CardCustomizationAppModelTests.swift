@@ -453,7 +453,7 @@ final class CardCustomizationAppModelTests: XCTestCase {
             XCTAssertTrue(controller.save())
             // Then: no seed on relaunch.
             let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 3)
+            XCTAssertEqual(root["version"] as? Int, 4)
             let restarted = loadedModel(url)
             XCTAssertEqual(restarted.currentCardStyle, CardStyle(background: Self.editedColor, photos: []))
             assertIdentity(restarted.snapshot)

@@ -14,7 +14,7 @@
 
 ## 향후 네이티브와 후순위
 
-iOS 실제 분 타이머는 W05에서 구현됐다: `JourneyTimerController`(단조 시계 `JourneyClock`·틱 `JourneyTicker` 주입, 상태 running/paused/arrived)가 진도를 소유하고 `AppModel.saveJourneyProgress`로 저장한다(저장 형식 v4). 앱 생명주기(포기·이어가기)와 MapKit 기본 지도/앱 내 가상 코스는 iOS MVP 예정(W07·W06). 실제 GPS·버스 API·실시간 위치·기기 간 재개는 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
+iOS 실제 분 타이머는 W05에서 구현됐다: `JourneyTimerController`(단조 시계 `JourneyClock`·틱 `JourneyTicker` 주입, 상태 running/paused/arrived)가 진도를 소유하고 `AppModel.saveJourneyProgress`로 저장한다(저장 형식 v4). 앱 생명주기(포기·이어가기)는 W07에서 구현됐다: `JourneyReach`가 도달 정류장 규칙(경과÷간격의 몫, 방향 유지)과 `AppSnapshot.endingActiveJourney`(현재 정류장 변경과 진행 여정 삭제를 한 스냅샷으로)를 맡아 포기·새 여정이 한 번의 저장이 된다. `AppModel+JourneyLifecycle`의 이어가기·새 여정 확정·포기는 `LifecycleActionResult`(done/rejected/saveFailed)를 반환하고, 포기는 `abandonJourney(timerPaused:)` 계약으로 컨트롤러의 일시정지 상태를 받아 모델이 BR-6을 강제한다(`JourneyAbandonController`/`JourneyAbandonBar`가 확인 창 상태를 가짐). 컨트롤러 autoStart는 '시작'을 직접 본 경우에 더해 이번 실행에서 이어가기 저장에 성공한 같은 여정(1회용 메모리 신호)도 포함한다. 이 저장들은 실패를 호출자가 직접 안내하는 `saveHandlingFailure`를 써서 일반 `saveFailure`를 남기지 않는다. 저장 형식은 v4 그대로다. MapKit 기본 지도/앱 내 가상 코스는 iOS MVP 예정(W06). 실제 GPS·버스 API·실시간 위치·기기 간 재개는 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
 
 ## 주제 문서
 

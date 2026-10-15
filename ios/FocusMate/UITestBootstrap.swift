@@ -19,6 +19,7 @@ struct UITestBootstrap {
     let boardingSaveFailure: UITestCardSaveFailure
     let manualClock: Bool
     let nextSaveFailure = UITestNextSaveFailure()
+    let writeCounter = UITestWriteCounter()
     enum IssueHold { case standard, manual }
     private let recoveryScenario: String?
     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
@@ -145,7 +146,7 @@ struct UITestBootstrap {
     }
 
     private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
-        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds)
+        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys)
 
     func prepare() throws {
         guard let seed else { return }
@@ -160,6 +161,9 @@ struct UITestBootstrap {
                 .updating(journey: JourneySection(active: Self.seededJourney)))
         case let name where Self.timerSeeds[name] != nil:
             try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
+        case let name where Self.lifecycleSeeds[name] != nil:
+            guard let snapshot = Self.lifecycleSnapshot(name) else { throw SetupIssue.invalidArguments }
+            try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
         case let name where Self.v3Seeds.contains(name):
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Self.v3Bytes(name).write(to: fileURL, options: .atomic)
@@ -177,6 +181,7 @@ struct UITestBootstrap {
         let cardFailure = cardSaveFailure
         let boardingFailure = boardingSaveFailure
         let nextFailure = nextSaveFailure
+        let counter = writeCounter
         var activeReads = 0
         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
             if url == activeURL {
@@ -187,6 +192,8 @@ struct UITestBootstrap {
             }
             return try Data(contentsOf: url)
         }, writeData: { data, url in
+            // 실패 주입보다 먼저 세어 실패한 시도도 포함한다(test.writeAttempts).
+            counter.record()
             if failSave || cardFailure.consume() || boardingFailure.consume() || nextFailure.consume() { throw StorageIssue.writeFailed }
             try data.write(to: url, options: .atomic)
         }, writeBackup: { data, url in
@@ -211,7 +218,7 @@ struct UITestBootstrap {
     /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
     @MainActor func applyRoute(to model: AppModel) throws {
         if route == "journey" {
-            // 진단용 진입. 실제 재진입(이어가기)은 W07이다.
+            // 진단용 진입(autoStart 없음). 실제 이어가기는 `resumeJourney`다.
             guard model.launchState == .ready(.main), model.activeJourney != nil else { throw SetupIssue.invalidSaveState }
             model.open(.journey)
             return
@@ -283,6 +290,42 @@ struct UITestBootstrap {
     private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot {
         readySnapshot.issuingCard(fixedCard)
             .updating(journey: JourneySection(active: timerJourney(phase: .departed, elapsed: elapsed, paused: true)))
+    }
+
+    /// W07 시드: 재실행된 상태(출발 후 일시정지)의 2014번 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
+    private struct LifecycleSeed { let originStopID: String; let direction: Int; let elapsed: Int? }
+    private static let lifecycleSeeds: [String: LifecycleSeed] = [
+        "lifePaused90": .init(originStopID: "seongsu", direction: 1, elapsed: 90),
+        "lifePaused600": .init(originStopID: "seongsu", direction: 1, elapsed: 600),
+        "lifePaused0": .init(originStopID: "seongsu", direction: 1, elapsed: 0),
+        "lifePaused299": .init(originStopID: "seongsu", direction: 1, elapsed: 299),
+        "lifePaused300": .init(originStopID: "seongsu", direction: 1, elapsed: 300),
+        "lifePaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499),
+        "lifeReverse300": .init(originStopID: "seongsu", direction: -1, elapsed: 300),
+        "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", direction: 1, elapsed: 900),
+        "lifeArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500),
+        "lifeAwaiting": .init(originStopID: "seongsu", direction: 1, elapsed: nil),
+    ]
+    private static let lifecycleRecord = RecordSnapshot(
+        id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014", tag: "독서",
+        tagColor: "#12ABef", task: "책 한 챕터 읽기", minutes: 25, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
+
+    static func lifecycleSnapshot(_ name: String) -> AppSnapshot? {
+        guard let seed = lifecycleSeeds[name], let bus = BusLine.all.first(where: { $0.id == "2014" }),
+              let origin = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction, stops: 0),
+              let destination = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction,
+                                                     stops: 25 / bus.minutesPerStop) else { return nil }
+        let journey = JourneySnapshot(
+            id: "seed-life", cardID: fixedCard.id, originStopID: seed.originStopID, direction: seed.direction, minutes: 25,
+            busID: bus.id, destinationStopID: destination.id,
+            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "생명주기 시드",
+            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000),
+            phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
+            progress: JourneySnapshot.Progress(elapsedSeconds: seed.elapsed ?? 0), paused: seed.elapsed != nil)
+        return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: origin, currentStation: origin)
+            .issuingCard(fixedCard)
+            .updating(records: RecordSection(items: [lifecycleRecord]))
+            .updating(journey: JourneySection(active: journey))
     }
 
     /// v4로 만든 뒤 version을 3으로 바꾸고 paused 키를 지운다. 손상 시드는 그 위에서 값만 바꾼다.
@@ -392,6 +435,13 @@ final class UITestNextSaveFailure {
         pending -= 1
         return true
     }
+}
+
+/// `test.writeAttempts`: 이 프로세스에서 앱 저장소에 시도한 쓰기 수(실패 포함). 재실행마다 0부터다.
+@Observable
+final class UITestWriteCounter {
+    private(set) var attempts = 0
+    func record() { attempts += 1 }
 }
 
 /// `--fm-ui-save fail-once-boarding`: 승차 저장 직전에만 한 번 실패를 건다.

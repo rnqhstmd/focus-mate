@@ -47,14 +47,11 @@ extension AppModel {
         return true
     }
 
-    /// 메인 '여행 시작하기'. 진행 여정이 있으면 기록 없이 정리한 뒤 시간 선택으로 간다(W07 이어가기 전 임시 동작).
-    /// 정리 저장에 실패하면 이동하지 않는다 — 정리됐다고 믿은 채 새 여행을 시작하는 불일치를 막는다.
+    /// 메인 '여행 시작하기'. 진행 여정이 있으면 거부한다 — 여정 정리는 확인을 거친 `confirmNewJourney`만 한다(W07).
     @discardableResult
     func startTripFromMain() -> Bool {
-        if let snapshot, snapshot.journey.active != nil {
-            guard save(snapshot.updating(journey: .empty)) else { return false }
-        }
-        // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.
+        guard snapshot?.journey.active == nil else { return false }
+        // 남아 있던 확정값으로 뒤늦게 승차가 저장되지 않도록 버린다.
         discardConfirmedPreparation()
         open(Destination.preparation.mainMenuTarget)
         return true

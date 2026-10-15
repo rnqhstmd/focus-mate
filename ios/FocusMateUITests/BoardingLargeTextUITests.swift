@@ -66,6 +66,10 @@ final class BoardingLargeTextUITests: XCTestCase {
         reach(open, in: h.app)
         open.tap()
 
+        let confirmNewJourney = h.alertButton("main.newJourney.confirm", label: "새 여정 시작")
+        XCTAssertTrue(confirmNewJourney.waitForExistence(timeout: timeout))
+        confirmNewJourney.tap()
+
         XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
         let wheel = h.app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: timeout))

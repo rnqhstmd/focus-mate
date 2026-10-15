@@ -1,0 +1,711 @@
+diff --git a/ios/FocusMate/AppModel+Boarding.swift b/ios/FocusMate/AppModel+Boarding.swift
+index a48ee64..6432e0b 100644
+--- a/ios/FocusMate/AppModel+Boarding.swift
++++ b/ios/FocusMate/AppModel+Boarding.swift
+@@ -47,14 +47,11 @@ extension AppModel {
+         return true
+     }
+ 
+-    /// 메인 '여행 시작하기'. 진행 여정이 있으면 기록 없이 정리한 뒤 시간 선택으로 간다(W07 이어가기 전 임시 동작).
+-    /// 정리 저장에 실패하면 이동하지 않는다 — 정리됐다고 믿은 채 새 여행을 시작하는 불일치를 막는다.
++    /// 메인 '여행 시작하기'. 진행 여정이 있으면 거부한다 — 여정 정리는 확인을 거친 `confirmNewJourney`만 한다(W07).
+     @discardableResult
+     func startTripFromMain() -> Bool {
+-        if let snapshot, snapshot.journey.active != nil {
+-            guard save(snapshot.updating(journey: .empty)) else { return false }
+-        }
+-        // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.
++        guard snapshot?.journey.active == nil else { return false }
++        // 남아 있던 확정값으로 뒤늦게 승차가 저장되지 않도록 버린다.
+         discardConfirmedPreparation()
+         open(Destination.preparation.mainMenuTarget)
+         return true
+diff --git a/ios/FocusMate/AppModel+JourneyLifecycle.swift b/ios/FocusMate/AppModel+JourneyLifecycle.swift
+new file mode 100644
+index 0000000..5d48e96
+--- /dev/null
++++ b/ios/FocusMate/AppModel+JourneyLifecycle.swift
+@@ -0,0 +1,56 @@
++import Foundation
++
++/// W07 이어가기·새 여정·포기. 각 동작은 한 번만 저장하고, 실패하면 아무것도 바꾸지 않은 채 `.saveFailed`를 돌려준다(BR-4, BR-7).
++/// 연타는 시간이 아니라 상태(path·active)로 막는다(BR-8).
++extension AppModel: JourneyAbandoning {
++    var activeJourneyCard: ActiveJourneyCardContent? { activeJourney.flatMap(ActiveJourneyCardContent.init(journey:)) }
++
++    var mainStartTitle: String {
++        activeJourney == nil ? Destination.preparation.mainMenuTitle : JourneyLifecycleText.newJourneyButton
++    }
++
++    /// 출발한 여정은 (저장 경과, 진행 중)으로 저장한 뒤 바로 흐르게 연다. 출발 대기는 저장 없이 출발 안내부터 다시 연다.
++    @discardableResult
++    func resumeJourney() -> LifecycleActionResult {
++        guard launchState == .ready(.main), path.isEmpty, let snapshot, let active = snapshot.journey.active,
++              !active.isArrived else { return .rejected }
++        if active.phase == .departed {
++            let running = active.updatingProgress(elapsedSeconds: active.progress.elapsedSeconds, paused: false)
++            guard saveHandlingFailure(snapshot.updating(journey: JourneySection(active: running))) else { return .saveFailed }
++            resumeEntryJourneyID = active.id
++        }
++        open(.journey)
++        return .done
++    }
++
++    /// 이어가기로 연 같은 여정이면 한 번만 true를 돌려준다. 타이머 자동 진행·낭독의 근거다.
++    func consumeResumeEntry(journeyID: String) -> Bool {
++        guard resumeEntryJourneyID == journeyID else { return false }
++        resumeEntryJourneyID = nil
++        return true
++    }
++
++    /// 메인 '새 여정 시작' 확정. 도달 정류장을 현재 정류장으로 두고 여정을 지운 뒤 시간 선택으로 간다.
++    @discardableResult
++    func confirmNewJourney() -> LifecycleActionResult {
++        guard launchState == .ready(.main), path.isEmpty, let snapshot, let station = snapshot.journey.active?.reachedStation
++        else { return .rejected }
++        guard saveHandlingFailure(snapshot.endingActiveJourney(at: station)) else { return .saveFailed }
++        // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.
++        discardConfirmedPreparation()
++        open(Destination.preparation.mainMenuTarget)
++        return .done
++    }
++
++    /// 일시정지 중인 출발 후 여정만 포기한다(BR-6). 도달 정류장은 마지막으로 저장된 경과로 정한다(BR-1).
++    @discardableResult
++    func abandonJourney(timerPaused: Bool) -> LifecycleActionResult {
++        guard timerPaused, launchState == .ready(.main), path.last == .journey, let snapshot,
++              let active = snapshot.journey.active, active.phase == .departed, !active.isArrived,
++              let station = active.reachedStation else { return .rejected }
++        guard saveHandlingFailure(snapshot.endingActiveJourney(at: station)) else { return .saveFailed }
++        path = []
++        abandonNotice = station.name
++        return .done
++    }
++}
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index 0dae68c..b67bc88 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -77,6 +77,10 @@ final class AppModel {
+         storedPreparationRequest = nil
+         return request
+     }
++    /// 포기한 정류장 이름. 메인 안내용 메모리 값이며 다른 화면으로 가면 지운다(BR-10). 설정은 lifecycle 확장에서만 한다.
++    var abandonNotice: String?
++    /// 이번 실행에서 이어가기 저장에 성공한 여정 id. 타이머가 한 번 소비한다.
++    @ObservationIgnored var resumeEntryJourneyID: String?
+     private(set) var recoveryFailure: StorageRecoveryIssue?
+     private(set) var isRecovering = false
+     private(set) var hasAttemptedCleanup = false
+@@ -201,6 +205,13 @@ final class AppModel {
+         return saveFailure == nil
+     }
+ 
++    /// 실패를 호출자가 그 화면에서 직접 안내하는 저장(W07). 실패해도 상태가 바뀌지 않았으므로 일반 `saveFailure`를 남기지 않는다.
++    func saveHandlingFailure(_ candidate: AppSnapshot) -> Bool {
++        guard !isRecovering, persist(candidate) == nil else { return false }
++        saveFailure = nil
++        return true
++    }
++
+     /// 저장에 성공하면 snapshot·경로를 바꾸고 nil, 실패하면 아무것도 바꾸지 않고 원인을 돌려준다.
+     private func persist(_ candidate: AppSnapshot) -> StorageIssue? {
+         guard case let .ready(previousRoute) = launchState else {
+@@ -262,6 +273,7 @@ final class AppModel {
+ 
+     func open(_ destination: Destination) {
+         guard launchState == .ready(.main) else { return }
++        abandonNotice = nil
+         // 승차권·승차 태그는 확정된 준비가 있을 때만 열린다(어떤 경로로도 미완성 준비로 들어가지 않는다).
+         if destination == .board || destination == .boarding, confirmedPreparation == nil || hasDepartedJourney { return }
+         if destination == .journey, activeJourney == nil { return }
+@@ -269,7 +281,7 @@ final class AppModel {
+     }
+     func goBack() {
+         guard launchState == .ready(.main), !path.isEmpty else { return }
+-        // 출발한 여행 화면에서는 메인으로 돌아가지 않는다(나가기는 W07).
++        // 출발한 여행 화면에서 메인으로 가는 길은 포기뿐이다(W07, FR-10).
+         if path.last == .journey, hasDepartedJourney { return }
+         path.removeLast()
+     }
+@@ -280,6 +292,8 @@ extension AppModel: CardCustomizationSaving {
+     func beginCardCustomization() -> CardCustomizationController? {
+         guard case .ready = launchState, let snapshot, snapshot.cardIssued,
+               let card = snapshot.currentCard else { return nil }
++        // 꾸미기 화면은 `open`을 거치지 않으므로 포기 안내를 여기서 지운다(BR-10).
++        abandonNotice = nil
+         return CardCustomizationController(card: card, saver: self)
+     }
+ 
+diff --git a/ios/FocusMateTests/BoardingModelTests.swift b/ios/FocusMateTests/BoardingModelTests.swift
+index 82f7122..5506136 100644
+--- a/ios/FocusMateTests/BoardingModelTests.swift
++++ b/ios/FocusMateTests/BoardingModelTests.swift
+@@ -301,13 +301,27 @@ final class BoardingModelTests: XCTestCase {
+ 
+     // MARK: AC-27
+ 
+-    // 깨짐: 새 여행 시작이 active를 폐기하지 않거나 .time을 열지 않거나 records를 건드리면 실패.
++    // 깨짐: 확인 없이 startTripFromMain이 active를 폐기하면 true/쓰기 발생으로 실패.
+     @MainActor
+-    func testAC27_진행여정이_있으면_폐기하고_시간선택을_연다() throws {
++    func testAC27_진행여정이_있으면_startTripFromMain은_false이고_쓰기없이_유지한다() throws {
++        let probe = Probe()
++        let old = F.journey()
++        let model = try makeModel(active: old, probe: probe)
++
++        XCTAssertFalse(model.startTripFromMain())
++
++        XCTAssertEqual(probe.writes.count, 0)
++        XCTAssertEqual(model.activeJourney, old)
++        XCTAssertEqual(model.path, [])
++    }
++
++    // 깨짐: 새 여정 확정이 active를 폐기하지 않거나 .time을 열지 않거나 records를 건드리면 실패.
++    @MainActor
++    func testAC27_새여정_확정이_진행여정을_폐기하고_시간선택을_연다() throws {
+         let probe = Probe()
+         let model = try makeModel(active: F.journey(), probe: probe)
+ 
+-        XCTAssertTrue(model.startTripFromMain())
++        XCTAssertEqual(model.confirmNewJourney(), .done)
+ 
+         XCTAssertEqual(model.path.last, .time)
+         XCTAssertNil(model.activeJourney)
+@@ -316,19 +330,19 @@ final class BoardingModelTests: XCTestCase {
+         XCTAssertEqual(model.snapshot?.records.items.count, 0)
+     }
+ 
+-    // 깨짐: 폐기 실패인데 .time으로 이동하거나 active를 지우면 실패.
++    // 깨짐: 폐기 실패인데 .time으로 이동하거나 active를 지우거나 일반 saveFailure를 남기면 실패.
+     @MainActor
+-    func testAC27_폐기가_실패하면_이동하지_않고_진행여정이_남는다() throws {
++    func testAC27_새여정_확정이_실패하면_이동하지_않고_진행여정이_남는다() throws {
+         let probe = Probe()
+         let old = F.journey()
+         let model = try makeModel(active: old, probe: probe)
+         probe.shouldFail = true
+ 
+-        XCTAssertFalse(model.startTripFromMain())
++        XCTAssertEqual(model.confirmNewJourney(), .saveFailed)
+ 
+         XCTAssertEqual(model.path, [])
+         XCTAssertEqual(model.activeJourney, old)
+-        XCTAssertEqual(model.saveFailure, .writeFailed)
++        XCTAssertNil(model.saveFailure)
+     }
+ 
+     // 깨짐: active가 없는데 저장하면 실패.
+diff --git a/ios/FocusMateTests/JourneyLifecycleModelTests.swift b/ios/FocusMateTests/JourneyLifecycleModelTests.swift
+new file mode 100644
+index 0000000..f5d0ee8
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyLifecycleModelTests.swift
+@@ -0,0 +1,465 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 이어가기·새 여정·포기 모델 동작 (T4). 현재 정류장은 출발지 성수역(1), 완료 기록 1건 포함.
++final class JourneyLifecycleModelTests: XCTestCase {
++    private typealias F = BoardingFixtures
++
++    private static let station = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
++
++    private func active(elapsed: Int, paused: Bool = true, phase: JourneySnapshot.Phase = .departed) -> JourneySnapshot {
++        F.journey(
++            minutes: 25, destinationStopID: "seoulForestGate",
++            phase: phase, elapsedSeconds: elapsed, paused: paused
++        )
++    }
++
++    private func appSnapshot(active: JourneySnapshot?) -> AppSnapshot {
++        let record = RecordSnapshot(
++            id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014",
++            tag: "독서", tagColor: "#12ABef", task: "책 한 챕터 읽기", minutes: 25, sound: "빗소리",
++            from: "성수역", to: "서울숲 입구", memo: ""
++        )
++        return XCTestCase.stage(true, Self.station, Self.station)
++            .issuingCard(CardSnapshot(id: F.cardID, issuedAt: F.boardedAt))
++            .updating(records: RecordSection(items: [record]))
++            .updating(journey: JourneySection(active: active))
++    }
++
++    @MainActor
++    private func makeModel(active: JourneySnapshot?, probe: LifecycleProbe) throws -> AppModel {
++        let bytes = try SnapshotCodec.encode(appSnapshot(active: active))
++        let store = LocalSnapshotStore(
++            fileURL: URL(fileURLWithPath: "/unused/app-state.json"),
++            readData: { _ in bytes },
++            createDirectory: { _ in },
++            writeData: { data, _ in try probe.record(data) }
++        )
++        let factory = ActiveJourneyFactory(makeID: { "new-journey" }, now: { F.boardedAt })
++        let model = AppModel(store: store, journeyFactory: factory)
++        model.loadIfNeeded()
++        XCTAssertEqual(model.launchState, .ready(.main))
++        return model
++    }
++
++    /// 포기 진입 상태: 저장된 일시정지 여정이 있고 타이머 화면이 열려 있다.
++    @MainActor
++    private func timerOpen(elapsed: Int, probe: LifecycleProbe) throws -> AppModel {
++        let model = try makeModel(active: active(elapsed: elapsed), probe: probe)
++        model.open(.journey)
++        XCTAssertEqual(model.path, [.journey])
++        return model
++    }
++
++    private func lastSaved(_ probe: LifecycleProbe) throws -> AppSnapshot {
++        try SnapshotCodec.decode(try XCTUnwrap(probe.writes.last))
++    }
++
++    // MARK: 이어가기 (AC-4, 5, 35, 23, 24)
++
++    // 깨짐: 저장 경과를 바꾸거나 paused를 true로 두거나 path를 안 열면 실패.
++    @MainActor
++    func testAC4_이어가기는_경과_90_paused_false를_한번_저장하고_타이머를_연다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 90), probe: probe)
++
++        XCTAssertEqual(model.resumeJourney(), .done)
++
++        XCTAssertEqual(probe.attempts, 1)
++        XCTAssertEqual(probe.writes.count, 1)
++        let saved = try XCTUnwrap(try lastSaved(probe).journey.active)
++        XCTAssertEqual(saved.progress.elapsedSeconds, 90)
++        XCTAssertFalse(saved.paused)
++        XCTAssertEqual(model.path, [.journey])
++    }
++
++    // 깨짐: 이어가기가 완료 기록을 만들거나 지우면 실패.
++    @MainActor
++    func testAC31_이어가기는_완료기록_수를_바꾸지_않는다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 90), probe: probe)
++
++        model.resumeJourney()
++
++        XCTAssertEqual(try lastSaved(probe).records.items.count, 1)
++        XCTAssertEqual(model.snapshot?.records.items.count, 1)
++    }
++
++    // 깨짐: path 가드가 없으면 두 번째도 저장해 attempts 2, .done이 된다.
++    @MainActor
++    func testAC5_이어가기_연타의_두번째는_rejected이고_시도는_1회다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 90), probe: probe)
++
++        XCTAssertEqual(model.resumeJourney(), .done)
++        XCTAssertEqual(model.resumeJourney(), .rejected)
++
++        XCTAssertEqual(probe.attempts, 1)
++        XCTAssertEqual(model.path, [.journey])
++    }
++
++    // 깨짐: 첫 호출 전에도 true거나 두 번째 호출도 true면 실패.
++    @MainActor
++    func testR_consumeResumeEntry는_이어가기_성공_후_처음만_true다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 90), probe: probe)
++        XCTAssertFalse(model.consumeResumeEntry(journeyID: "journey-1"))
++
++        model.resumeJourney()
++
++        XCTAssertTrue(model.consumeResumeEntry(journeyID: "journey-1"))
++        XCTAssertFalse(model.consumeResumeEntry(journeyID: "journey-1"))
++    }
++
++    // 깨짐: 실패를 .done으로 보고하거나 이동하거나 저장값/신호를 바꾸거나 일반 saveFailure를 남기면 실패.
++    @MainActor
++    func testAC35_이어가기_저장실패는_saveFailed이고_이동과_저장값과_신호가_없다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 90), probe: probe)
++        probe.shouldFail = true
++
++        XCTAssertEqual(model.resumeJourney(), .saveFailed)
++
++        XCTAssertEqual(probe.attempts, 1)
++        XCTAssertEqual(probe.writes.count, 0)
++        XCTAssertEqual(model.path, [])
++        XCTAssertEqual(model.activeJourney?.progress.elapsedSeconds, 90)
++        XCTAssertEqual(model.activeJourney?.paused, true)
++        XCTAssertFalse(model.consumeResumeEntry(journeyID: "journey-1"))
++        XCTAssertNil(model.saveFailure)
++    }
++
++    // 깨짐: 실패 후 재시도가 막히거나 결과가 AC-4와 다르면 실패.
++    @MainActor
++    func testAC35_이어가기_실패_뒤_재시도하면_성공한다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 90), probe: probe)
++        probe.shouldFail = true
++        model.resumeJourney()
++        probe.shouldFail = false
++
++        XCTAssertEqual(model.resumeJourney(), .done)
++
++        XCTAssertEqual(probe.attempts, 2)
++        XCTAssertEqual(probe.writes.count, 1)
++        XCTAssertEqual(model.path, [.journey])
++    }
++
++    // 깨짐: 출발 대기 여정에 저장하면 attempts가 1이 되고, 화면을 안 열면 path가 달라 실패.
++    @MainActor
++    func testAC23_출발대기_여정의_이어가기는_쓰기없이_타이머_화면을_연다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 0, paused: false, phase: .awaitingDeparture), probe: probe)
++
++        XCTAssertEqual(model.resumeJourney(), .done)
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.path, [.journey])
++    }
++
++    // 깨짐: 도착 여정에서 이어가기를 허용하면 .done/쓰기 발생으로 실패.
++    @MainActor
++    func testAC24_도착_여정의_이어가기는_rejected이고_쓰기가_없다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 1500), probe: probe)
++
++        XCTAssertEqual(model.resumeJourney(), .rejected)
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.path, [])
++    }
++
++    // MARK: 새 여정 (AC-8, 10, 11, 12, 23, 24)
++
++    // 깨짐: 현재 정류장을 도달 정류장으로 바꾸지 않거나 active를 안 지우거나 쓰기가 2회거나 .time을 안 열면 실패.
++    @MainActor
++    func testAC8_새여정_확정은_도달정류장_저장_여정삭제_시간선택_이동을_한번에_한다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 600), probe: probe)
++
++        XCTAssertEqual(model.confirmNewJourney(), .done)
++
++        XCTAssertEqual(probe.writes.count, 1)
++        let saved = try lastSaved(probe)
++        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "ttukseom", name: "뚝섬역", direction: 1))
++        XCTAssertNil(saved.journey.active)
++        XCTAssertEqual(saved.records.items.count, 1)
++        XCTAssertEqual(model.path, [.time])
++        XCTAssertNil(model.activeJourney)
++    }
++
++    // 깨짐: 실패를 .done으로 보고하거나 상태를 바꾸거나 일반 saveFailure를 남기면 실패.
++    @MainActor
++    func testAC10_새여정_저장실패는_saveFailed이고_상태가_불변이다() throws {
++        let probe = LifecycleProbe()
++        let old = active(elapsed: 600)
++        let model = try makeModel(active: old, probe: probe)
++        let before = model.snapshot
++        probe.shouldFail = true
++
++        XCTAssertEqual(model.confirmNewJourney(), .saveFailed)
++
++        XCTAssertEqual(probe.attempts, 1)
++        XCTAssertEqual(probe.writes.count, 0)
++        XCTAssertEqual(model.path, [])
++        XCTAssertEqual(model.snapshot, before)
++        XCTAssertEqual(model.activeJourney, old)
++        XCTAssertNil(model.saveFailure)
++    }
++
++    // 깨짐: 실패 후 재시도가 막히면 실패.
++    @MainActor
++    func testAC10_새여정_실패_뒤_재시도하면_AC8_결과가_된다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 600), probe: probe)
++        probe.shouldFail = true
++        model.confirmNewJourney()
++        probe.shouldFail = false
++
++        XCTAssertEqual(model.confirmNewJourney(), .done)
++
++        XCTAssertEqual(probe.attempts, 2)
++        XCTAssertEqual(probe.writes.count, 1)
++        XCTAssertEqual(try lastSaved(probe).currentStation?.id, "ttukseom")
++        XCTAssertEqual(model.path, [.time])
++    }
++
++    // 깨짐: 연타 가드가 없으면 .time이 두 번 쌓이거나 두 번째가 .done이 된다.
++    @MainActor
++    func testAC11_새여정_연타의_두번째는_rejected이고_time은_한번만_쌓인다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 600), probe: probe)
++
++        XCTAssertEqual(model.confirmNewJourney(), .done)
++        XCTAssertEqual(model.confirmNewJourney(), .rejected)
++
++        XCTAssertEqual(probe.attempts, 1)
++        XCTAssertEqual(model.path, [.time])
++    }
++
++    // 깨짐: 진행 여정 없이 startTripFromMain이 저장하거나 .time으로 안 가면 실패.
++    @MainActor
++    func testAC12_진행여정이_없으면_startTripFromMain은_쓰기없이_time으로_간다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: nil, probe: probe)
++
++        XCTAssertTrue(model.startTripFromMain())
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.path, [.time])
++    }
++
++    // 깨짐: 확인 없이 폐기하는 옛 동작이면 true/쓰기 발생으로 실패.
++    @MainActor
++    func testAC12_진행여정이_있으면_startTripFromMain은_false이고_쓰기없이_유지한다() throws {
++        let probe = LifecycleProbe()
++        let old = active(elapsed: 600)
++        let model = try makeModel(active: old, probe: probe)
++
++        XCTAssertFalse(model.startTripFromMain())
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.activeJourney, old)
++        XCTAssertEqual(model.path, [])
++    }
++
++    // 깨짐: 출발 대기에서 정류장이 바뀌거나 여정이 안 지워지면 실패.
++    @MainActor
++    func testAC23_출발대기_새여정_확정은_출발정류장_그대로_여정삭제_시간선택이다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 0, paused: false, phase: .awaitingDeparture), probe: probe)
++
++        XCTAssertEqual(model.confirmNewJourney(), .done)
++
++        let saved = try lastSaved(probe)
++        XCTAssertEqual(saved.currentStation, Self.station)
++        XCTAssertNil(saved.journey.active)
++        XCTAssertEqual(model.path, [.time])
++    }
++
++    // 깨짐: 도착 여정이 출발 정류장을 유지하거나 식으로 계산하면 실패.
++    @MainActor
++    func testAC24_도착_여정의_새여정_확정은_도착지가_현재정류장이다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 1500), probe: probe)
++
++        XCTAssertEqual(model.confirmNewJourney(), .done)
++
++        let saved = try lastSaved(probe)
++        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "seoulForestGate", name: "서울숲 입구", direction: 1))
++        XCTAssertNil(saved.journey.active)
++        XCTAssertEqual(saved.records.items.count, 1)
++    }
++
++    // 깨짐: 여정이 없을 때 확정이 .done이거나 쓰기를 하면 실패.
++    @MainActor
++    func testAC31_진행여정이_없으면_새여정_확정은_rejected이고_쓰기가_없다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: nil, probe: probe)
++
++        XCTAssertEqual(model.confirmNewJourney(), .rejected)
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.path, [])
++    }
++
++    // MARK: mainStartTitle
++
++    // 깨짐: active 유무를 안 보면 문구가 같아 실패.
++    @MainActor
++    func testFR3_진행여정이_있으면_시작_버튼_문구는_새_여정_시작이다() throws {
++        let model = try makeModel(active: active(elapsed: 90), probe: LifecycleProbe())
++
++        XCTAssertEqual(model.mainStartTitle, "새 여정 시작")
++    }
++
++    // 깨짐: 없을 때도 "새 여정 시작"이면 실패.
++    @MainActor
++    func testFR3_진행여정이_없으면_시작_버튼_문구는_기존_메인_문구다() throws {
++        let model = try makeModel(active: nil, probe: LifecycleProbe())
++
++        XCTAssertEqual(model.mainStartTitle, "여행 시작하기")
++    }
++
++    // MARK: 포기 (AC-16, 17, 19, 20, BR-6, BR-10)
++
++    // 깨짐: 도달 정류장이 아닌 곳을 저장하거나, path/notice/쓰기 횟수가 다르면 실패.
++    @MainActor
++    func testAC16_포기_확정은_도달정류장_저장_여정삭제_메인이동_안내를_한번에_한다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 600, probe: probe)
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .done)
++
++        XCTAssertEqual(probe.writes.count, 1)
++        let saved = try lastSaved(probe)
++        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "ttukseom", name: "뚝섬역", direction: 1))
++        XCTAssertNil(saved.journey.active)
++        XCTAssertEqual(saved.records.items.count, 1)
++        XCTAssertEqual(model.path, [])
++        XCTAssertEqual(model.abandonNotice, "뚝섬역")
++        XCTAssertNil(model.activeJourney)
++    }
++
++    // 깨짐: 0초에서 정류장을 이동시키면 실패.
++    @MainActor
++    func testAC19_0초_포기는_성수역_그대로다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 0, probe: probe)
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .done)
++
++        XCTAssertEqual(try lastSaved(probe).currentStation, Self.station)
++        XCTAssertEqual(model.abandonNotice, "성수역")
++        XCTAssertNil(model.activeJourney)
++    }
++
++    // 깨짐: 실패를 .done으로 보고하거나 path/상태를 바꾸거나 일반 saveFailure를 남기면 실패.
++    @MainActor
++    func testAC20_포기_저장실패는_saveFailed이고_타이머_화면과_상태가_불변이다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 600, probe: probe)
++        let before = model.snapshot
++        probe.shouldFail = true
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .saveFailed)
++
++        XCTAssertEqual(probe.attempts, 1)
++        XCTAssertEqual(probe.writes.count, 0)
++        XCTAssertEqual(model.path, [.journey])
++        XCTAssertEqual(model.snapshot, before)
++        XCTAssertNil(model.abandonNotice)
++        XCTAssertNil(model.saveFailure)
++    }
++
++    // 깨짐: 실패 후 재시도가 막히면 실패.
++    @MainActor
++    func testAC20_포기_실패_뒤_재시도하면_AC16_결과가_된다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 600, probe: probe)
++        probe.shouldFail = true
++        model.abandonJourney(timerPaused: true)
++        probe.shouldFail = false
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .done)
++
++        XCTAssertEqual(try lastSaved(probe).currentStation?.id, "ttukseom")
++        XCTAssertEqual(model.path, [])
++        XCTAssertEqual(model.abandonNotice, "뚝섬역")
++    }
++
++    // 깨짐: 호출자가 진행 중이라고 알려도 포기를 허용하면 .done/쓰기 발생으로 실패.
++    @MainActor
++    func testBR6_타이머가_진행중이면_포기는_rejected이고_쓰기가_없다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 600, probe: probe)
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: false), .rejected)
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.path, [.journey])
++    }
++
++    // 깨짐: path 마지막이 .journey인지 안 보면 메인에서도 포기되어 실패.
++    @MainActor
++    func testBR6_타이머_화면이_아니면_포기는_rejected다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 600), probe: probe)
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .rejected)
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertNotNil(model.activeJourney)
++    }
++
++    // 깨짐: 출발 대기 여정을 포기할 수 있으면 실패.
++    @MainActor
++    func testBR6_출발대기_여정은_포기할_수_없다() throws {
++        let probe = LifecycleProbe()
++        let model = try makeModel(active: active(elapsed: 0, paused: false, phase: .awaitingDeparture), probe: probe)
++        model.open(.journey)
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .rejected)
++
++        XCTAssertEqual(probe.attempts, 0)
++    }
++
++    // 깨짐: 도착 여정을 포기할 수 있으면 실패.
++    @MainActor
++    func testBR6_도착_여정은_포기할_수_없다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 1500, probe: probe)
++
++        XCTAssertEqual(model.abandonJourney(timerPaused: true), .rejected)
++
++        XCTAssertEqual(probe.attempts, 0)
++        XCTAssertEqual(model.path, [.journey])
++    }
++
++    // 깨짐: open이 안내를 지우지 않으면 실패.
++    @MainActor
++    func testBR10_open은_포기_안내를_지운다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 600, probe: probe)
++        model.abandonJourney(timerPaused: true)
++        XCTAssertEqual(model.abandonNotice, "뚝섬역")
++
++        model.open(.time)
++
++        XCTAssertNil(model.abandonNotice)
++    }
++
++    // 깨짐: beginCardCustomization이 안내를 지우지 않으면 실패.
++    @MainActor
++    func testBR10_카드_꾸미기_진입은_포기_안내를_지운다() throws {
++        let probe = LifecycleProbe()
++        let model = try timerOpen(elapsed: 600, probe: probe)
++        model.abandonJourney(timerPaused: true)
++        XCTAssertEqual(model.abandonNotice, "뚝섬역")
++
++        XCTAssertNotNil(model.beginCardCustomization())
++
++        XCTAssertNil(model.abandonNotice)
++    }
++}
+diff --git a/ios/FocusMateTests/JourneyLifecycleTestDoubles.swift b/ios/FocusMateTests/JourneyLifecycleTestDoubles.swift
+new file mode 100644
+index 0000000..88ad3fa
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyLifecycleTestDoubles.swift
+@@ -0,0 +1,36 @@
++import Foundation
++@testable import FocusMate
++
++/// 포기 처리 더블. 결과 배열을 순서대로 소비하고 소진되면 마지막 값(없으면 .rejected)을 반환한다.
++/// 호출 때 받은 timerPaused 인자를 모두 `calls`에 기록한다.
++@MainActor
++final class FakeJourneyAbandoner: JourneyAbandoning {
++    private var results: [LifecycleActionResult]
++    private var last: LifecycleActionResult = .rejected
++    private(set) var calls: [Bool] = []
++
++    init(results: [LifecycleActionResult]) {
++        self.results = results
++    }
++
++    func abandonJourney(timerPaused: Bool) -> LifecycleActionResult {
++        calls.append(timerPaused)
++        if !results.isEmpty { last = results.removeFirst() }
++        return last
++    }
++}
++
++/// 저장 시도를 센다. attempts는 실패한 시도까지, writes는 성공한 바이트만 담는다 (R1).
++final class LifecycleProbe {
++    enum Failure: Error { case expected }
++
++    private(set) var attempts = 0
++    private(set) var writes: [Data] = []
++    var shouldFail = false
++
++    func record(_ data: Data) throws {
++        attempts += 1
++        if shouldFail { throw Failure.expected }
++        writes.append(data)
++    }
++}

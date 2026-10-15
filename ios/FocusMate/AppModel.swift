@@ -77,6 +77,10 @@ final class AppModel {
         storedPreparationRequest = nil
         return request
     }
+    /// 포기한 정류장 이름. 메인 안내용 메모리 값이며 다른 화면으로 가면 지운다(BR-10). 설정은 lifecycle 확장에서만 한다.
+    var abandonNotice: String?
+    /// 이번 실행에서 이어가기 저장에 성공한 여정 id. 타이머가 한 번 소비한다.
+    @ObservationIgnored var resumeEntryJourneyID: String?
     private(set) var recoveryFailure: StorageRecoveryIssue?
     private(set) var isRecovering = false
     private(set) var hasAttemptedCleanup = false
@@ -201,6 +205,13 @@ final class AppModel {
         return saveFailure == nil
     }
 
+    /// 실패를 호출자가 그 화면에서 직접 안내하는 저장(W07). 실패해도 상태가 바뀌지 않았으므로 일반 `saveFailure`를 남기지 않는다.
+    func saveHandlingFailure(_ candidate: AppSnapshot) -> Bool {
+        guard !isRecovering, persist(candidate) == nil else { return false }
+        saveFailure = nil
+        return true
+    }
+
     /// 저장에 성공하면 snapshot·경로를 바꾸고 nil, 실패하면 아무것도 바꾸지 않고 원인을 돌려준다.
     private func persist(_ candidate: AppSnapshot) -> StorageIssue? {
         guard case let .ready(previousRoute) = launchState else {
@@ -262,6 +273,7 @@ final class AppModel {
 
     func open(_ destination: Destination) {
         guard launchState == .ready(.main) else { return }
+        abandonNotice = nil
         // 승차권·승차 태그는 확정된 준비가 있을 때만 열린다(어떤 경로로도 미완성 준비로 들어가지 않는다).
         if destination == .board || destination == .boarding, confirmedPreparation == nil || hasDepartedJourney { return }
         if destination == .journey, activeJourney == nil { return }
@@ -269,7 +281,7 @@ final class AppModel {
     }
     func goBack() {
         guard launchState == .ready(.main), !path.isEmpty else { return }
-        // 출발한 여행 화면에서는 메인으로 돌아가지 않는다(나가기는 W07).
+        // 출발한 여행 화면에서 메인으로 가는 길은 포기뿐이다(W07, FR-10).
         if path.last == .journey, hasDepartedJourney { return }
         path.removeLast()
     }
@@ -280,6 +292,8 @@ extension AppModel: CardCustomizationSaving {
     func beginCardCustomization() -> CardCustomizationController? {
         guard case .ready = launchState, let snapshot, snapshot.cardIssued,
               let card = snapshot.currentCard else { return nil }
+        // 꾸미기 화면은 `open`을 거치지 않으므로 포기 안내를 여기서 지운다(BR-10).
+        abandonNotice = nil
         return CardCustomizationController(card: card, saver: self)
     }
 

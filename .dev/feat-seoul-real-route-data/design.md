@@ -933,3 +933,348 @@ AC-23은 D-1 권고(자연 정렬을 앱에서 계산)를 채택한다는 전제
 - `/Users/bonseung/projects/focus-mate/next-step-w16/ios/FocusMate/UITestBootstrap.swift`: `--fm-ui-route-data`와 `legacyV4Stations` 시드를 추가할 위치입니다. 시드 이름 집합은 :148에 있습니다.
 - `/Users/bonseung/projects/focus-mate/next-step-w16/ios/FocusMate/LocalSnapshotStore.swift`: `readData`/`writeData` 클로저 주입 구조입니다. AC-36~38 모델 테스트에서 메모리 버퍼로 대체합니다.
 - `/Users/bonseung/projects/focus-mate/next-step-w16/ios/FocusMate/JourneyCourseProgress.swift:80`: 정수 반올림 관례입니다. AC-26 남은 거리 공식을 검산해 보니 1400m에서 14가 나와 맞습니다.
+
+---
+
+# W16b 설계 보완 (2026-10-15, W09 #23 대조 — 본문·정합 절보다 우선)
+
+## W16b 앱 연결 — W09 머지(main 6542996) 반영 보완
+
+> 이 문서는 `.dev/feat-seoul-real-route-data/design.md`의 **차이분**만 담습니다. 여기 적지 않은 절(A·B·D·E·G 본문, J절)은 확정본 그대로 유효합니다. 확정본과 이 문서가 다르면 이 문서를 따릅니다.
+
+### 설계 규모
+대형입니다. 저장 형식 v4→v5 이전, 전역 카탈로그 제거, W09 하차 경로 재연결이 한 컴파일 단위에 묶여 있습니다. 앱 소스 약 35개, 단위 테스트 약 40개, UI 테스트 20개 파일에 영향이 있습니다.
+
+### 배경 및 목적
+- W09a(#23)가 하차 태그, 요약, 기록, 메모를 넣었습니다. 저장 형식은 v4 그대로입니다(`context/journey/status.md:47`, `.dev/plan.md:83`).
+- W16a(#22)가 계산 모듈 5개를 추가만 했습니다. W16b는 이 모듈을 앱에 연결하고, 예시 데이터 전역 상수(`RouteData.swift`)를 없앱니다.
+
+### 요구사항 및 수용 기준
+- 범위: PRD `.dev/feat-seoul-real-route-data/prd.md`의 AC-24, AC-27~55, AC-78, AC-79와 "설계 정합 개정" 절(BR-4 보강 포함)
+- 사용자 결정: ±1분 규칙 유지
+- 함께 처리: `reports/review-deferred.md`의 security MEDIUM 항목(아래 "보안 유예 항목 처리" 참조)
+
+---
+
+### 1. W09 체크리스트 1~11 판정 (실제 코드 기준)
+
+| # | 항목 | 판정 | 근거(파일:라인) | W16b 조치 |
+|---|---|---|---|---|
+| 1 | `currentVersion` | **W09가 올리지 않음. 그대로 4** | `ios/FocusMate/SnapshotCodec.swift:49`, v3 분기 `:65-69` | W16 = **v5**로 확정. legacy DTO에 W09 필드 없음 |
+| 2 | 새 필드 | **저장 필드 추가 없음** | `JourneySnapshot.swift:24-38`, `AppSnapshot.swift:18-24`, `RecordSection.swift:3-16`(memo는 W08부터 있음). 메모리 값만 늘었음: `AppModel.swift:87`(`alightingSummary`), `:98`(`recordClock`), `Destination`에 `.alighting/.alightingSummary`(`:6`) | v5 필드 목록 변경 없음. `AppModel.init` 마지막 인자는 `recordClock` 다음에 `routeData:`로 붙임 |
+| 3 | 하차 저장의 도달 정류장 | **`reachedStation` 사용 중** | `JourneyAlighting.swift:44`(`active.reachedStation`) → `endingActiveJourney(at:)` `:49`. 카탈로그 조회 실패 시 `.unknownCatalog` `:4, :46` | `arrivedStation`(저장값)으로 교체. `.unknownCatalog` 삭제 |
+| 4 | 기록 from/to/bus 출처 | **카탈로그 조회** | `JourneyAlighting.swift:28-35`(`journey.bus`, `originName`, `destinationName`, 실패 시 nil) | 저장 필드 `originName`/`destinationName`/`busNumber`. 생성자는 실패하지 않게(non-failable) 바꿈 |
+| 5 | 도착 안내의 `CourseJourney` | **도착 안내는 `CourseJourney`를 쓰지 않음** | 지도만 `JourneyView.swift:50` `CourseJourney(journey:)`. 도착 안내는 `ArrivalBriefingContent(journey:)` `ArrivalBriefingController.swift:22-27`이고 `journey.bus`·`destinationName`을 씀. `.dev/plan.md:86`의 "도착 안내도 같은 규칙"은 코드와 맞지 않음 | 지도: `init?(journey:catalog:)`. 도착 안내: 저장 이름을 쓰는 non-failable로 바꿔 BR-12와 무관하게 늘 표시 |
+| 6 | 진행 카드 | **`Kind.arrived` 유지. 하차 진입은 `showsAlight`** | `ActiveJourneyCardContent.swift:5, 16, 24`. `journey.bus`·`destinationName` 의존이 남아 있음 `:23, :27` | 저장 필드로 non-failable. `AppModel+JourneyLifecycle.swift:6`의 `flatMap`을 `map`으로 |
+| 7 | `StationSnapshot(direction:)` 생성처 | 하차 자체는 직접 만들지 않음(`reachedStation` 경유) | `JourneyReach.swift:14, 23`, `UITestBootstrap.swift:215, 409-412, 421`, `RouteData.swift:48` | 모두 `{id, name}`으로 |
+| 8 | W09 UI 시드와 UI 테스트 | **카탈로그 의존 있음** | 시드 `UITestBootstrap.swift:315-318`(`alight*`), 생성 `:360-377`(`BusLine`, `JourneyReach.station`). `recordSeeds` `:325-358`은 문자열만 쓰므로 영향 없음. UI: `AlightingFlowUITests.swift:11, 149, 275("seongsu"), 330` | I절 delta 참조 |
+| 9 | 문서 | **낡은 문구 있음** | `context/journey/glossary.md:18`(정류장 간격 분 몫), `:21`("도착 여정은 도착지" — W09 이후 도착 여정은 새 여정이 거절됨), `.dev/plan.md:86` | T7에서 갱신 |
+| 10 | `RouteStops.wrap` | 현재 **12곳** | `JourneySnapshot.swift:42, 44`, `JourneyCourseProgress.swift:12, 51, 55, 56, 67`, `JourneyCourse.swift:40`, `JourneyReach.swift:13`, `UITestBootstrap.swift:275, 287`, `RouteData.swift:24` | T3 완료 조건: `RouteStops\|BusLine\|StationCatalog\|StopPosition` grep 0건 |
+| 11 | 하차 화면 로딩 차단 | **차단 불필요** | `beginAlighting`/`confirmArrival`/`alightJourney`(`AppModel+Alighting.swift:15-43`)는 3번 변경 후 카탈로그를 쓰지 않음. 도착 여정은 새 여정 확정도 이미 거절함(`AppModel+JourneyLifecycle.swift:37-38` `!active.isArrived`). 메인 메뉴에서도 빠짐(`AppModel+Alighting.swift:67-69`) | `canEndActiveJourney`는 "도착하지 않은 여정"에만 적용 |
+
+**판정에서 나온 PRD 영향**
+- AC-36("도착한 여정에서 새 여정 시작 → S4")은 W09 규칙 때문에 그 경로로 실행할 수 없습니다. 하차 경로로 검증하자고 제안합니다(확인 사항 1).
+- PRD 정합 개정 "도착한 여정의 새 여정 확정은 로딩 중에도 허용"은 해당 경로가 없으므로 효력이 없습니다.
+
+---
+
+### 2. C절 delta — 저장 v5
+
+**버전**
+- `SnapshotCodec.currentVersion = 5`.
+- 테스트는 숫자를 직접 쓰지 않고 `SnapshotCodec.currentVersion`을 참조합니다(확정본 유지).
+
+**v5 필드(확정. W09 추가분 없음)**
+- `JourneySnapshot`: `id, cardID, originStopID, originName, minutes, busID, busNumber, busKind, destinationStopID, destinationName, tag, task, sound, boardedAt, phase, progress, paused`
+- `StationSnapshot`: `{id, name}`
+- `AppSnapshot` 키는 그대로입니다.
+
+**검증 보강(신규)**
+- 이름 4종(`originName`, `destinationName`, `busNumber`, `busKind`)은 공백만 있으면 안 되고 **UTF-16 500 이하**여야 합니다.
+- 이유: 하차 때 기록의 `from/to/bus` 검증(`RecordSection.swift:146-149`, 500 상한)이 실패하면 하차 저장이 막힙니다. 저장 시점에 미리 보장합니다.
+
+**삭제 대상**
+- `JourneySnapshot.Format`, `.journeyFormat` (`JourneySnapshot.swift:8, 117-119, 149-151`)
+- v3 분기 (`SnapshotCodec.swift:65-69`)
+- 이유: v3 여정은 이제 이전 과정에서 모두 버려지므로 v3 `paused` 해석이 필요 없습니다.
+
+**legacy DTO(단순화)**
+- `LegacyStationSnapshot`은 만들지 않습니다. 새 `StationSnapshot{id,name}`이 옛 JSON의 `direction` 키를 무시하고 그대로 읽습니다(Decodable 기본 동작).
+- 신규 `LegacySnapshotV3V4: Decodable`
+  - 필드: `cardIssued`, `initialStation: StationSnapshot?`, `currentStation: StationSnapshot?`, `cards: CardSection`(v3·v4 같은 형식, 현 `:65-70`이 같은 Envelope로 읽는 근거), `journey: LegacyJourneyPresence`, `records: RecordSection`
+  - `LegacyJourneyPresence`: `active`가 null이면 false, 객체면 내용을 해석하지 않고 true
+- **주의**: 현재 v5 `JourneySection` 디코드는 `try?`로 손상 여정을 조용히 버립니다(`JourneySection.swift:17`). 그래서 legacy 파일을 v5 Envelope로 읽으면 이전 보고가 누락됩니다. legacy는 반드시 별도 DTO로 읽어야 합니다.
+
+**이전 규칙(순서 고정)**
+1. 버전 1·2는 기존 `migrateV1`/`migrateV2`(`SnapshotCodec.swift:94-107`), 3·4는 `LegacySnapshotV3V4`로 **이전 형태 그대로** `AppSnapshot`을 만듭니다(여정은 `.empty`).
+2. **비우기 전에 `validate()`를 실행합니다.**
+   - 기존 손상 판정(단계 불일치, 카드, 기록)을 지키기 위해서입니다.
+   - 예: v1 `invalidState` 시드(`UITestBootstrap.swift:421`)는 cardIssued=false인데 정류장이 있습니다. 정류장을 먼저 비우면 유효한 상태로 바뀌어 `StorageRecoveryFlowTests.swift:19`가 깨집니다.
+3. `migrateLegacyRouteData`가 `updatingStage(cardIssued:, initialStation: nil, currentStation: nil).updating(journey: .empty)`로 비웁니다. 카드와 기록은 그대로 둡니다.
+4. 보고: `initialStation/currentStation != nil || journeyPresent`일 때만 `.routeDataReset`을 돌려줍니다.
+5. `sortedNewestFirst()`는 기존대로 적용합니다.
+
+**하차 대기 여정과 완료 기록**
+- 도착했지만 하차하지 않은 v4 여정도 **비웁니다**. 완료 기록은 **만들지 않습니다**(PRD 영향 범위 :160, 하차 접촉 성공만 기록 — `context/journey/README.md:34`).
+- W09가 이미 만든 기록의 `from/to/bus` 문자열은 손대지 않습니다. 기록은 id를 담지 않습니다.
+
+**`LocalSnapshotStore`**
+- `loadReport()`를 추가하고 `load()`는 래퍼로 둡니다.
+- `save()`는 쓰기 전에 `load()`를 다시 부릅니다(`LocalSnapshotStore.swift:108`). legacy 파일도 이전 디코드가 성공하므로 쓰기가 막히지 않습니다.
+
+**`AppModel.start()` 순서**
+- `loadIfNeeded()` → `persistMigrationIfNeeded()` → `supplementCardIfNeeded()`
+- 보충이 필요한 사용자는 마이그레이션 저장 뒤 한 번 더 저장합니다(둘 다 v5).
+
+**시그니처**
+- `static func decodeReport(_ data: Data) throws -> (snapshot: AppSnapshot, migration: SnapshotMigration?)`
+- `enum SnapshotMigration { case routeDataReset }`
+- `func loadReport() throws -> (snapshot: AppSnapshot, migration: SnapshotMigration?)?`
+
+### 3. F절 delta — 도달 정류장, 하차, 생명주기
+
+**하차 흐름의 도착 정류장 연결(AC-78·79)**
+- `JourneySnapshot.arrivedStation: StationSnapshot?`: `isArrived`이면 `{destinationStopID, destinationName}`, 아니면 nil입니다. 카탈로그를 쓰지 않습니다.
+- `AppSnapshot.alightingActiveJourney` (`JourneyAlighting.swift:41-50`)
+  - `guard let station = active.arrivedStation`으로 바꿉니다. `isArrived` 검사 뒤라 nil일 수 없습니다.
+  - `RecordCompletionInput(alighting:completedAt:)`은 non-failable입니다: `bus: journey.busNumber`, `from: journey.originName`, `to: journey.destinationName`.
+  - `bus`는 번호만 씁니다. 현재 `bus.number`와 같고 `AlightingSnapshotTests.swift:45`가 기대값 "2014"를 유지합니다.
+  - `AlightingIssue`는 `{ noActiveJourney, notArrived }`로 줄입니다.
+- 결과: 하차는 로딩 상태와 무관하게 동작합니다(체크리스트 11). 하차 후 `currentStation.id == destinationStopID`입니다(AC-79).
+
+**`reachedStation(in:) -> ReachAttempt`**
+- 확정본의 분기를 유지합니다.
+- 실제 호출자는 도착하지 않은 여정뿐입니다. `confirmNewJourney`·`abandonJourney`가 모두 `!isArrived`로 막습니다(`AppModel+JourneyLifecycle.swift:38, 51`).
+- 도착 분기(`.resolved(.station(arrivedStation))`)는 API 일관성과 AC-78 단위 검증용으로 둡니다.
+
+**`AppModel+JourneyLifecycle.swift`**
+- `confirmNewJourney` (`:36-45`)와 `abandonJourney` (`:49-57`)
+  - 기존 guard는 유지하고, `let station = active.reachedStation`만 `switch active.reachedStation(in: routeAvailability)`로 바꿉니다.
+  - `.notLoaded` → `.rejected`, 저장 0회(AC-43·44)
+  - `.station(s)`/`.stayAtOrigin(s)` → `endingActiveJourney(at: s)`
+    - 포기: 기존처럼 `abandonNotice = s.name`. AC-37의 "안내 문구 없음"은 BR-13 재선택 안내(`stationResetNotice`)가 없다는 뜻으로 해석합니다.
+  - `.reselectStation` → `snapshot.clearingStationsAndJourney()`를 한 번 저장합니다. `persist`가 경로를 `.initialStationEntry`로 바꾸고 `path = []`로 만듭니다(`AppModel.swift:230-233`). `stationResetNotice = .stationRemoved`, 결과는 `.done`.
+    - 새 여정 쪽은 `discardConfirmedPreparation()`만 하고 `open(.time)`은 하지 않습니다. 라우트가 메인이 아니라 어차피 동작하지 않습니다.
+- `var canEndActiveJourney: Bool { routeAvailability != .loading }`
+  - 확정본의 "도착이면 true" 조건은 뺍니다. 도착 여정은 이 두 버튼에 닿지 않습니다.
+
+**BR-16(AC-40) 시점**
+- `AppModel.startRouteData() -> Task<Void, Never>`를 신규로 둡니다.
+  - 스토어의 `startLoading()`을 부르고, 완료 후 메인 액터에서 `resolveStationAfterRouteDataReady()`를 1회 실행합니다.
+  - 진행 여정이 없고 현재 정류장 id가 카탈로그에 없으면 `restartStationSelection(reason: .stationRemoved)`를 실행합니다.
+- `FocusMateApp.start()`(`FocusMateApp.swift:100` 다음)에서 부릅니다. 테스트는 반환된 Task를 `await`합니다.
+- `AppModel.start()`는 로딩을 시작하지 않습니다. AC-55 구조 테스트의 근거입니다.
+
+**`AppModel.swift`**
+- `init(…, recordClock: RecordClock = .live, routeData: RouteCatalogStore = .bundled())`
+- `var stationResetNotice: StationResetReason?`(메모리)
+- `Destination`에 `.dataSource`(제목 "데이터 출처")를 **이 파일에서** 추가합니다. 화면 연결은 T4가 합니다(파일 겹침 회피).
+
+### 4. G·H절 delta(작음)
+- **표시 이름 출처**: `RouteOrigin.name`은 승차 시점의 카탈로그 이름입니다. 그 이름이 `JourneySelection.originName` → `JourneySnapshot.originName` → 기록 `from`으로 이어집니다. 메인 현재 정류장 표시는 저장된 `currentStation.name`입니다.
+- **도착 안내** `ArrivalBriefingContent(journey:)`: non-failable. `routeText = "\(busNumber) · \(destinationName) 도착"`.
+- **Live Activity** `JourneyLiveActivityPolicy.attributes(for:)` (`:29-33`): non-failable. `busNumber`·`busKind`·`destinationName`을 씁니다.
+- **H. 출처 화면**: 보안 유예 항목을 반영합니다.
+  - `source`에 `sourceURL`(OA-1095 페이지), `routeInfoSourceURL`(OA-15066 페이지) 키를 추가합니다. 스크립트는 T1, 로더 필수 키는 T2.
+  - 화면 문구에 "구간 시간과 거리는 원천 데이터를 가공·계산한 값이에요"를 넣습니다.
+  - URL은 텍스트로 표시하고 링크 동작은 없습니다(오프라인 FR-12).
+
+### 5. I절 delta — UI 테스트 주입과 시드
+
+**`RouteCatalog+Fixture.swift`(앱, `#if DEBUG`, 신규)**
+- `static func acceptanceFixture() throws -> RouteCatalog`: PRD 표 그대로. 현재 테스트 전용 `RouteCatalogFixture.acceptance()`(`ios/FocusMateTests/RouteCatalogTestFixtures.swift:37-57`) 내용을 옮깁니다. 테스트 헬퍼는 이것을 위임 호출합니다(중복 제거).
+- `static func uiTestFixture() throws -> RouteCatalog` = acceptance + 레거시 재현
+  - 정방향 승강장: **기존 id 9개를 그대로** 씁니다(`seongsu` 등, `RouteData.swift:12-20`). 이름과 W06 좌표도 그대로입니다.
+  - 역방향 승강장: id에 `-r`을 붙이고 이름은 같게 둡니다.
+  - 노선(9정류장 순환, 구간 초 균등)
+
+| id | 번호 | 유형 | 구간 | 방향 |
+|---|---|---|---|---|
+| `2014` | 2014 | 지선 | 300초 | 정방향 |
+| `2014-r` | 2014 | 지선 | 300초 | 역방향 |
+| `302` | 강남02 | 마을 | 450초 | 정방향 |
+| `421` | 343 | 간선 | 424초 | 정방향 |
+
+  - 검산(출발 `seongsu`, ±60초 규칙). UI 테스트가 쓰는 분 값에서 후보 집합이 기존과 같습니다.
+
+| 분 | 후보 | 비고 |
+|---|---|---|
+| 17 | 0건 | |
+| 25 | `2014`만 | 5정류장, 서울숲 입구 (`TimeSelectionUITests.swift:44-47`) |
+| 60 | `2014`, `302` | `2014` 12정류장 → 성동구민체육센터. `302`는 8정류장, 차이 0 |
+| 120 | 3건 | `2014` 24정류장, `302` 16정류장, `421` 17×424=7208초, 차이 8 |
+
+  - 방면: `seongsu`는 "성수동 방면", `seongsu-r`은 "성수사거리 방면"으로 기존 표시와 같습니다.
+- AC-7(60개 정류장)은 단위 테스트에서만 봅니다(정합 절 유지).
+
+**`UITestBootstrap.swift`**
+- `--fm-ui-route-data fixture|bundled|pending|failed`(기본 fixture) → `makeRouteCatalogStore()`
+- 시드의 `direction` 필드를 제거하고 `routeID`를 추가합니다. `lifecycleSnapshot`은 `RouteLegFinder.leg`로 도착지를 구하고 이름 4종을 복사합니다.
+
+| 시드 | 변경 |
+|---|---|
+| `lifeReverse300` | 출발 `seongsu-r`, 노선 `2014-r` → 성수사거리 |
+| `lifeWrap900` | 출발 `seongsuBridgeNorth` → 성수역(기존 값 유지) |
+| `alightMismatchArrived` | `destinationStopID: "ttukseom"`, `destinationName: "뚝섬역"`을 저장 → 지도 생략, 하차 후 현재 정류장은 ttukseom(BR-12 UI, AC-79) |
+| `timerJourney` | 출발 `seoulForest-r`, `2014-r`, 25분 → 성수사거리(기존 주석 `:286`과 같음) |
+| `readySnapshot` | `initial {seongsu, 성수}`, `current {seoulForest-r, 서울숲}`(저장 이름은 그대로 둠) |
+| `applySaveScenario` (`:215`) | `StationSnapshot(id: "ttukseom", name: "뚝섬")` |
+| `applyRoute` (`:229`) | `choose(routeID: "2014", …)` |
+
+- 신규 시드
+
+| 시드 | 내용 | 대상 AC |
+|---|---|---|
+| `lifeRouteGone700` | 노선 `gone-route`, 출발 seongsu | AC-37 UI |
+| `lifeOriginGone700` | 노선 gone, 출발 `gone-stop` | AC-38·39 UI |
+| `stationGone` | 여정 없음, 현재 정류장 `gone-stop` | AC-40 UI |
+| `legacyV4Stations` | v5 인코딩 뒤 station·journey에 `direction`을 넣고 `version=4`. 진행 여정, 카드 1장, 기록 3건 포함 | AC-46~48 UI |
+| `invalidMinutesJourney` | 현재 버전, 분 361 → 여정만 버림 | 기존 `v3InvalidMinutes`의 "카드 없는 메인" 의도를 대체 |
+
+- `v3Seeds`(`:281`)는 이제 **이전 시드**입니다. 정류장과 여정이 비워지고 최초 정류장 화면으로 갑니다.
+- `rawSeeds`
+  - `profileRecords`(v2, `:430-431`)는 이전 때문에 메인이 아니라 최초 정류장 화면으로 가게 됩니다. **v5 빌더 시드로 다시 씁니다.**
+  - 나머지 손상 시드는 "비우기 전 validate" 규칙 덕분에 그대로 실패합니다.
+
+### 6. 보안 유예 항목 처리(`reports/review-deferred.md:17-26`)
+
+| 항목 | 처리 | 태스크 |
+|---|---|---|
+| 로더/카탈로그 값 범위·중복 id | `RouteCatalogIssue.duplicateID(String)`, `.outOfRange(String)` 추가. 기준: 좌표 위도 33e6~39e6·경도 124e6~130e6(BR-11과 같은 범위), 구간 초 1~21,600(최대 여정 360분), 구간 m 0~200,000, 노선당 정류장 2~1,000, id·이름은 공백 아님·UTF-16 200 이하. 상한은 기술적 방어선이고 실데이터 통과는 T6 회귀 테스트가 확인합니다. Bool이 Int로 받아들여지는 문제는 `NSNumber`의 `objCType`으로 거부 | T2 |
+| leg minutes 상한 | `RouteLegFinder.leg`에 `guard (1...JourneySnapshot.maximumMinutes).contains(minutes)` | T2 |
+| 출처 "가공·계산" 문구·원천 URL | 4절 H | T1(키), T2(로더), T4(화면) |
+| 스크립트: zip·XML·행 수 상한, DOCTYPE/ENTITY 거부, 지수 표기 정수 상한, 손상 xlsx → 종료 코드 2, SHA를 쓰기 전 바이트로 계산·임시 파일 정리·fsync | **포함 권고.** 출처 URL 키 때문에 T1에서 어차피 스크립트를 고치고 산출물을 다시 만들어야 합니다. 파일이 `scripts/**`뿐이라 앱 태스크와 겹치지 않습니다 | T1 |
+| "--out이 Resources/ 아래면 경고" | **철회.** W16b의 표준 출력 위치가 Resources입니다 | — |
+| 라이선스 하드코딩 | README의 매월 재확인 절차로 유지(자동 검증 없음) | T7 |
+| "(가상)" 판정 문구 차이 | 문서만 정리 | T7 |
+
+### 7. 번들 포함 방식 재확인(요구 4)
+- 위치: `ios/FocusMate/Resources/RouteData/seoul-route-data.json`. 동기화 루트(`project.pbxproj:35`, exceptions 비어 있음)라 앱 타깃 리소스로 자동 포함됩니다. pbxproj는 수정하지 않습니다.
+- 위젯 타깃은 `FocusMateWidgets`/`Shared` 그룹만 쓰므로(`:39, :49`) 포함되지 않습니다.
+- 평탄화 충돌이 없습니다. 현재 번들 루트 이름은 `travel-*.wav` 4개, `SOURCE.md`, `SeoulAlrim-*.ttf` 2개뿐이고, `ios/FocusMate` 아래 다른 `.json`도 없습니다. 같은 폴더에 `README.md`를 두지 않습니다.
+- `.gitignore:22-23`(`scripts/data/out/`, `*.xlsx`)은 Resources의 JSON에 영향이 없으므로 JSON은 커밋됩니다.
+- `RouteCatalogLoader.bundledURL()` = `bundle.url(forResource: "seoul-route-data", withExtension: "json")`. 호스팅 테스트의 `Bundle.main` 선례는 `AudioResourceTests.swift:19`입니다.
+- 로더는 `JSONSerialization`을 유지합니다(W16a 구현 그대로). 확정본 A절의 Decodable 기술은 폐기합니다. AC-54가 1초를 넘을 때만 다시 봅니다.
+
+---
+
+### 변경 범위(W16b 전체)
+
+**신규**
+- `RouteCatalogStore.swift`, `RouteCatalog+Fixture.swift`(DEBUG), `DataSourceView.swift`
+- `Resources/RouteData/seoul-route-data.json`
+- 테스트: `RouteCatalogStoreTests`, `RouteDataMigrationTests`, `RouteDataLifecycleModelTests`, `RouteDataBundleTests`, `RouteDataOfflineTests`, `DataSourceContentTests`
+- UI: `RouteDataUITests`(로딩·실패·BR-13·이전), `DataSourceUITests`
+
+**삭제**
+- 앱: `RouteData.swift`, `JourneyPlanner.swift`(`RouteCandidates`가 대체)
+- 테스트: `StationCatalogTests.swift`, `JourneyPlannerTests.swift`(`StationSearchTests`·`RouteCandidatesTests`가 이미 있음)
+
+**수정(앱)**
+
+| 영역 | 파일 |
+|---|---|
+| 저장 | `AppSnapshot`, `JourneySnapshot`, `JourneySection`(주석만), `SnapshotCodec`, `LocalSnapshotStore` |
+| 규칙 | `JourneyReach`, `JourneyAlighting`, `JourneyCourse`, `JourneyCourseProgress`, `JourneyPlanDraft`, `PreparationDraft` |
+| 표시 | `ActiveJourneyCardContent`, `ArrivalBriefingController`(Content), `JourneyLiveActivityPolicy`, `BoardingPassContent`, `StationSearchState` |
+| 모델 | `AppModel`, `AppModel+JourneyStart`, `AppModel+JourneyLifecycle` |
+| 화면 | `InitialStationSearchView`, `TimeSelectionView`, `RootView`, `JourneyView`, `JourneyMapController`, `JourneyMapView`, `JourneyTimerView`, `JourneyAbandonBar`, `DestinationScreen`, `ProfileView`, `AppModel+Profile` |
+| 시작·테스트 지원 | `FocusMateApp`, `UITestBootstrap` |
+| W16a 모듈 | `RouteCatalog`, `RouteCatalogLoader`, `RouteLeg` |
+
+**테스트 영향(단위, T3 컴파일 대상)**
+- 아래 파일이 `RouteStops`/`BusLine`/`direction:`/`seongsu`/`CourseJourney(journey:)`를 참조합니다(grep 42개 파일, 329곳).
+  - 공용 픽스처: `BoardingTestDoubles.swift:10-50`(`details`·`journey()`·`snapshot()`) — 고치면 파급이 큼
+  - 그 밖: `JourneyReachTests`(33), `JourneyMapControllerTests`(27), `LifecycleSeedTests`(15, 특히 `:161-167`), `SnapshotCodecTests`, `StorageV2Tests`, `RecordStorageTests`, `AppSnapshotSectionsTests`, `JourneySnapshotTests`, `JourneySnapshotStorageTests`, `JourneySnapshotV4StorageTests`, `JourneyCourseTests`, `JourneyCourseProgressTests`, `JourneyStartModelTests`, `CardCustomizationAppModelTests`, `ProfileModelTests`, `CardSupplementTests`, `AppRecoveryTests`, `RecoveryBootstrapTests`, `AlightingSnapshotTests`(`:57` direction), `AlightingModelTests`(`:10-11`), `StationSearchStateTests`, `JourneyPlanDraftTests`, `PreparationDetailsTests`, `BoardingPassContentTests`, `JourneyLiveActivityPolicyTests`, `JourneyMapStateTests` 외
+- 의미가 바뀌는 테스트: v1~v4 입력 뒤 "정류장 유지"를 단언하던 저장 테스트는 "비움 + `.routeDataReset`"으로 뒤집힙니다.
+
+**테스트 영향(UI, T5)**
+- 20개 파일, 131곳: `search.result.seongsu:1` → `search.result.seongsu`, `main.direction`과 `persistedCurrentStation().direction` 삭제, v3 시드 의미 변경
+- 해당 위치: `JourneyTimerLifecycleUITests.swift:132-160`, `MainActiveJourneyCardUITests.swift:110-131`, `NewJourneyUITests.swift:284-298`
+
+### 적용 컨벤션
+확정본 그대로입니다. 추가 사항은 하나입니다: 하차 확장 패턴(`AppModel+Alighting.swift`)처럼 결과는 `LifecycleActionResult`(`.done/.saveFailed/.rejected`)로 돌려주고, 저장은 `saveHandlingFailure` 한 번으로 합니다.
+
+---
+
+### 8. W16b 구현 순서 — 태스크 7개(AC 묶음, 파일 겹침 없음)
+
+전역 제거와 저장 v5는 한 컴파일 단위(앱 타깃 + 단위 테스트 타깃)입니다. 쪼개면 중간 빌드가 깨지므로 **T3 하나로 묶습니다.** 대신 추가형 작업(T2), 출처 화면(T4), UI 테스트 단언(T5), 실데이터 측정(T6)은 밖으로 뺍니다. UI 테스트 시드(`UITestBootstrap`)는 앱 타깃이라 T3가 맡습니다. UI 테스트 파일은 별도 타깃이고 `@testable`이 없어 T3 동안에도 컴파일되므로 T5로 분리합니다.
+
+| 태스크 | 내용 | 파일 | AC | 의존 |
+|---|---|---|---|---|
+| **T1** [Must] | 스크립트 보안 보강, 출처 URL 키, 산출물 재생성과 번들 배치 | `scripts/build_route_data.py`, `scripts/route_data/{xlsx,routes}.py`, `scripts/tests/*`, `scripts/data/README.md`, `ios/FocusMate/Resources/RouteData/seoul-route-data.json` | AC-77(재생성 증거: 명령, 요약, SHA 3개), 보안 5건 | 없음 |
+| **T2** [Must] | 카탈로그 기반(추가형) | `RouteCatalogStore.swift`(신규), `RouteCatalog+Fixture.swift`(신규), `RouteCatalog.swift`, `RouteCatalogLoader.swift`(`bundledURL/bundled`, URL 키, 범위·중복), `RouteLeg.swift`(분 상한), `FocusMateTests/RouteCatalogTestFixtures.swift`, `RouteCatalogStoreTests`(신규), 기존 `RouteCatalogTests`·`RouteLegTests` 보강 | AC-55(스토어 전이), AC-50(`bundledURL` 단위) | 없음(키 이름은 이 문서로 T1과 공유) |
+| **T3** [Must] | 전환 코어: 저장 v5·이전·안내, 카탈로그 주입, 전역 제거, 도달·하차·생명주기, 화면 연결, UI 시드 | 위 "수정(앱)"에서 T2·T4 파일을 뺀 전부, 삭제 2개, 단위 테스트 전부(신규 `RouteDataMigrationTests`·`RouteDataLifecycleModelTests`) | AC-24, AC-27~48(모델·단위), AC-55(구조), AC-78, AC-79, AC-5~8·12·17·18의 화면 상태 | T2 |
+| **T4** [Must] | 데이터 출처 화면 | `DataSourceView.swift`(신규), `DestinationScreen.swift`, `ProfileView.swift`, `AppModel+Profile.swift`, `DataSourceContentTests`(신규), `FocusMateUITests/DataSourceUITests.swift`(신규) | AC-49 | T3(`Destination.dataSource`, `routeAvailability`) |
+| **T5** [Must] | UI 테스트 전환과 신규 UI 검증 | `ios/FocusMateUITests/**`(T4 신규 파일 제외), 신규 `RouteDataUITests.swift` | AC-5~8·12·17·18·31·37~48·79의 UI | T3 |
+| **T6** [Should] | 실데이터 회귀·성능·오프라인 | `RouteDataBundleTests.swift`, `RouteDataOfflineTests.swift`(신규) | AC-50·51·52·53·54·56, 후보 0건 비율 보고 | T1, T3(오프라인 코스 계산에 `CourseJourney(journey:catalog:)` 필요) |
+| **T7** [Must] | 문서 | `context/journey/{glossary,architecture,status}.md`, `.dev/plan.md`(:86 정정), `scripts/data/README.md`의 "(가상)" 문구 | — | T3~T6 |
+
+- 병렬 가능: T1 ∥ T2, 그 다음 T3, 그 다음 T4 ∥ T5 ∥ T6, 마지막 T7
+
+**T3 내부 커밋 순서(권고)**
+1. 저장 v5·이전 + 단위 테스트
+2. `JourneyReach`·`JourneyAlighting`·표시 Content 4종
+3. 코스·진도·지도
+4. `AppModel` 주입, 안내, BR-13·16, 차단
+5. 화면 3종(`InitialStationSearchView`, `TimeSelectionView`, `RootView`)과 `JourneyAbandonBar`
+6. `UITestBootstrap` 시드
+7. `RouteData.swift`·`JourneyPlanner.swift` 삭제, grep 0건 확인
+
+- 1~6 동안은 `RouteData.swift`를 남겨 두고, 7에서 지웁니다.
+- focused 테스트는 매 커밋에서 실행하고, 전체 테스트는 W16b 마지막에 한 번만 합니다(사용자 메모).
+
+### 9. AC 매핑 delta(확정본 "구현 단계 ↔ AC 매핑"의 12~27행 대체)
+
+| AC | 태스크 | 검증 수단 |
+|---|---|---|
+| AC-24 | T3 | `JourneyPlanDraftTests` |
+| AC-27~30, 32 | T3 | `JourneyCourseProgressTests`(`CourseJourney(journey:catalog:)`) |
+| AC-31 | T3 + T5 | 단위: 저장 도착 S5 → nil. UI: `alightMismatchArrived` 지도 없음 |
+| AC-33~35 | T3 | `JourneyReachTests`(`ReachAttempt`) |
+| AC-36 | T3 | 하차 경로(`alightJourney` → S4)로 검증(확인 사항 1) |
+| AC-37~39 | T3 + T5 | 모델: `RouteDataLifecycleModelTests`. UI: `lifeRouteGone700`, `lifeOriginGone700` |
+| AC-40 | T3 + T5 | `startRouteData()` Task await. UI: `stationGone` |
+| AC-41·42 | T3 + T5 | `currentStationBound`. UI: `main.bound`, `pending` |
+| AC-43~45 | T3 + T5 | 쓰기 카운터 0, `pending` → 준비 후 재시도 |
+| AC-46~48 | T3 + T5 | `RouteDataMigrationTests`, `AppModel` 즉시 저장. UI: `legacyV4Stations` |
+| AC-49 | T4 | `DataSourceContentTests` + UI |
+| AC-50·51·52·53·54·56 | T6 (AC-50 일부 T2) | ContinuousClock, `isFileURL`, 카운팅 URLProtocol |
+| AC-55 | T2 + T3 | 스토어 전이와 끝나지 않는 로더로 `start()` → `.ready(.main)` |
+| AC-78 | T3 | `arrivedStation`(카탈로그 없음) |
+| AC-79 | T3 + T5 | `AlightingSnapshotTests`, `AlightingFlowUITests` |
+
+### 의존성 및 영향도
+- 새 외부 의존성은 없습니다.
+- 저장 v5로 올리면 이전 앱은 `unsupportedVersion`을 냅니다. 외부 배포 전이라 개발 기기에만 영향이 있습니다.
+- **W09b(분석, 대기 — `.dev/plan.md:15`)**: 기록 문자열만 읽으므로 W16b와 충돌할 가능성은 낮습니다. 다만 W09b가 먼저 머지되면서 저장 버전을 올리면 W16b의 v5는 그 +1이 되고, legacy DTO에 W09b 필드를 반영해야 합니다.
+- 하차 대기 중이던 개발 기기 여정은 이전 때 기록 없이 사라집니다(PRD 영향 범위에 명시됨).
+
+### 탐색 추가 항목
+- `ios/FocusMate/JourneyAlighting.swift:4, 28-36, 41-50` → 하차 저장, 기록 입력 생성, `.unknownCatalog`
+- `ios/FocusMate/AppModel+Alighting.swift:15-69` → 하차 진입, 확인, 커밋, 메뉴 필터. 카탈로그 차단 불필요의 근거
+- `ios/FocusMate/ArrivalBriefingController.swift:18-27` → 도착 안내 문구. 지도 규칙과 무관
+- `ios/FocusMate/JourneyView.swift:46-53` → 도착 안내와 지도 생성 지점
+- `ios/FocusMate/AppModel+JourneyLifecycle.swift:36-57` → W09가 넣은 `!active.isArrived` guard
+- `ios/FocusMate/JourneySection.swift:17` → 손상 여정 `try?` 무시. legacy를 별도 DTO로 읽어야 하는 이유
+- `ios/FocusMate/LocalSnapshotStore.swift:88-115` → `save` 전에 다시 읽기. 이전 디코드와의 상호작용
+- `ios/FocusMate/SnapshotCodec.swift:49, 65-70, 82-86` → 버전, v3 분기, 여정만 버리는 완화
+- `ios/FocusMate/UITestBootstrap.swift:148-149, 273-322, 360-391, 408-431` → 시드 전체, v3 바이트, rawSeeds
+- `ios/FocusMate/RouteCatalogLoader.swift:6-48`, `ios/FocusMate/RouteCatalog.swift:89-112` → 값 범위 검사와 중복 id 처리 위치(현재 `uniquingKeysWith`로 조용히 첫 값만 씀)
+- `ios/FocusMate/RouteLeg.swift:19-36` → 분 상한 guard 위치
+- `ios/FocusMateTests/BoardingTestDoubles.swift:10-50` → 공용 여정 픽스처. T3 파급의 중심
+- `ios/FocusMateTests/LifecycleSeedTests.swift:117-168` → W09 시드 검증. `CourseJourney(journey:)` 호출 포함
+- `ios/FocusMateUITests/TimeSelectionUITests.swift:40-63` → uiTest 픽스처 구간 초를 고른 근거(17·25·60·120분 후보 집합)
+- `ios/FocusMateUITests/StorageRecoveryFlowTests.swift:19`, `ios/FocusMateTests/RecoveryBootstrapTests.swift:20` → "비우기 전 validate" 규칙의 근거
+- `ios/FocusMate.xcodeproj/project.pbxproj:35, 39, 49` → 앱 동기화 루트와 위젯 그룹 분리
+- `scripts/build_route_data.py:29-35` → `source` 고정 키. URL 키 추가 위치
+- `.gitignore:22-23` → xlsx 제외. Resources JSON은 추적됨
+
+---
+
+
+### 사용자 결정 (2026-10-15)
+- ±1분 규칙 유지.
+- AC-36은 하차 경로로 검증(W09의 도착 여정 새 여정 거절 규칙 유지).
+- 스크립트 보안 보강 5건을 T1에서 함께 처리.

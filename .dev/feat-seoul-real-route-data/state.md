@@ -1,8 +1,8 @@
-phase: complete
-status: completed
+phase: implement
+status: in_progress
 pipeline: gx-tdd
-verify-status: passed
-verify-fingerprint: "c38bba1:e4ebaed934b6"
+verify-status: pending
+verify-fingerprint: ""
 model-profile: standard
 mode: all
 intent-source: user-selection
@@ -18,11 +18,11 @@ started: 2026-10-15T19:10:00
 last-known-head: 2d4aeca510ca4f2df9529b27dd3c3bff04f9ba2e
 auto-stashed: false
 config-setup-attempts: 0
-warnings-baseline: 5
-simulator: FM-W16 9306E393-1808-45F1-8C65-CD6E57D7DF98
-current-step: "W16a PR #22 생성 — W16b(12~27단계)는 W09 머지 후 재진입"
-user-scope: "W09 진행 중 — 사용자 결정(설계 승인 시): 설계 구현 순서 1~11(스크립트·데이터 + 새 파일 앱 계산 모듈)만 지금, 12~27은 W09 머지 후"
-phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed }
+warnings-baseline: 1
+simulator: FM-W16 680F8A78-9875-4E68-8FC1-95CDFEA87139
+current-step: "W16b RGR T1: RED"
+user-scope: "W16b — 설계 12~27단계(앱 연결). W09a 머지(#23 6542996) 위에서 진행. ±1분 규칙 유지(사용자 결정 2026-10-15)"
+phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed, w16b: { design-delta: completed, implement: in_progress } }
 execution-log:
   - { phase: implement, result: "worktree next-step-w16, 착수 커밋 2d4aeca push" }
   - { phase: requirements, agent: product-owner, result: "PRD 확정 55 AC, Q1 ±1분·Q2 회차·Q3 다음 정류장 방면·Q4 비우기·Q5 10MB/0.3s" }
@@ -50,3 +50,6 @@ steps:
   - { phase: complete, gate: verify, result: "통과 — 단위 1059/0, Python 93, UI 165/0(112 미실행, 사용자 결정), 빌드 3종 성공, 경고 1(기준 5)" }
   - { phase: complete, agent: product-owner, result: "ACCEPT 47/47 (범위 1~11단계)" }
   - { phase: complete, result: "PR #22 생성. plan.md W16은 W16b 남아 진행 유지(완료 처리 안 함). status.md 변경 없음(FR-6·7·8 기존 ✅, 연결은 W16b)" }
+  - { phase: w16b, result: "재진입 — W09 #23 머지 확인, 워크트리 next-step-w16(origin/main 6542996), ±1분 유지 결정" }
+  - { phase: w16b, gate: baseline, result: "ios build 0 exit·warning 1(appintents), python OK. 전체 iOS 테스트는 사용자 상시 지시로 생략" }
+  - { phase: w16b, agent: architect, result: "W09 대조 delta 설계 — v5, 하차 arrivedStation, 7태스크. 사용자: AC-36 하차 검증, 스크립트 보안 T1 포함. testability는 기존 8/10 + 권고 반영(Store Task 핸들, startRouteData Task)" }

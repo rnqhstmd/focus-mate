@@ -79,4 +79,66 @@ final class CourseJourneyTests: XCTestCase {
     func testInitFromJourneyIsNilWhenRecomputedDestinationDiffers() throws {
         XCTAssertNil(CourseJourney(journey: F.journey(destinationStopID: "C"), catalog: try F.single()))
     }
+
+    // MARK: AC-28 / AC-32 (phase-review 보강)
+
+    /// acceptanceFixture 노선 1111, 출발 S1, 16분: 정류장 S1,S2,S3,S4 / 구간 초 [300,240,420] / 구간 미터 [800,600,1100].
+    /// 미터는 RouteLegTests의 distanceMeters(S1~S3 1400, S1~S4 2500)와 AC-28 기대값(420초 → 14)에서 역산한 값이다.
+    private func acceptanceCourse() throws -> CourseJourney {
+        let catalog = try RouteCatalogFixture.acceptance()
+        let route = try XCTUnwrap(catalog.routeIndex(id: "1111"))
+        let origin = try XCTUnwrap(catalog.stopIndex(id: "S1"))
+        let leg = try XCTUnwrap(RouteLegFinder.leg(route: route, originStop: origin, minutes: 16, in: catalog))
+        return CourseJourney(leg: leg, catalog: catalog)
+    }
+
+    // 깨짐: 남은 거리를 구간 비례(절반 지점 = 240초 구간의 반)로 계산하지 않거나 0.1km 반올림이 틀리면 실패한다.
+    func testAC28_420초의_남은_거리는_1점4km다() throws {
+        let course = try acceptanceCourse()
+        XCTAssertEqual(course.cumulativeSeconds, [0, 300, 540, 960])
+        XCTAssertEqual(JourneyCourseProgress.remainingDistanceTenthsKm(of: course, elapsedSeconds: 420), 14)
+    }
+
+    // 깨짐: 420초 위치가 구간 1의 정확한 중간(fraction 0.5)이 아니면 실패한다.
+    func testAC28_420초_위치는_구간1의_중간이다() throws {
+        let position = JourneyCourseProgress.position(of: try acceptanceCourse(), elapsedSeconds: 420)
+        XCTAssertEqual(position.segmentFrom, 1)
+        XCTAssertEqual(position.segmentTo, 2)
+        XCTAssertEqual(position.fraction, 0.5, accuracy: 1e-9)
+        XCTAssertFalse(position.isArrived)
+    }
+
+    // 깨짐: 경계(0·300·540·960초)에서 구간 선택 또는 반올림이 틀리면 해당 경계에서 실패한다.
+    func testAC28_경계_경과의_남은_거리() throws {
+        let course = try acceptanceCourse()
+        let cases: [(elapsed: Int, tenths: Int)] = [(0, 25), (300, 17), (540, 11), (960, 0)]
+        for c in cases {
+            XCTAssertEqual(
+                JourneyCourseProgress.remainingDistanceTenthsKm(of: course, elapsedSeconds: c.elapsed), c.tenths,
+                "elapsed \(c.elapsed)"
+            )
+        }
+    }
+
+    // 깨짐: BR-11 범위(33~39 / 124~130) 안의 서울 밖 좌표를 코스에서 걸러 내거나 코스를 nil로 만들면 실패한다.
+    func testAC32_서울_밖_좌표_정류장도_코스에_포함된다() throws {
+        let outside = CoursePoint(latitude: 37.70, longitude: 126.70)
+        let stops = [
+            RouteCatalogFixture.stop("A", "에이", 1),
+            RouteCatalog.Stop(id: "OUT", name: "서울밖", ars: nil, point: outside),
+            RouteCatalogFixture.stop("C", "씨", 3),
+        ]
+        let route = RouteCatalogFixture.route("r-1", number: "1", stops: ["A", "OUT", "C"], in: stops, seconds: [600, 900, 60], meters: [1000, 2000, 100])
+        let catalog = try RouteCatalog(stops: stops, routes: [route], metadata: RouteCatalog.fixtureMetadata)
+        let journey = F.journey(
+            minutes: 25, busID: "r-1", busNumber: "1", destinationStopID: "C", destinationName: "씨"
+        )
+
+        let course = try XCTUnwrap(CourseJourney(journey: journey, catalog: catalog))
+
+        XCTAssertEqual(course.stops.map(\.id), ["A", "OUT", "C"])
+        let point = try XCTUnwrap(course.stops.first { $0.id == "OUT" }?.point)
+        XCTAssertEqual(point.latitude, 37.70, accuracy: 1e-9)
+        XCTAssertEqual(point.longitude, 126.70, accuracy: 1e-9)
+    }
 }

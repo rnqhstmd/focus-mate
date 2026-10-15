@@ -74,4 +74,25 @@ final class DataSourceContentTests: XCTestCase {
         XCTAssertEqual(content.baseDateText, "데이터 기준일 2026.09.02")
         XCTAssertEqual(content.datasetTexts.first, "서울시버스노선별정류소정보 (OA-1095)")
     }
+
+    // MARK: BR-17 unavailable
+
+    // 깨짐: 메타데이터를 읽을 수 없을 때 쓰는 고정 문구(출처·라이선스·데이터셋·주소·가공 고지)가 명세와 다르면 실패한다.
+    func testBR17_unavailable은_고정_문구와_기준일_확인불가를_보인다() {
+        let content = DataSourceContent.unavailable
+
+        XCTAssertEqual(content.copyrightText, "서울특별시")
+        XCTAssertEqual(content.providerText, "서울 열린데이터광장")
+        XCTAssertEqual(content.datasetTexts, [
+            "서울시버스노선별정류소정보 (OA-1095)",
+            "서울시버스노선기본정보 (OA-15066)",
+        ])
+        XCTAssertEqual(content.licenseText, "공공누리 제1유형")
+        XCTAssertEqual(content.baseDateText, "데이터 기준일 확인할 수 없어요")
+        XCTAssertEqual(content.sourceURLs, [
+            "https://data.seoul.go.kr/dataList/OA-1095/F/1/datasetView.do",
+            "https://data.seoul.go.kr/dataList/OA-15066/F/1/datasetView.do",
+        ])
+        XCTAssertEqual(content.processingNotice, "구간 시간과 거리는 원천 데이터를 가공·계산한 값이에요")
+    }
 }

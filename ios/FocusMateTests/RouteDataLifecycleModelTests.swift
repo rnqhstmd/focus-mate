@@ -545,4 +545,26 @@ final class RouteDataLifecycleModelTests: XCTestCase {
         XCTAssertNil(model.journeyPlan.selectedRouteID)
         XCTAssertEqual(model.journeyPlan.minutes, JourneyPlanner.initialMinutes)
     }
+
+    // MARK: AC-45 연속 시나리오
+
+    // 깨짐: 로딩 중 포기를 막지 않거나, 로딩 완료 후에도 같은 포기가 거절되면(또는 도달 정류장이 다르면) 실패한다.
+    func testAC45_로딩_중_포기는_거절되고_로딩_후_같은_포기는_도달_정류장으로_성공한다() async throws {
+        let probe = LifecycleProbe()
+        let model = try F.model(
+            snapshot: F.appSnapshot(active: F.journey(elapsedSeconds: 600)),
+            routeData: F.loadingStore(try F.single()), probe: probe
+        )
+        model.open(.journey)
+
+        XCTAssertEqual(model.abandonJourney(timerPaused: true), .rejected)
+        XCTAssertEqual(probe.attempts, 0)
+
+        await model.startRouteData().value
+
+        XCTAssertEqual(model.abandonJourney(timerPaused: true), .done)
+        XCTAssertEqual(probe.writes.count, 1)
+        XCTAssertEqual(try lastSaved(probe).currentStation, StationSnapshot(id: "B", name: "비"))
+        XCTAssertNil(try lastSaved(probe).journey.active)
+    }
 }

@@ -4,7 +4,7 @@ import XCTest
 
 /// 경과 시간 -> 코스 위치·남은 수치 (AC-6~9, AC-39 계산). uiTestFixture의 2014(구간 300초)를 성수역에서 25분 탄다.
 /// 코스 위치 0...5 = seongsu, seongsuDong, ttukseom, seongdongSportsCenter, seoulForest, seoulForestGate.
-/// 구간별 보간·방위·거리 반올림의 세부는 W16b에서 CourseJourneyTests가 손계산 카탈로그로 다룬다.
+/// 이 파일은 uiTestFixture 2014 코스의 위치·남은 정류장/거리를 다룬다. 구간이 불균등한 경우의 거리 반올림(AC-28)은 CourseJourneyTests가 acceptanceFixture 1111로 다룬다. 방위 규칙은 이 파일에서 검증하지 않는다.
 final class JourneyCourseProgressTests: XCTestCase {
     private let accuracy = 1e-9
 

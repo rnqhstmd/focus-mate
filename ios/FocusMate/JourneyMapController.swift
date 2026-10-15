@@ -30,7 +30,7 @@ final class JourneyMapController {
     /// 출발 → 도착 실제 노선 구간. 닫는 선이 없다.
     var routePoints: [CoursePoint] { journey.stops.map(\.point) }
     var visibleStops: [CourseStop] { state.showsStops ? journey.stops : [] }
-    var destinationStop: CourseStop { journey.stops[journey.stops.count - 1] }
+    var destinationStop: CourseStop { journey.stops.last! }
     var nextStop: CourseStop { journey.stops[nextStopIndex] }
 
     func sync(status: JourneyTimerController.Status, elapsedSeconds: Int) {

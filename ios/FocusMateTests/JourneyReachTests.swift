@@ -6,7 +6,7 @@ import XCTest
 /// 정방향 순서(리터럴): 0 seongsu, 1 seongsuDong, 2 ttukseom, 3 seongdongSportsCenter, 4 seoulForest,
 /// 5 seoulForestGate, 6 seongsuBridgeNorth, 7 ttukseomHangangPark, 8 seongsuIntersection (9개 순환).
 /// 구간 초: 2014 = 300, 302 = 450, 421 = 424. 역방향은 id 뒤에 "-r".
-/// 순수 계산 규칙(칸 수·상한·순환)은 W16b에서 RouteReachTests·RouteLegTests가 카탈로그 기준으로 다룬다.
+/// 도달 정류장의 카탈로그 상태별 판정(누적 시간·노선 사라짐·로딩/실패)은 RouteReachTests가, 도착지 탐색 규칙(칸 수·허용 오차·순환)은 RouteLegTests가 다룬다.
 @MainActor
 final class JourneyReachTests: XCTestCase {
     private typealias F = BoardingFixtures

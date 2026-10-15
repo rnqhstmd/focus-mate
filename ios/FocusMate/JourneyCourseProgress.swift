@@ -27,7 +27,7 @@ struct CourseJourney: Equatable {
     init?(journey: JourneySnapshot, catalog: RouteCatalog) {
         guard let route = catalog.routeIndex(id: journey.busID), let origin = catalog.stopIndex(id: journey.originStopID),
               let leg = RouteLegFinder.leg(route: route, originStop: origin, minutes: journey.minutes, in: catalog),
-              catalog.stops[leg.stopIndices[leg.stopIndices.count - 1]].id == journey.destinationStopID
+              leg.stopIndices.last.map({ catalog.stops[$0].id }) == journey.destinationStopID
         else { return nil }
         self.init(leg: leg, catalog: catalog)
     }

@@ -120,4 +120,41 @@ final class RouteDataBundleTests: XCTestCase {
         print("[T6] zero-candidate ratio @25min = \(ratio) (\(empty)/\(n))")
         XCTAssertLessThan(ratio, 0.5)
     }
+
+    // 깨짐: 번들 메타데이터의 저작권자·라이선스·제공처·데이터셋명이 바뀌거나 비면 실패한다.
+    func test번들_메타데이터는_출처_고정_문구를_가진다() throws {
+        let m = try catalog().metadata
+        XCTAssertEqual(m.copyright, "서울특별시")
+        XCTAssertEqual(m.license, "공공누리 제1유형")
+        XCTAssertEqual(m.provider, "서울 열린데이터광장")
+        XCTAssertEqual(m.dataset, "서울시버스노선별정류소정보")
+        XCTAssertEqual(m.routeInfoDataset, "서울시버스노선기본정보")
+    }
+
+    // 깨짐: 번들 메타데이터 기반 출처 문구가 unavailable과 기준일 줄 말고도 다르면(문구 이원화) 실패한다.
+    func test번들_출처_문구는_unavailable과_기준일_줄만_다르다() throws {
+        let content = DataSourceContent(metadata: try catalog().metadata)
+        let fallback = DataSourceContent.unavailable
+
+        XCTAssertEqual(content.copyrightText, fallback.copyrightText)
+        XCTAssertEqual(content.providerText, fallback.providerText)
+        XCTAssertEqual(content.datasetTexts, fallback.datasetTexts)
+        XCTAssertEqual(content.licenseText, fallback.licenseText)
+        XCTAssertEqual(content.sourceURLs, fallback.sourceURLs)
+        XCTAssertEqual(content.processingNotice, fallback.processingNotice)
+        XCTAssertEqual(content.baseDateText, "데이터 기준일 2026.09.02")
+        XCTAssertNotEqual(content.baseDateText, fallback.baseDateText)
+    }
+
+    // 깨짐: 공백뿐이거나 UTF-16 500 초과인 이름·번호·종류·id가 있으면 승차 저장 검증에서 거절된다.
+    func test번들_모든_정류장과_노선_문자열은_공백뿐이지_않고_500_이하다() throws {
+        let c = try catalog()
+        func bad(_ s: String) -> Bool {
+            s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || s.utf16.count > 500
+        }
+        let badStops = c.stops.filter { bad($0.name) || bad($0.id) }.prefix(5).map(\.id)
+        XCTAssertEqual(Array(badStops), [], "정류장 name/id 위반")
+        let badRoutes = c.routes.filter { bad($0.number) || bad($0.kind) || bad($0.id) }.prefix(5).map(\.id)
+        XCTAssertEqual(Array(badRoutes), [], "노선 number/kind/id 위반")
+    }
 }

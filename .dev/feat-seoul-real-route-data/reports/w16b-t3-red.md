@@ -36,3 +36,11 @@
 - 수정: testV5FileMissingStoredFieldFailsToDecode -> testV5FileMissingStoredFieldDropsOnlyTheJourney (destinationName 누락 v5 여정은 decode 성공, journey.active nil, 카드·정류장 유지; JourneySection 기존 계약).
 - R1 리뷰 재현: RouteDataLifecycleModelTests에 testRetryLoadAfterReadFailureMigratesLegacyFile(읽기 실패 후 retryLoad 이전), testConfirmInitialStationResetsJourneyPlanDraft(정류장 확정 시 journeyPlan 초기화) 추가. 가정: 모델 API retryLoad(), journeyPlan(var), launchState .failed. 분 초기화는 25분 상태에서만 확인 가능(약함).
 - R1 재현 테스트 컴파일 결함(오케스트레이터): launchState .failed → .failed(.unreadable) (읽기 실패는 StorageIssue.unreadable)
+
+## phase-review 보강
+- CourseJourneyTests: AC-28(420초 → 14, fraction 0.5/segmentFrom 1, 경계 0·300·540·960 → 25·17·11·0), AC-32(서울 밖 37.70/126.70 정류장 코스 포함) 추가.
+  - 가정(위험): 픽스처 구간 미터는 production 미열람이라 [800,600,1100]로 역산함(S1~S3=1400, S1~S4=2500, 420초→14). 300→17, 540→11은 이 역산 기준이라 실제 픽스처가 다르면 기대값 재검토 필요(420→14와 0→25·960→0은 확정).
+- RouteDataLifecycleModelTests: AC-45 연속 시나리오(로딩 중 포기 .rejected·저장 0회 → startRouteData 후 .done, 현재 정류장 B "비").
+- DataSourceContentTests: BR-17 `DataSourceContent.unavailable` 고정 문구.
+- RouteDataBundleTests: 번들 metadata 고정 문구, unavailable과 기준일 줄만 다름, 모든 정류장·노선 문자열 공백뿐/UTF-16 500 초과 없음.
+- 주석 정정: JourneyCourseProgressTests.swift·JourneyReachTests.swift 머리 주석의 "W16b에서 ...가 다룬다" 잘못된 커버리지 주장을 실제 담당 파일 기준으로 수정(방위 규칙은 이 파일들에서 검증하지 않는다고 명시, 방위 규칙은 이 두 파일에서 검증하지 않는다고만 명시).

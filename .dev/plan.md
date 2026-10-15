@@ -17,7 +17,7 @@
 | W12 | [P5] 접근성·동작 설정 | preferences | preferences FR-3 | - | - | 폐기 |
 | W13 | [P5] 저장 오류 복구 | preferences | preferences FR-4 | W00 | codex/feat-storage-error-recovery | 완료 |
 | W14 | [P6] 실기기 QA·출시 준비 | 통합 | journey NFR-2(실기기), preferences NFR-2 | W04, W06, W07, W09, W10, W11, W13 | - | 대기 |
-| W15 | [P3] 다이나믹 아일랜드·잠금 화면 진행 표시(Live Activity) | journey | journey FR-5 보조(2026-10-15 사용자 요청) | W05 | - | 대기 |
+| W15 | [P3] 다이나믹 아일랜드·잠금 화면 진행 표시(Live Activity) | journey | journey FR-5 보조(2026-10-15 사용자 요청) | W05 | feat/live-activity-progress | 진행 |
 
 요구사항 ID는 `context/{도메인}/status.md`의 원장을 따른다. `[P2]`는 [개발 단계](../docs/DEVELOPMENT-PHASES.md)의 Phase다.
 

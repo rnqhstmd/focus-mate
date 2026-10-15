@@ -144,4 +144,11 @@ final class RouteLegTests: XCTestCase {
         )
         XCTAssertNil(try leg("9", from: "A", minutes: 2, in: catalog))
     }
+
+    // 깨짐: 분 범위 검사를 빼면 0분·361분에서 값이 나와 실패한다.
+    func testMinutesOutsideOneTo360IsNil() throws {
+        let catalog = try F.acceptance()
+        XCTAssertNil(try leg("1111", from: "S1", minutes: 0, in: catalog))
+        XCTAssertNil(try leg("1111", from: "S1", minutes: 361, in: catalog))
+    }
 }

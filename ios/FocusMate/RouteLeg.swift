@@ -17,7 +17,8 @@ enum RouteLegFinder {
     static let toleranceSeconds = 60
 
     static func leg(route routeIndex: Int, originStop: Int, minutes: Int, in catalog: RouteCatalog) -> RouteLeg? {
-        guard let visit = catalog.visits(stopIndex: originStop).first(where: { $0.route == routeIndex }) else { return nil }
+        guard (1...JourneySnapshot.maximumMinutes).contains(minutes),
+              let visit = catalog.visits(stopIndex: originStop).first(where: { $0.route == routeIndex }) else { return nil }
         let route = catalog.routes[routeIndex]
         let count = route.stops.count
         let target = minutes * 60

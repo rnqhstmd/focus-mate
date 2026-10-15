@@ -3,12 +3,21 @@ from dataclasses import dataclass
 import posixpath
 import re
 import xml.etree.ElementTree as ET
+import io
 import zipfile
+import zlib
 
 _MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 _DOC_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _TEXT_TYPES = {"s", "inlineStr", "str"}
+DEFAULT_MAX_ENTRY_BYTES = 200_000_000
+DEFAULT_MAX_ROWS = 2_000_000
+_FORBIDDEN_MARKUP = (b"<!DOCTYPE", b"<!ENTITY")
+
+
+class XlsxError(Exception):
+    """The file is not a readable xlsx or exceeds the reading limits."""
 
 
 @dataclass(frozen=True)
@@ -35,10 +44,19 @@ def require_columns(sheet, names):
         raise MissingColumnsError(missing)
 
 
-def read_first_sheet(path):
-    with zipfile.ZipFile(path) as archive:
-        shared = _shared_strings(archive)
-        grid = _sheet_rows(archive, _first_sheet_path(archive), shared)
+def read_first_sheet(path, *, max_entry_bytes=DEFAULT_MAX_ENTRY_BYTES, max_rows=DEFAULT_MAX_ROWS):
+    try:
+        with zipfile.ZipFile(path) as archive:
+            oversized = [info.filename for info in archive.infolist() if info.file_size > max_entry_bytes]
+            if oversized:
+                raise XlsxError(f"압축을 푼 크기가 한도({max_entry_bytes} bytes)를 넘습니다: {', '.join(oversized)}")
+            shared = _shared_strings(archive)
+            grid = _sheet_rows(archive, _first_sheet_path(archive), shared, max_rows)
+    except XlsxError:
+        raise
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile, zlib.error, EOFError, RuntimeError,
+            NotImplementedError, KeyError, ValueError, IndexError, AttributeError, TypeError, ET.ParseError) as error:
+        raise XlsxError(f"xlsx 파일을 읽을 수 없습니다: {error}") from None
     if not grid:
         return Sheet(header=[], rows=[])
     header_row = grid[0][1]
@@ -50,17 +68,29 @@ def read_first_sheet(path):
 
 
 def _first_sheet_path(archive):
-    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+    workbook = ET.fromstring(_read_xml(archive, "xl/workbook.xml"))
     sheet = workbook.find(f"{_MAIN}sheets/{_MAIN}sheet")
     if sheet is None:
         raise ValueError("시트가 없습니다")
     rel_id = sheet.get(f"{_DOC_REL}id")
-    rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    rels = ET.fromstring(_read_xml(archive, "xl/_rels/workbook.xml.rels"))
     for rel in rels.iter(f"{_REL}Relationship"):
         if rel.get("Id") == rel_id:
             target = rel.get("Target")
             return target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join("xl", target))
     raise ValueError("첫 시트 경로를 찾을 수 없습니다")
+
+
+def _read_xml(archive, name):
+    """Reads one XML part, allowing only UTF-8 without DOCTYPE/ENTITY declarations (normal xlsx parts have neither)."""
+    data = archive.read(name)
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise XlsxError(f"xlsx XML이 UTF-8이 아닙니다: {name}") from None
+    if any(marker in data for marker in _FORBIDDEN_MARKUP):
+        raise XlsxError(f"xlsx XML에 DOCTYPE·ENTITY 선언이 있어 읽지 않습니다: {name}")
+    return data
 
 
 def _text(node):
@@ -77,7 +107,7 @@ def _text(node):
 def _shared_strings(archive):
     if "xl/sharedStrings.xml" not in archive.namelist():
         return []
-    root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+    root = ET.fromstring(_read_xml(archive, "xl/sharedStrings.xml"))
     return [_text(si) for si in root.iter(f"{_MAIN}si")]
 
 
@@ -102,13 +132,15 @@ def _cell(element, shared):
     return Cell(value=text, is_text=kind in _TEXT_TYPES)
 
 
-def _sheet_rows(archive, sheet_path, shared):
+def _sheet_rows(archive, sheet_path, shared, max_rows):
     rows = []
-    with archive.open(sheet_path) as stream:
+    with io.BytesIO(_read_xml(archive, sheet_path)) as stream:
         for _, element in ET.iterparse(stream):
             if element.tag != f"{_MAIN}row":
                 continue
             cells = {_column_index(c.get("r")): _cell(c, shared) for c in element.iter(f"{_MAIN}c")}
             rows.append((int(element.get("r")), cells))
             element.clear()
+            if len(rows) > max_rows + 1:
+                raise XlsxError(f"데이터 행이 한도({max_rows})를 넘습니다")
     return rows

@@ -12,6 +12,8 @@ struct RouteDataMetadata: Equatable, Sendable {
     let routeInfoDatasetID: String
     let stopsFile: String
     let routeInfoFile: String
+    let sourceURL: String
+    let routeInfoSourceURL: String
 }
 
 /// 한 정류장을 지나는 노선과 그 노선 안의 첫 지점.
@@ -24,6 +26,8 @@ enum RouteCatalogIssue: Error, Equatable {
     case invalidRoute(String)
     case unknownStop(String)
     case malformed
+    case duplicateID(String)
+    case outOfRange(String)
 }
 
 /// 노선 번호 자연 정렬. 숫자 덩어리는 크기로, 글자 덩어리는 유니코드 순으로 비교한다(720 → 1111 → 강남02).
@@ -61,7 +65,11 @@ enum RouteNumberOrder {
 }
 
 /// 서울 버스 정류장·노선 데이터. 모든 경로 규칙은 이 값을 주입받는다(전역 상수 대신).
-struct RouteCatalog: Sendable {
+struct RouteCatalog: Equatable, Sendable {
+    static let maximumSegmentSeconds = 21_600
+    static let maximumSegmentMeters = 200_000
+    static let maximumRouteStops = 1_000
+
     struct Stop: Equatable, Sendable {
         let id: String
         let name: String
@@ -87,11 +95,17 @@ struct RouteCatalog: Sendable {
     private let visitsByStop: [[RouteVisit]]
 
     init(stops: [Stop], routes: [Route], metadata: RouteDataMetadata) throws {
+        if let duplicate = Self.firstDuplicate(stops.map(\.id)) ?? Self.firstDuplicate(routes.map(\.id)) {
+            throw RouteCatalogIssue.duplicateID(duplicate)
+        }
         for route in routes {
             let count = route.stops.count
             guard count >= 2, route.seconds.count == count, route.meters.count == count,
                   route.seconds.allSatisfy({ $0 >= 1 }), route.stops.allSatisfy(stops.indices.contains)
             else { throw RouteCatalogIssue.invalidRoute(route.id) }
+            guard count <= Self.maximumRouteStops, route.seconds.allSatisfy({ $0 <= Self.maximumSegmentSeconds }),
+                  route.meters.allSatisfy({ (0...Self.maximumSegmentMeters).contains($0) })
+            else { throw RouteCatalogIssue.outOfRange(route.id) }
         }
         let ordered = routes.sorted {
             $0.number == $1.number ? $0.id < $1.id : RouteNumberOrder.areInIncreasingOrder($0.number, $1.number)
@@ -112,6 +126,11 @@ struct RouteCatalog: Sendable {
     }
 
     func stopIndex(id: String) -> Int? { stopIndexByID[id] }
+
+    private static func firstDuplicate(_ ids: [String]) -> String? {
+        var seen = Set<String>()
+        return ids.first { !seen.insert($0).inserted }
+    }
 
     func routeIndex(id: String) -> Int? { routeIndexByID[id] }
 

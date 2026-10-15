@@ -92,6 +92,111 @@ class XlsxReadTest(unittest.TestCase):
         self.assertEqual(sheet.rows[0]["노선명"].value, "진짜")
 
 
+class XlsxGuardTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "t.xlsx")
+
+    def test_압축_해제_크기가_한도를_넘으면_XlsxError(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        write_xlsx(self.path, [["A"], ["x"]])
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path, max_entry_bytes=10)
+
+    def test_데이터_행이_max_rows를_넘으면_XlsxError(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        write_xlsx(self.path, [["A"], ["x"], ["y"]])
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path, max_rows=1)
+
+    def test_데이터_행이_max_rows와_같으면_정상(self):
+        from route_data.xlsx import read_first_sheet
+        write_xlsx(self.path, [["A"], ["x"], ["y"]])
+        sheet = read_first_sheet(self.path, max_rows=2)
+        self.assertEqual([r["A"].value for r in sheet.rows], ["x", "y"])
+
+    def test_시트_XML에_DOCTYPE이_있으면_XlsxError(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        from tests.xlsx_fixture import write_xlsx_with_doctype
+        write_xlsx_with_doctype(self.path, [["A"], ["x"]])
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path)
+
+    def test_공유_문자열_XML에_ENTITY가_있으면_XlsxError(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        from tests.xlsx_fixture import write_xlsx_with_doctype
+        write_xlsx_with_doctype(self.path, [["A"], ["x"]], entry="xl/sharedStrings.xml")
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path)
+
+    def test_공유_문자열_색인이_범위_밖이면_XlsxError(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        from tests.xlsx_fixture import write_xlsx_with_bad_shared_index
+        write_xlsx_with_bad_shared_index(self.path, ["A"])
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path)
+
+    def test_zip이_아닌_파일은_XlsxError(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        with open(self.path, "wb") as f:
+            f.write(b"not a zip")
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path)
+
+
+class XlsxHardeningTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "t.xlsx")
+
+    def assert_xlsx_error(self):
+        from route_data.xlsx import XlsxError, read_first_sheet
+        with self.assertRaises(XlsxError):
+            read_first_sheet(self.path)
+
+    def test_긴_주석_뒤의_DOCTYPE도_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_with_comment_then_doctype
+        write_xlsx_with_comment_then_doctype(self.path, [["A"], ["x"]])
+        self.assert_xlsx_error()
+
+    def test_workbook_XML에_DOCTYPE이_있으면_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_with_doctype
+        write_xlsx_with_doctype(self.path, [["A"], ["x"]], entry="xl/workbook.xml")
+        self.assert_xlsx_error()
+
+    def test_workbook_rels에_DOCTYPE이_있으면_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_with_doctype
+        write_xlsx_with_doctype(self.path, [["A"], ["x"]], entry="xl/_rels/workbook.xml.rels")
+        self.assert_xlsx_error()
+
+    def test_UTF16_시트_XML은_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_utf16_sheet
+        write_xlsx_utf16_sheet(self.path, [["A"], ["x"]])
+        self.assert_xlsx_error()
+
+    def test_손상된_deflate_데이터는_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_corrupt_deflate
+        write_xlsx_corrupt_deflate(self.path, [["A"], ["x"]])
+        self.assert_xlsx_error()
+
+    def test_workbook_엔트리가_없으면_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_without_entry
+        write_xlsx_without_entry(self.path, [["A"], ["x"]], "xl/workbook.xml")
+        self.assert_xlsx_error()
+
+    def test_시트_XML_문법_오류는_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_broken_sheet_xml
+        write_xlsx_broken_sheet_xml(self.path, [["A"], ["x"]])
+        self.assert_xlsx_error()
+
+    def test_셀에_r_속성이_없으면_XlsxError(self):
+        from tests.xlsx_fixture import write_xlsx_cell_without_r
+        write_xlsx_cell_without_r(self.path, ["A"])
+        self.assert_xlsx_error()
+
+
 class RequireColumnsTest(unittest.TestCase):
     def sheet(self, header):
         from route_data.xlsx import Sheet

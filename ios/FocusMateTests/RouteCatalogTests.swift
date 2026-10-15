@@ -104,7 +104,7 @@ final class RouteCatalogTests: XCTestCase {
     // MARK: 로더
 
     private static let source = """
-    "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"서울시버스노선별정류소정보","datasetID":"OA-1095","license":"공공누리 제1유형","provider":"서울 열린데이터광장","routeInfoDataset":"서울시버스노선기본정보","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","stopsFile":"s.csv"}
+    "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"서울시버스노선별정류소정보","datasetID":"OA-1095","license":"공공누리 제1유형","provider":"서울 열린데이터광장","routeInfoDataset":"서울시버스노선기본정보","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","routeInfoSourceURL":"https://example.test/r","sourceURL":"https://example.test/s","stopsFile":"s.csv"}
     """
 
     private func json(routeNodes: String) -> Data {
@@ -142,5 +142,158 @@ final class RouteCatalogTests: XCTestCase {
         XCTAssertThrowsError(try RouteCatalogLoader.load(data: Data("not json".utf8))) {
             XCTAssertEqual($0 as? RouteCatalogIssue, .malformed)
         }
+    }
+
+    // MARK: 검증 (W16b)
+
+    private func assertIssue(
+        _ expected: RouteCatalogIssue, stops: [RouteCatalog.Stop], routes: [RouteCatalog.Route],
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        XCTAssertThrowsError(try F.make(stops: stops, routes: routes), file: file, line: line) {
+            XCTAssertEqual($0 as? RouteCatalogIssue, expected, file: file, line: line)
+        }
+    }
+
+    // 깨짐: 정류장 id 중복 검사를 빼면 throw하지 않아 실패한다.
+    func testDuplicateStopIDIsRejected() {
+        let stops = [F.stop("A", "에이", 1), F.stop("A", "에이2", 2), F.stop("B", "비", 3)]
+        assertIssue(.duplicateID("A"), stops: stops, routes: [F.route("1", stops: ["B", "B"], in: stops)])
+    }
+
+    // 깨짐: 노선 id 중복 검사를 빼면 실패한다.
+    func testDuplicateRouteIDIsRejected() {
+        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
+        let routes = [F.route("1", stops: ["A", "B"], in: stops), F.route("1", number: "2", stops: ["A", "B"], in: stops)]
+        assertIssue(.duplicateID("1"), stops: stops, routes: routes)
+    }
+
+    // 깨짐: 상한 비교를 >= 로 쓰거나 검사를 빼면 실패한다.
+    func testSegmentSeconds21601IsOutOfRange() {
+        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
+        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, seconds: [21_601, 60])])
+    }
+
+    func testSegmentSeconds21600IsAllowed() throws {
+        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
+        XCTAssertNoThrow(try F.make(stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, seconds: [21_600, 60])]))
+    }
+
+    func testNegativeSegmentMetersIsOutOfRange() {
+        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
+        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, meters: [-1, 500])])
+    }
+
+    func testSegmentMeters200001IsOutOfRange() {
+        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
+        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, meters: [200_001, 500])])
+    }
+
+    func testRouteWith1001StopsIsOutOfRange() {
+        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
+        let ids = (0..<1_001).map { $0 % 2 == 0 ? "A" : "B" }
+        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ids, in: stops)])
+    }
+
+    // MARK: 로더 검증 (W16b)
+
+    private func loaderJSON(
+        stop1: String = "[\"N1\",\"시작\",\"\",37500000,127000000]", sourceExtra: String? = nil
+    ) -> Data {
+        var source = Self.source
+        if let sourceExtra { source = sourceExtra }
+        return Data("""
+        {"format":1,\(source),"stops":[\(stop1),["N2","끝","12345",37510000,127010000]],"routes":[["R1","100","지선",["N1","N2"],[60,120],[500,700]]]}
+        """.utf8)
+    }
+
+    private func assertLoadIssue(_ expected: RouteCatalogIssue, _ data: Data, line: UInt = #line) {
+        XCTAssertThrowsError(try RouteCatalogLoader.load(data: data), line: line) {
+            XCTAssertEqual($0 as? RouteCatalogIssue, expected, line: line)
+        }
+    }
+
+    // 깨짐: 위도 범위 검사를 빼면 실패한다.
+    func testLoaderRejectsLatitudeOutOfKoreaRange() {
+        assertLoadIssue(.outOfRange("N1"), loaderJSON(stop1: "[\"N1\",\"시작\",\"\",40000000,127000000]"))
+    }
+
+    func testLoaderRejectsLongitudeOutOfKoreaRange() {
+        assertLoadIssue(.outOfRange("N1"), loaderJSON(stop1: "[\"N1\",\"시작\",\"\",37500000,123999999]"))
+    }
+
+    // 깨짐: JSON true를 숫자 1로 받아들이면 실패한다.
+    func testLoaderRejectsBooleanInNumericSlot() {
+        assertLoadIssue(.malformed, loaderJSON(stop1: "[\"N1\",\"시작\",\"\",true,127000000]"))
+    }
+
+    func testLoaderRejectsMissingSourceURL() {
+        let source = """
+        "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"d","datasetID":"OA-1095","license":"l","provider":"p","routeInfoDataset":"r","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","routeInfoSourceURL":"https://example.test/r","stopsFile":"s.csv"}
+        """
+        assertLoadIssue(.malformed, loaderJSON(sourceExtra: source))
+    }
+
+    func testLoaderRejectsMissingRouteInfoSourceURL() {
+        let source = """
+        "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"d","datasetID":"OA-1095","license":"l","provider":"p","routeInfoDataset":"r","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","sourceURL":"https://example.test/s","stopsFile":"s.csv"}
+        """
+        assertLoadIssue(.malformed, loaderJSON(sourceExtra: source))
+    }
+
+    // 깨짐: URL 필드를 다른 키에서 읽거나 서로 바꾸면 실패한다.
+    func testLoaderReadsSourceURLs() throws {
+        let catalog = try RouteCatalogLoader.load(data: loaderJSON())
+        XCTAssertEqual(catalog.metadata.sourceURL, "https://example.test/s")
+        XCTAssertEqual(catalog.metadata.routeInfoSourceURL, "https://example.test/r")
+    }
+
+    // 깨짐: 번들 조회가 없거나 다른 파일명을 찾으면 nil이어서 실패한다.
+    func testBundledURLFindsRouteDataInAppBundle() throws {
+        let url = try XCTUnwrap(RouteCatalogLoader.bundledURL())
+        XCTAssertTrue(url.isFileURL)
+        XCTAssertEqual(url.lastPathComponent, "seoul-route-data.json")
+    }
+
+    // MARK: uiTestFixture (W16b)
+
+    private func candidateSummary(minutes: Int) throws -> [RouteCandidate] {
+        let catalog = try RouteCatalog.uiTestFixture()
+        let origin = try XCTUnwrap(catalog.stopIndex(id: "seongsu"))
+        return RouteCandidates.candidates(minutes: minutes, originStop: origin, in: catalog)
+    }
+
+    // 깨짐: 구간 초를 바꾸면 17분에 후보가 생겨 실패한다.
+    func testUITestFixture_17분은_후보가_없다() throws {
+        XCTAssertEqual(try candidateSummary(minutes: 17).map(\.id), [])
+    }
+
+    func testUITestFixture_25분은_2014_서울숲_입구다() throws {
+        let result = try candidateSummary(minutes: 25)
+        XCTAssertEqual(result.map(\.id), ["2014"])
+        XCTAssertEqual(result.first?.destination, "서울숲 입구")
+        XCTAssertEqual(result.first?.stops, 5)
+    }
+
+    func testUITestFixture_60분은_2014와_302다() throws {
+        let result = try candidateSummary(minutes: 60)
+        XCTAssertEqual(result.map(\.id), ["2014", "302"])
+        XCTAssertEqual(result[0].destination, "성동구민체육센터")
+        XCTAssertEqual(result[0].stops, 12)
+        XCTAssertEqual(result[1].stops, 8)
+    }
+
+    func testUITestFixture_120분은_세_노선이며_차이_순이다() throws {
+        let result = try candidateSummary(minutes: 120)
+        XCTAssertEqual(result.map(\.id), ["2014", "302", "421"])
+    }
+
+    // 깨짐: 정/역방향 id 접미나 방면 계산이 달라지면 실패한다.
+    func testUITestFixture_방면_라벨() throws {
+        let catalog = try RouteCatalog.uiTestFixture()
+        let fwd = try XCTUnwrap(catalog.stopIndex(id: "seongsu"))
+        let rev = try XCTUnwrap(catalog.stopIndex(id: "seongsu-r"))
+        XCTAssertEqual(catalog.boundLabel(stopIndex: fwd), "성수동 방면")
+        XCTAssertEqual(catalog.boundLabel(stopIndex: rev), "성수사거리 방면")
     }
 }

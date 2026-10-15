@@ -6,7 +6,7 @@
 | W01 | [P2] 카드 발급·접촉 카드 | card | card FR-3 | W00 | feat/card-issuance-contact-card | 완료 |
 | W02 | [P2] 첫 출발지·시간·버스·도착지 선택 | journey | journey FR-7, FR-8 | W00 | feat/first-station-time-bus-destination | 완료 |
 | W03 | [P2] 준비 허브·태그·소리 | journey | journey FR-9, FR-10 | W02 | codex/feat-preparation-tags-sound | 완료 |
-| W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | feat/boarding-pass-tag | 진행 |
+| W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | feat/boarding-pass-tag | 완료 |
 | W05 | [P3] 실제 분 타이머·일시정지 | journey | journey FR-5 | W04 | - | 대기 |
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | - | 대기 |
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | - | 대기 |

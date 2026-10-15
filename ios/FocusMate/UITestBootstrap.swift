@@ -243,6 +243,8 @@ struct UITestBootstrap {
         let failure = boardingSaveFailure
         services.makeBoarder = { ArmingBoarder(base: $0, failure: failure) }
         services.failNextSave = nextSaveFailure
+        // 기존 UI 테스트가 시뮬레이터에 실제 카드를 띄우지 않도록 항상 기록기를 쓴다.
+        services.liveActivities = RecordingLiveActivityGateway()
         if manualClock {
             let clock = ManualJourneyClock()
             services.clock = clock

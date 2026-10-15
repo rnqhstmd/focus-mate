@@ -1,0 +1,23 @@
+ M .dev/feat-live-activity-progress/decisions.md
+ M .dev/feat-live-activity-progress/state.md
+ M ios/FocusMate.xcodeproj/project.pbxproj
+ M ios/FocusMate/JourneyTimerController.swift
+?? .dev/feat-live-activity-progress/.sim
+?? .dev/feat-live-activity-progress/reports/
+?? .dev/feat-live-activity-progress/rgr-t1-porcelain.now.txt
+?? .dev/feat-live-activity-progress/rgr-t1-porcelain.txt
+?? .dev/feat-live-activity-progress/rgr-t2-porcelain.txt
+?? .dev/feat-live-activity-progress/rgr-t3-porcelain.txt
+?? .dev/feat-live-activity-progress/rgr-t4-porcelain.now.txt
+?? .dev/feat-live-activity-progress/rgr-t4-porcelain.txt
+?? .dev/feat-live-activity-progress/rgr-t5-porcelain.txt
+?? .dev/feat-live-activity-progress/rgr-t6-porcelain.txt
+?? .dev/feat-live-activity-progress/trust-ledger.md
+?? ios/FocusMate/JourneyLiveActivityPolicy.swift
+?? ios/FocusMate/JourneyLiveActivitySync.swift
+?? ios/FocusMate/LiveActivityGateway.swift
+?? ios/FocusMateTests/JourneyActivityDisplayTests.swift
+?? ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift
+?? ios/FocusMateTests/JourneyLiveActivitySyncTests.swift
+?? ios/FocusMateTests/JourneyTimerObserverParityTests.swift
+?? ios/Shared/

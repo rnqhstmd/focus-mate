@@ -34,8 +34,10 @@ struct JourneyView: View {
     private func ensureTimer() {
         guard timer == nil, let journey = model.activeJourney, journey.phase == .departed else { return }
         let resumed = model.consumeResumeEntry(journeyID: journey.id)
+        let liveActivity = JourneyLiveActivitySync(journey: journey, gateway: services.liveActivities)
         timer = JourneyTimerController(journey: journey, autoStart: briefing?.isConfirmed == true || resumed, saver: model,
-                                       clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer)
+                                       clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
+                                       observer: liveActivity)
         if resumed { services.announcer.announce(JourneyLifecycleText.resumeAnnouncement) }
         // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
         if let timer, let course = CourseJourney(journey: journey) {

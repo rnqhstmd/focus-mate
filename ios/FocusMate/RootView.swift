@@ -283,6 +283,9 @@ struct RootView: View {
                 Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")
                 Text("안내 진단").accessibilityValue(testRecorder.announcements.joined(separator: "\n")).accessibilityIdentifier("test.announcements")
             }
+            if let liveActivities = services.liveActivities as? RecordingLiveActivityGateway {
+                Text("표시 진단").accessibilityValue(liveActivities.diagnosticJSON).accessibilityIdentifier("test.liveActivity")
+            }
             if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
         }.font(.system(size: 1)).foregroundStyle(.clear).allowsHitTesting(false)
     }

@@ -35,7 +35,7 @@
 - FR-3 / AC-3: completeFareTag / 신규 VM hold 회귀.
 - FR-4 / AC-4: tick / checkpointJourney / resumePreviousJourney.
 - NFR-1 / AC-5: prototype-edge-qa.cjs 직접 실행 결과.
-- FR-5 / AC-6: W05 PR #17 — 실제 분 타이머·일시정지·10초 체크포인트·저장 v4 구현. 백그라운드에서도 진행(사용자 결정), 종료 후 일시정지 복원. 이어가기·포기는 W07에서 구현, 실기기 확인은 W14.
+- FR-5 / AC-6: W05 PR #17 — 실제 분 타이머·일시정지·10초 체크포인트·저장 v4 구현. 백그라운드에서도 진행(사용자 결정), 종료 후 일시정지 복원. 이어가기·포기는 W07에서 구현, 실기기 확인은 W14. 보조(W15): 잠금 화면·다이나믹 아일랜드 진행 표시(Live Activity) — 위젯 확장 `FocusMateWidgets`, 컨트롤러 옵저버 알림 → `JourneyLiveActivitySync`, 앱 시작 정리. 실기기 렌더·VoiceOver 확인은 W14.
 - FR-6 / AC-7: W06(PR #18). `JourneyCourse`(정류장 id별 실제 위치 근사 좌표, 서울 경계)·`JourneyCourseProgress`(진도 → 버스 위치·남은 정류장·거리)·`JourneyMapState`·`JourneyMapController`(저장자 없음)·`JourneyMapView`(SwiftUI Map, POI 숨김, 라벨 있는 위성)·`JourneyMapThemeSheet`. 하단 남은 시간·정류장·거리, 따라가기/자유 탐색, 일시정지 중 도구 잠금, 지도 상태 미저장. 단위 `JourneyCourseTests`·`JourneyCourseProgressTests`·`JourneyMapDisplayTests`·`JourneyMapStateTests`·`JourneyMapControllerTests`·`AppInfoLocationTests`, UI `JourneyMapUITests`·`JourneyMapAccessibilityUITests`. 실기기 확인 M-1~M-7(법적 표기·VoiceOver·제스처·큰 글자·지도 모양·오프라인·렌더)은 W14. 정류장 목록 펼침은 후속.
 - FR-13 / AC-15: W07 [#19](https://github.com/rnqhstmd/focus-mate/pull/19) — 포기·이어가기 구현. `JourneyReach`(도달 정류장 규칙·`endingActiveJourney` 단일 저장), `AppModel+JourneyLifecycle`(이어가기·새 여정·포기), `JourneyAbandonController`/`JourneyAbandonBar`(일시정지 중 하단 포기하기·확인 창), `MainActiveJourneyView`(이어가기 카드), `life*` 시드·`test.writeAttempts` 진단. 확인 창 첫 VoiceOver 포커스(alert)와 실제 낭독 청취는 W14로 이관.
 - NFR-2 / AC-8: W07 [#19](https://github.com/rnqhstmd/focus-mate/pull/19) — Simulator 구현·검사 완료. 이어가기 저장 1회, 확인 창 중·이어가기 직후 백그라운드·종료·재실행에서 진도 손실·중복·종료 중 시간 가산 없음을 `life*` 시드와 `test.writeAttempts`로 검증. 잠금·실제 재실행 실기기 검사는 W14.

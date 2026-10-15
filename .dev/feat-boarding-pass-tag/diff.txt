@@ -1,0 +1,45 @@
+ ios/FocusMate/AppModel+Boarding.swift              |  56 ++++
+ ios/FocusMate/AppModel+JourneyStart.swift          |   5 +-
+ ios/FocusMate/AppModel.swift                       |  11 +-
+ ios/FocusMate/AppSnapshot.swift                    |   7 +
+ .../BoardMap.imageset/Contents.json                |  12 +
+ .../BoardMap.imageset/board-map.png                | Bin 0 -> 655799 bytes
+ .../TicketDots.imageset/Contents.json              |  12 +
+ .../TicketDots.imageset/ticket-seoul-dots.png      | Bin 0 -> 17856 bytes
+ ios/FocusMate/BoardingPassContent.swift            |  45 +++
+ ios/FocusMate/BoardingPassView.swift               |  98 ++++++
+ ios/FocusMate/BoardingRules.swift                  |  64 ++++
+ ios/FocusMate/BoardingTagController.swift          | 193 +++++++++++
+ ios/FocusMate/BoardingTagView.swift                | 242 ++++++++++++++
+ ios/FocusMate/DepartureBriefingController.swift    |  84 +++++
+ ios/FocusMate/DestinationScreen.swift              |   7 +
+ ios/FocusMate/FocusMateApp.swift                   |  24 +-
+ ios/FocusMate/IssuanceHapticPattern.swift          |   8 +
+ ios/FocusMate/JourneySection.swift                 |   9 +-
+ ios/FocusMate/JourneyServices.swift                |  24 ++
+ ios/FocusMate/JourneySnapshot.swift                | 134 ++++++++
+ ios/FocusMate/JourneyView.swift                    | 133 ++++++++
+ ios/FocusMate/PreparationDraft.swift               |   6 +-
+ ios/FocusMate/PreparationView.swift                |  23 +-
+ ios/FocusMate/RootView.swift                       |  39 ++-
+ ios/FocusMate/SnapshotCodec.swift                  |  15 +-
+ ios/FocusMate/UITestBootstrap.swift                | 114 ++++++-
+ ios/FocusMateTests/BoardingModelTests.swift        | 356 +++++++++++++++++++++
+ ios/FocusMateTests/BoardingPassContentTests.swift  | 117 +++++++
+ ios/FocusMateTests/BoardingRulesTests.swift        | 177 ++++++++++
+ .../BoardingTagControllerTests.swift               | 353 ++++++++++++++++++++
+ ios/FocusMateTests/BoardingTestDoubles.swift       | 125 ++++++++
+ .../DepartureBriefingControllerTests.swift         | 180 +++++++++++
+ .../JourneySnapshotStorageTests.swift              | 185 +++++++++++
+ ios/FocusMateTests/JourneySnapshotTests.swift      | 221 +++++++++++++
+ .../ActiveJourneyMainUITests.swift                 |  59 ++++
+ ios/FocusMateUITests/BoardingFlowUITests.swift     | 188 +++++++++++
+ .../BoardingLargeTextUITests.swift                 |  74 +++++
+ ios/FocusMateUITests/BoardingTagUITests.swift      | 268 ++++++++++++++++
+ .../DepartureBriefingUITests.swift                 |  94 ++++++
+ ios/FocusMateUITests/Phase1FlowTests.swift         |   2 +-
+ .../PreparationEditorUITests.swift                 |   7 +-
+ ios/FocusMateUITests/PreparationFlowUITests.swift  |  22 +-
+ 42 files changed, 3739 insertions(+), 54 deletions(-)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라. 전체 diff(.dev·png 제외)는 .dev/feat-boarding-pass-tag/diff-full.txt (4390줄).

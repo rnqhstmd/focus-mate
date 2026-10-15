@@ -146,7 +146,6 @@ struct PreparationView: View {
     #if DEBUG
       .overlay(alignment: .topLeading) {
         VStack {
-          preparationDiagnostic
           if !showSoundSelection { SoundPreviewDiagnostic(controller: model.soundPreview) }
         }
       }
@@ -175,7 +174,7 @@ struct PreparationView: View {
   private var confirmButton: some View {
     Button {
       taskEditing = false
-      model.confirmPreparation()
+      model.showBoardingPass()
     } label: {
       Text("승차권 보기").font(PreparationTypography.bold(17, relativeTo: .body)).padding(16)
         .frame(maxWidth: .infinity)
@@ -187,26 +186,6 @@ struct PreparationView: View {
   }
 
   #if DEBUG
-    private var preparationDiagnostic: some View {
-      let details = model.confirmedPreparation
-      let object: [String: Any]? = details.map {
-        [
-          "journey": [
-            "minutes": $0.journey.minutes, "busID": $0.journey.busID,
-            "busNumber": $0.journey.busNumber,
-            "destination": $0.journey.destination, "stops": $0.journey.stops,
-          ],
-          "tag": [
-            "id": $0.tag.id, "name": $0.tag.name, "icon": $0.tag.icon.rawValue,
-            "color": $0.tag.color.rawValue,
-          ],
-          "task": $0.task, "sound": $0.sound.rawValue,
-        ]
-      }
-      return Text("준비 확정 진단").font(.system(size: 1)).foregroundStyle(.clear)
-        .accessibilityValue(diagnosticJSON(object)).accessibilityIdentifier(
-          "test.preparedPreparation")
-    }
   #endif
 }
 

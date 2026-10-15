@@ -175,14 +175,18 @@ final class AppSnapshotSectionsTests: XCTestCase {
         XCTAssertNil(section.active)
     }
 
-    // 깨짐: active를 빈 객체로 받아 통과시키면 실패
-    func testJourneySectionWithEmptyObjectActiveFailsToDecode() {
-        XCTAssertThrowsError(try decode(JourneySection.self, #"{"active":{}}"#))
+    // 깨짐: 손상된 빈 객체 active에서 던지면(영역 전체 손상 처리) 실패 (F1 여정만 버리기)
+    func testJourneySectionWithEmptyObjectActiveDecodesToNil() throws {
+        let section = try decode(JourneySection.self, #"{"active":{}}"#)
+
+        XCTAssertNil(section.active)
     }
 
-    // 깨짐: active를 문자열로 받아 통과시키면 실패
-    func testJourneySectionWithStringActiveFailsToDecode() {
-        XCTAssertThrowsError(try decode(JourneySection.self, #"{"active":"x"}"#))
+    // 깨짐: 손상된 문자열 active에서 던지면 실패
+    func testJourneySectionWithStringActiveDecodesToNil() throws {
+        let section = try decode(JourneySection.self, #"{"active":"x"}"#)
+
+        XCTAssertNil(section.active)
     }
 
     // MARK: - helpers

@@ -1,0 +1,432 @@
+diff --git a/ios/FocusMate/DepartureBriefingController.swift b/ios/FocusMate/DepartureBriefingController.swift
+new file mode 100644
+index 0000000..9ac35e0
+--- /dev/null
++++ b/ios/FocusMate/DepartureBriefingController.swift
+@@ -0,0 +1,84 @@
++import Foundation
++import Observation
++
++@MainActor
++protocol DepartureConfirming: AnyObject {
++    func confirmDeparture() -> Bool
++}
++
++/// 출발 안내. 세 문장을 같은 자리에서 차례로 보여 준 뒤 '시작'을 띄우고, 누르면 출발 확인을 저장한다.
++/// 안내 중에는 일시정지·진도·남은 시간이 화면에 없어 출발 확인 전에는 아무것도 흐르지 않는다.
++@MainActor @Observable
++final class DepartureBriefingController {
++    enum FocusTarget: Equatable { case startButton }
++
++    nonisolated static let sentences = ["문을 닫습니다", "자리에 앉아주세요", "버스 출발합니다"]
++    nonisolated static let interval: Duration = .milliseconds(1700)
++
++    private(set) var visibleIndex = 0
++    private(set) var showsAll = false
++    private(set) var showsStart = false
++    private(set) var focusTarget: FocusTarget?
++    private(set) var isConfirmed = false
++    private(set) var showsSaveFailure = false
++
++    @ObservationIgnored private let confirmer: DepartureConfirming
++    @ObservationIgnored private let interval: Duration
++    @ObservationIgnored private let sleep: (Duration) async -> Void
++    @ObservationIgnored private var token = 0
++
++    init(confirmer: DepartureConfirming, interval: Duration = DepartureBriefingController.interval,
++         sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
++        self.confirmer = confirmer
++        self.interval = interval
++        self.sleep = sleep
++    }
++
++    /// 처음부터 보여 준다. 동작 줄이기면 세 문장과 '시작'을 한꺼번에 보여 준다.
++    func begin(reduceMotion: Bool) async {
++        token += 1
++        let current = token
++        visibleIndex = 0
++        showsStart = false
++        focusTarget = nil
++        if reduceMotion {
++            showsAll = true
++            visibleIndex = Self.sentences.count - 1
++            revealStart()
++            return
++        }
++        showsAll = false
++        for index in 1..<Self.sentences.count {
++            await sleep(interval)
++            guard token == current else { return }
++            visibleIndex = index
++        }
++        revealStart()
++    }
++
++    /// 앱이 숨겨지면 진행 중인 안내를 버린다. 돌아오면 `begin`으로 처음부터 다시 보여 준다.
++    func reset() {
++        token += 1
++        visibleIndex = 0
++        showsAll = false
++        showsStart = false
++        focusTarget = nil
++    }
++
++    @discardableResult
++    func confirm() -> Bool {
++        guard showsStart, !isConfirmed else { return false }
++        guard confirmer.confirmDeparture() else {
++            showsSaveFailure = true
++            return false
++        }
++        showsSaveFailure = false
++        isConfirmed = true
++        return true
++    }
++
++    private func revealStart() {
++        showsStart = true
++        focusTarget = .startButton
++    }
++}
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index 487f176..70d9c81 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -6,11 +6,18 @@ struct DestinationScreen: View {
+     let destination: Destination
+     @Bindable var model: AppModel
+     let onCardCustomization: () -> Void
++    let services: JourneyServices
+ 
+     var body: some View {
+         // 마이페이지는 시안대로 자체 여백·좌측 제목을 쓰므로 공통 자리표시 체인 밖에서 그린다.
+         if destination == .profile {
+             ProfileView(model: model, onCustomize: onCardCustomization)
++        } else if destination == .board {
++            BoardingPassView(model: model)
++        } else if destination == .boarding {
++            BoardingTagView(model: model, services: services)
++        } else if destination == .journey {
++            JourneyView(model: model, services: services)
+         } else {
+             placeholderOrTime
+         }
+diff --git a/ios/FocusMate/JourneyView.swift b/ios/FocusMate/JourneyView.swift
+new file mode 100644
+index 0000000..5bbf7ef
+--- /dev/null
++++ b/ios/FocusMate/JourneyView.swift
+@@ -0,0 +1,133 @@
++import SwiftUI
++
++/// 여행 화면. 출발 확인 전에는 출발 안내(시안 DO8HO)만 보이고, '시작' 뒤에는 실제 여행 화면(W05) 자리표시를 둔다.
++@MainActor
++struct JourneyView: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    /// 출발 안내 컨트롤러는 화면이 처음 나타날 때 한 번만 만든다.
++    @State private var briefing: DepartureBriefingController?
++
++    var body: some View {
++        Group {
++            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing) }
++            else { Color.clear }
++        }
++        .onAppear {
++            guard briefing == nil else { return }
++            briefing = DepartureBriefingController(confirmer: model, sleep: services.sleep)
++        }
++    }
++}
++
++@MainActor
++private struct JourneyScreen: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    let briefing: DepartureBriefingController
++    @AccessibilityFocusState private var startFocused: Bool
++    @Environment(\.scenePhase) private var scenePhase
++    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
++
++    private var reduceMotion: Bool { services.reduceMotion(system: systemReduceMotion) }
++    private var awaitingDeparture: Bool { model.activeJourney?.phase == .awaitingDeparture && !briefing.isConfirmed }
++
++    var body: some View {
++        // Group은 수식어를 자식마다 나눠 붙여 안쪽 식별자를 덮으므로, 컨테이너 하나로 감싼다.
++        ZStack {
++            if awaitingDeparture { departureBriefing } else { placeholder }
++        }
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier("screen.journey")
++        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
++        .navigationBarBackButtonHidden(awaitingDeparture)
++        .toolbar(awaitingDeparture ? .hidden : .automatic, for: .navigationBar)
++        .task { if awaitingDeparture { await briefing.begin(reduceMotion: reduceMotion) } }
++        .onChange(of: scenePhase) { _, phase in
++            guard awaitingDeparture else { return }
++            if phase == .background { briefing.reset() }
++            else if phase == .active, !briefing.showsStart {
++                Task { await briefing.begin(reduceMotion: reduceMotion) }
++            }
++        }
++        .onChange(of: briefing.focusTarget) { _, target in startFocused = target == .startButton }
++        #if DEBUG
++        .overlay(alignment: .topLeading) { diagnostics }
++        #endif
++    }
++
++    private var departureBriefing: some View {
++        GeometryReader { proxy in
++            ScrollView {
++                VStack(spacing: 40) {
++                    Image(systemName: "bus").font(.system(size: 44, weight: .semibold)).accessibilityHidden(true)
++                    sentences
++                    if briefing.showsStart {
++                        Button { briefing.confirm() } label: {
++                            Text("시작").font(.headline).foregroundStyle(.black)
++                                .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
++                                .background(Color(white: 0.95), in: Capsule())
++                        }
++                        .buttonStyle(.plain)
++                        .accessibilityIdentifier("journey.start")
++                        .accessibilityFocused($startFocused)
++                    }
++                    if briefing.showsSaveFailure {
++                        Text("출발을 저장하지 못했어요. 다시 눌러주세요.").font(.subheadline).foregroundStyle(.orange)
++                            .accessibilityIdentifier("journey.saveFailure")
++                    }
++                }
++                .multilineTextAlignment(.center)
++                .padding(24)
++                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
++            }
++        }
++        .foregroundStyle(.white)
++        .background(LinearGradient(colors: [Color(white: 0.12), .black], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
++        // 중첩 컨테이너 식별자는 스크롤 뷰에 흡수될 수 있어, 안내 단계 표지는 별도 요소로 둔다.
++        .overlay(alignment: .topLeading) {
++            Color.clear.frame(width: 1, height: 1).accessibilityElement()
++                .accessibilityLabel("출발 안내").accessibilityIdentifier("journey.briefing")
++        }
++    }
++
++    @ViewBuilder private var sentences: some View {
++        if briefing.showsAll {
++            VStack(spacing: 12) {
++                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(.title2.bold()) }
++            }
++            .accessibilityElement(children: .combine)
++            .accessibilityValue(DepartureBriefingController.sentences.joined(separator: " "))
++            .accessibilityIdentifier("journey.briefingSentence")
++        } else {
++            let sentence = DepartureBriefingController.sentences[briefing.visibleIndex]
++            Text(sentence).font(.title2.bold())
++                .id(briefing.visibleIndex)
++                .transition(.opacity)
++                .animation(.easeInOut(duration: 0.4), value: briefing.visibleIndex)
++                .accessibilityValue(sentence)
++                .accessibilityIdentifier("journey.briefingSentence")
++        }
++    }
++
++    /// W05가 실제 분 타이머·지도로 교체한다. 지금은 제목만 두고 뒤로가기로 메인에 간다.
++    private var placeholder: some View {
++        VStack(alignment: .leading, spacing: 16) {
++            Text(Destination.journey.title).font(.largeTitle.bold()).accessibilityIdentifier("journey.placeholder")
++            Spacer()
++        }
++        .padding(24).frame(maxWidth: .infinity, alignment: .leading)
++    }
++
++    #if DEBUG
++    private var diagnostics: some View {
++        let object: [String: Any] = ["index": briefing.visibleIndex, "showsAll": briefing.showsAll,
++                                     "showsStart": briefing.showsStart,
++                                     "focus": briefing.focusTarget == .startButton ? "start" : "none"]
++        let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
++            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
++        return Text("출발 안내 진단").font(.system(size: 1)).foregroundStyle(.clear)
++            .accessibilityValue(json).accessibilityIdentifier("test.briefing")
++    }
++    #endif
++}
+diff --git a/ios/FocusMateUITests/BoardingLargeTextUITests.swift b/ios/FocusMateUITests/BoardingLargeTextUITests.swift
+new file mode 100644
+index 0000000..f00d65f
+--- /dev/null
++++ b/ios/FocusMateUITests/BoardingLargeTextUITests.swift
+@@ -0,0 +1,74 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class BoardingLargeTextUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    private func reach(_ target: XCUIElement, in app: XCUIApplication) {
++        XCTAssertTrue(target.waitForExistence(timeout: timeout), target.identifier)
++        var attempts = 0
++        while !target.isHittable && attempts < 4 {
++            app.swipeUp()
++            attempts += 1
++        }
++        XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)")
++    }
++
++    // 깨짐: 가장 큰 글자에서 폐기·승차권·탑승·시작 버튼 중 하나가 화면 안에 닿지 않는다.
++    func testU11_AC23_가장_큰_글자에서도_승차_태그와_출발_안내_시작까지_끝낼_수_있다() throws {
++        let h = FocusMateUIHarness.launch(
++            seed: "activeJourney",
++            extraArguments: [
++                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
++                "--fm-ui-reduce-motion", "on"
++            ]
++        )
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        let open = h.app.buttons["open.preparation"]
++        reach(open, in: h.app)
++        open.tap()
++
++        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
++        let wheel = h.app.pickerWheels.firstMatch
++        XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
++        wheel.adjust(toPickerWheelValue: "60분")
++        let bus = h.element("time.candidate.2014")
++        reach(bus, in: h.app)
++        bus.tap()
++        let proceed = h.element("time.proceed")
++        reach(proceed, in: h.app)
++        proceed.tap()
++
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++        let tag = h.element("preparation.tag.reading")
++        reach(tag, in: h.app)
++        tag.tap()
++        let field = h.element("preparation.task")
++        reach(field, in: h.app)
++        field.tap()
++        field.typeText("보고서 읽기")
++        let confirm = h.app.buttons["preparation.confirm"]
++        reach(confirm, in: h.app)
++        confirm.tap()
++
++        let boardBus = h.app.buttons["board.boardBus"]
++        reach(boardBus, in: h.app)
++        boardBus.tap()
++
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++        let activate = h.element("test.activateBoardingCard")
++        XCTAssertTrue(activate.waitForExistence(timeout: timeout))
++        activate.tap()
++
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++        let start = h.element("journey.start")
++        XCTAssertTrue(start.waitForExistence(timeout: 10))
++        XCTAssertTrue(start.isHittable, "시작 버튼이 화면 안에서 닿지 않음")
++    }
++}
+diff --git a/ios/FocusMateUITests/DepartureBriefingUITests.swift b/ios/FocusMateUITests/DepartureBriefingUITests.swift
+new file mode 100644
+index 0000000..f34d454
+--- /dev/null
++++ b/ios/FocusMateUITests/DepartureBriefingUITests.swift
+@@ -0,0 +1,94 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class DepartureBriefingUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    private let briefingTimeout: TimeInterval = 10
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    private func launchBoarding(reduceMotion: Bool = false) -> FocusMateUIHarness {
++        var extra = ["--fm-ui-route", "boarding"]
++        if reduceMotion { extra += ["--fm-ui-reduce-motion", "on"] }
++        return FocusMateUIHarness.launch(seed: "ready", extraArguments: extra)
++    }
++
++    private func enterJourney(_ h: FocusMateUIHarness) {
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++        let activate = h.element("test.activateBoardingCard")
++        XCTAssertTrue(activate.waitForExistence(timeout: timeout))
++        activate.tap()
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++    }
++
++    private func briefingDiag(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        let raw = try h.diagnostic("test.briefing")
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++
++    private func activeJourney(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        let journey = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
++        return try XCTUnwrap(journey["active"] as? [String: Any])
++    }
++
++    // 깨짐: 문장 순차 표시·시작 버튼 노출/초점, 정류장·버스·분 비노출, 시작 후 상태 전이, 뒤로가기 규칙 중 하나가 깨진다.
++    func testU4_AC17_19_20_출발_안내가_끝나면_시작을_누르고_임시_화면에서_뒤로_메인으로_돌아온다() throws {
++        let h = launchBoarding()
++        enterJourney(h)
++        XCTAssertTrue(h.element("journey.briefing").waitForExistence(timeout: timeout))
++
++        let start = h.element("journey.start")
++        let deadline = Date().addingTimeInterval(briefingTimeout)
++        while Date() < deadline && !(start.exists && start.isHittable) {
++            Thread.sleep(forTimeInterval: 0.2)
++        }
++        XCTAssertTrue(start.exists && start.isHittable)
++        XCTAssertEqual(h.element("journey.briefingSentence").value as? String, "버스 출발합니다")
++        XCTAssertEqual(try briefingDiag(h)["focus"] as? String, "start")
++
++        let texts = h.app.staticTexts.allElementsBoundByIndex.map(\.label)
++        let leaking = texts.filter { $0.contains("서울숲역") || $0.contains("2014") || $0.contains("분") }
++        XCTAssertEqual(leaking.count, 0, leaking.joined(separator: ","))
++        let pauseLike = h.app.descendants(matching: .any).matching(
++            NSPredicate(format: "label CONTAINS '일시정지' OR identifier CONTAINS 'pause'")
++        )
++        XCTAssertEqual(pauseLike.count, 0)
++        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
++
++        let before = try activeJourney(h)
++        XCTAssertEqual(before["phase"] as? String, "awaitingDeparture")
++        XCTAssertEqual((before["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
++
++        start.tap()
++
++        XCTAssertTrue(h.element("journey.placeholder").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("journey.briefing").exists)
++        let after = try activeJourney(h)
++        XCTAssertEqual(after["phase"] as? String, "departed")
++        XCTAssertEqual((after["progress"] as? [String: Any])?["elapsedSeconds"] as? Int, 0)
++
++        h.app.navigationBars.buttons.firstMatch.tap()
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
++    }
++
++    // 깨짐: 동작 줄이기에서 세 문장이 한 번에 보이지 않거나 시작 버튼이 즉시 나오지 않는다.
++    func testU9_AC18_동작_줄이기에서는_세_문장과_시작_버튼이_한꺼번에_보인다() throws {
++        let h = launchBoarding(reduceMotion: true)
++        enterJourney(h)
++
++        let diag = try briefingDiag(h)
++        XCTAssertEqual(diag["showsAll"] as? Bool, true)
++        XCTAssertEqual(diag["showsStart"] as? Bool, true)
++        let sentence = try XCTUnwrap(h.element("journey.briefingSentence").value as? String)
++        for part in ["문을 닫습니다", "자리에 앉아주세요", "버스 출발합니다"] {
++            XCTAssertTrue(sentence.contains(part), sentence)
++        }
++        XCTAssertTrue(h.element("journey.start").waitForExistence(timeout: timeout))
++    }
++}

@@ -37,9 +37,13 @@ final class PreparationEditorUITests: XCTestCase {
         let h = try openPreparation(); try selectTask(h, text: String(repeating: "a", count: 81))
         wait(h.element("preparation.task"), key: "value", equals: String(repeating: "a", count: 80))
         tap(h.element("preparation.confirm"), in: h.app)
+        XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         XCTAssertEqual(try preparation(h)["task"] as? String, String(repeating: "a", count: 80))
+        h.app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
         replaceText(h.element("preparation.task"), in: h.app, with: "  책 읽기  ")
         tap(h.element("preparation.confirm"), in: h.app)
+        XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         let payload = try preparation(h)
         XCTAssertEqual(payload["task"] as? String, "책 읽기")
         XCTAssertEqual(payload["sound"] as? String, "bus")
@@ -49,7 +53,6 @@ final class PreparationEditorUITests: XCTestCase {
         XCTAssertEqual(journey["destination"] as? String, "성수동"); XCTAssertEqual(journey["stops"] as? Int, 12)
         let tag = try XCTUnwrap(payload["tag"] as? [String: Any])
         XCTAssertEqual(tag["id"] as? String, "reading"); XCTAssertEqual(tag["name"] as? String, "독서")
-        XCTAssertTrue(h.element("screen.preparation").exists)
         let snapshotJourney = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
         XCTAssertTrue(snapshotJourney["active"] is NSNull)
         attachScreen(h.app, named: "w03-preparation-filled")
@@ -237,7 +240,7 @@ final class PreparationEditorUITests: XCTestCase {
     }
     private func enterPreparation(_ h: FocusMateUIHarness) throws {
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
-        h.app.buttons["여행 준비"].tap()
+        h.app.buttons["open.preparation"].tap()
         let wheel = h.app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: timeout)); wheel.adjust(toPickerWheelValue: "60분")
         tap(h.element("time.candidate.2014"), in: h.app); tap(h.element("time.proceed"), in: h.app)

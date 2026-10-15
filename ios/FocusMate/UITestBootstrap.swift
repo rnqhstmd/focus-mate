@@ -2,6 +2,7 @@
 import Foundation
 import Observation
 import CryptoKit
+import UIKit
 
 struct UITestBootstrap {
     let photoManifestURL: URL?
@@ -12,6 +13,10 @@ struct UITestBootstrap {
     let shouldFailSound: Bool
     let shouldFailSave: Bool
     let issueHold: IssueHold
+    let boardingHoldManual: Bool
+    let forcedReduceMotion: Bool
+    let route: String?
+    let boardingSaveFailure: UITestCardSaveFailure
     enum IssueHold { case standard, manual }
     private let recoveryScenario: String?
     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
@@ -30,6 +35,7 @@ struct UITestBootstrap {
             let url = (manifest.hasPrefix("/") ? URL(fileURLWithPath: manifest) : support.appendingPathComponent(manifest)).standardizedFileURL.resolvingSymlinksInPath()
             guard url.path.hasPrefix(support.path + "/") else { throw SetupIssue.invalidArguments }
             photoManifestURL = url
+            Self.stagePhotoFixtures(support: support)
         } else { photoManifestURL = nil }
         let cardHold = try argument("--fm-ui-card-import-hold")
         guard cardHold == nil || cardHold == "manual" else { throw SetupIssue.invalidArguments }
@@ -40,8 +46,17 @@ struct UITestBootstrap {
         seed = try argument("--fm-ui-seed")
         guard seed == nil || Self.seeds.contains(seed!) else { throw SetupIssue.invalidArguments }
         let save = try argument("--fm-ui-save")
-        guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
+        guard save == nil || save == "fail" || save == "fail-once-boarding" else { throw SetupIssue.invalidArguments }
         shouldFailSave = save == "fail"
+        boardingSaveFailure = UITestCardSaveFailure(enabled: save == "fail-once-boarding")
+        let boardingHold = try argument("--fm-ui-boarding-hold")
+        guard boardingHold == nil || boardingHold == "manual" else { throw SetupIssue.invalidArguments }
+        boardingHoldManual = boardingHold == "manual"
+        let reduce = try argument("--fm-ui-reduce-motion")
+        guard reduce == nil || reduce == "on" else { throw SetupIssue.invalidArguments }
+        forcedReduceMotion = reduce == "on"
+        route = try argument("--fm-ui-route")
+        guard route == nil || (route == "boarding" && seed == "ready") else { throw SetupIssue.invalidArguments }
         let sound = try argument("--fm-ui-sound")
         guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
         shouldFailSound = sound == "fail"
@@ -52,6 +67,39 @@ struct UITestBootstrap {
         guard recoveryScenario == nil || ["readOnce", "readAlways", "backupFail", "backupMismatch", "cleanupFail"].contains(recoveryScenario!) else { throw SetupIssue.invalidArguments }
         fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
             .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
+    }
+
+    /// UI 테스트용 사진 픽스처를 앱 컨테이너에 직접 만든다. 시뮬레이터마다 수동 배치하던 방식은 새 기기에서 재현되지 않았다.
+    /// 이미 있는 파일은 덮어쓰지 않는다.
+    private static func stagePhotoFixtures(support: URL) {
+        let base = support.appendingPathComponent("FocusMate", isDirectory: true)
+        let directory = base.appendingPathComponent("UITestPhotoFixtures", isDirectory: true)
+        let manager = FileManager.default
+        try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        func png(_ width: Int, _ height: Int, hue: CGFloat, alpha: Bool = false) -> Data {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = !alpha
+            return UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).pngData { context in
+                UIColor(hue: hue, saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
+                context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+                UIColor(hue: hue, saturation: 0.9, brightness: 0.4, alpha: alpha ? 0.25 : 1).setFill()
+                context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height / 2))
+            }
+        }
+        func manifest(_ names: [String]) -> Data {
+            Data(("{\"items\":[" + names.map { "{\"path\":\"\($0)\"}" }.joined(separator: ",") + "]}").utf8)
+        }
+        var files: [(URL, Data)] = [
+            (base.appendingPathComponent("escape.png"), png(48, 32, hue: 0.9)),
+            (directory.appendingPathComponent("a.png"), png(120, 80, hue: 0.1)),
+            (directory.appendingPathComponent("b.png"), png(80, 120, hue: 0.5, alpha: true)),
+            (directory.appendingPathComponent("unreadable.bin"), Data("not an image: unreadable fixture for card photo import".utf8)),
+            (directory.appendingPathComponent("valid2.json"), manifest(["a.png", "b.png"])),
+            (directory.appendingPathComponent("mixed.json"), manifest(["unreadable.bin", "a.png"])),
+            (directory.appendingPathComponent("invalidPaths.json"), manifest(["../escape.png", "missing.png"])),
+            (directory.appendingPathComponent("hold.json"), manifest(["a.png"])),
+            (directory.appendingPathComponent("seven.json"), manifest((1...7).map { "p\($0).png" }))]
+        for n in 1...7 { files.append((directory.appendingPathComponent("p\(n).png"), png(100 + n, 80, hue: CGFloat(n) / 8))) }
+        for (url, data) in files where !manager.fileExists(atPath: url.path) { try? data.write(to: url, options: .atomic) }
     }
 
     @MainActor func cardPhotoInputs(gate: UITestCardImportGate?) -> [CardPhotoInput] {
@@ -91,7 +139,7 @@ struct UITestBootstrap {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard"]).union(rawSeeds.keys)
+    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"]).union(rawSeeds.keys)
 
     func prepare() throws {
         guard let seed else { return }
@@ -101,6 +149,9 @@ struct UITestBootstrap {
         case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot.empty.issuingCard(Self.fixedCard))
         case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard))
         case "issuedWithoutCard": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
+        case "activeJourney":
+            try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard)
+                .updating(journey: JourneySection(active: Self.seededJourney)))
         default:
             guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -113,6 +164,7 @@ struct UITestBootstrap {
         let scenario = recoveryScenario
         let failSave = shouldFailSave
         let cardFailure = cardSaveFailure
+        let boardingFailure = boardingSaveFailure
         var activeReads = 0
         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
             if url == activeURL {
@@ -123,7 +175,7 @@ struct UITestBootstrap {
             }
             return try Data(contentsOf: url)
         }, writeData: { data, url in
-            if failSave || cardFailure.consume() { throw StorageIssue.writeFailed }
+            if failSave || cardFailure.consume() || boardingFailure.consume() { throw StorageIssue.writeFailed }
             try data.write(to: url, options: .atomic)
         }, writeBackup: { data, url in
             if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
@@ -144,6 +196,30 @@ struct UITestBootstrap {
                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
     }
 
+    /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
+    @MainActor func applyRoute(to model: AppModel) throws {
+        guard route == "boarding" else { return }
+        guard model.launchState == .ready(.main), let origin = model.journeyOrigin else { throw SetupIssue.invalidSaveState }
+        model.journeyPlan.setMinutes(60)
+        _ = model.journeyPlan.choose(busID: "2014", from: origin)
+        model.preparation.chooseTag(id: "reading")
+        model.preparation.setTask("라우트 할 일")
+        guard model.confirmPreparation() else { throw SetupIssue.invalidSaveState }
+        model.path = [.time, .preparation, .board, .boarding]
+    }
+
+    @MainActor func makeJourneyServices(recorder: UITestFeedbackRecorder) -> (JourneyServices, UITestHoldGate?) {
+        let gate = boardingHoldManual ? UITestHoldGate() : nil
+        var services = JourneyServices.live()
+        services.haptics = recorder
+        services.announcer = recorder
+        services.boardingHoldSleep = gate.map { gate in { await gate.wait($0) } }
+        services.forcedReduceMotion = forcedReduceMotion
+        let failure = boardingSaveFailure
+        services.makeBoarder = { ArmingBoarder(base: $0, failure: failure) }
+        return (services, gate)
+    }
+
     @MainActor func makeSoundPreview() -> SoundPreviewController? {
         guard shouldFailSound else { return nil }
         return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
@@ -157,6 +233,13 @@ struct UITestBootstrap {
         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return "absent" }
         catch { return "unreadable" }
     }
+
+    /// 승차 직후(출발 확인 전) 진행 여정 1건.
+    private static let seededJourney = JourneySnapshot(
+        id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
+        destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
+        tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
+        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start)
 
     private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
 
@@ -230,6 +313,31 @@ final class UITestIssuanceGate {
         waiter.resume()
     }
 }
+/// `--fm-ui-boarding-hold manual`: 인식 유지(1400ms)를 테스트가 해제할 때까지 붙잡는다. 여러 대기자를 모두 받고, 해제는 지금 기다리는 것만 푼다.
+@MainActor @Observable
+final class UITestHoldGate {
+    @ObservationIgnored private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait(_ duration: Duration) async { await withCheckedContinuation { waiters.append($0) } }
+    func release() {
+        let pending = waiters
+        waiters = []
+        pending.forEach { $0.resume() }
+    }
+}
+
+/// `--fm-ui-save fail-once-boarding`: 승차 저장 직전에만 한 번 실패를 건다.
+@MainActor
+final class ArmingBoarder: JourneyBoarding {
+    private let base: JourneyBoarding
+    private let failure: UITestCardSaveFailure
+    init(base: JourneyBoarding, failure: UITestCardSaveFailure) { self.base = base; self.failure = failure }
+    func boardJourney() -> Bool {
+        failure.arm()
+        defer { _ = failure.consume() }
+        return base.boardJourney()
+    }
+}
+
 /// Only the editor Save action arms this shared box; bootstrap and unrelated saves never arm it.
 final class UITestCardSaveFailure {
     private let enabled: Bool

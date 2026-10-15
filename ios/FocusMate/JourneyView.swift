@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 여행 화면. 출발 확인 전에는 출발 안내(시안 DO8HO)만 보이고, '시작' 뒤에는 실제 분 타이머를 둔다.
-/// 출발한 여행 화면에서는 메인으로 돌아가지 않는다(뒤로가기 숨김·스와이프 차단·모델 가드). 나가기는 W07이다.
+/// 출발한 여행 화면에서 메인으로 가는 길은 일시정지 중 포기뿐이다(뒤로가기 숨김·스와이프 차단·모델 가드, W07).
 @MainActor
 struct JourneyView: View {
     @Bindable var model: AppModel
@@ -30,13 +30,15 @@ struct JourneyView: View {
         }
     }
 
-    /// '시작'을 이 화면에서 직접 본 경우에만 바로 진행한다. 저장된 진행 상태만으로는 자동 시작하지 않는다.
+    /// '시작'을 이 화면에서 직접 봤거나 메인 이어가기로 들어온 경우에만 바로 진행한다. 저장된 진행 상태만으로는 자동 시작하지 않는다.
     private func ensureTimer() {
         guard timer == nil, let journey = model.activeJourney, journey.phase == .departed else { return }
+        let resumed = model.consumeResumeEntry(journeyID: journey.id)
         let liveActivity = JourneyLiveActivitySync(journey: journey, gateway: services.liveActivities)
-        timer = JourneyTimerController(journey: journey, autoStart: briefing?.isConfirmed == true, saver: model,
+        timer = JourneyTimerController(journey: journey, autoStart: briefing?.isConfirmed == true || resumed, saver: model,
                                        clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
                                        observer: liveActivity)
+        if resumed { services.announcer.announce(JourneyLifecycleText.resumeAnnouncement) }
         // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
         if let timer, let course = CourseJourney(journey: journey) {
             map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,
@@ -70,6 +72,10 @@ private struct JourneyScreen: View {
                 JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion)
                 #endif
             } else { Color.clear }
+        }
+        // 하단 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다. 일시정지가 아니면 버튼 없이 아래 여백만 남는다.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let timer, !awaitingDeparture { JourneyAbandonBar(abandoner: model, timer: timer) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.journey")

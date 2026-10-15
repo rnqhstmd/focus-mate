@@ -173,6 +173,76 @@ extension FocusMateUIHarness {
     }
 }
 
+/// W07 생명주기(이어가기·새 여정·포기) UI 테스트 도우미.
+extension FocusMateUIHarness {
+    /// life* 시드로 수동 시계와 함께 연다. 시드는 재실행된 상태라 메인으로 열린다.
+    @MainActor
+    static func launchLifecycle(seed: String, extraArguments: [String] = []) -> FocusMateUIHarness {
+        launch(seed: seed, extraArguments: manualClockArguments + extraArguments)
+    }
+
+    /// 프로세스 시작 이후 저장 시도 수(실패 포함, test.writeAttempts). 재실행을 넘어 비교하지 않는다.
+    @MainActor
+    func writeAttempts() throws -> Int {
+        let raw = try diagnostic("test.writeAttempts")
+        return try XCTUnwrap(Int(raw), "writeAttempts가 정수가 아님: \(raw)")
+    }
+
+    /// 메인에서 다음 저장 1건을 실패시키도록 예약한 뒤 action을 실행한다.
+    /// 쓰기가 반드시 일어나는 동작 직전에만 쓴다(예약이 다음 쓰기로 새지 않게).
+    @MainActor
+    func failNextMainSave(then action: () throws -> Void) rethrows {
+        tap("test.main.failNextSave")
+        try action()
+    }
+
+    /// 제목 label로 찾은 시스템 alert (CardCustomizationFlowTests와 같은 방식).
+    @MainActor
+    func alert(titled title: String) -> XCUIElement {
+        app.alerts
+            .matching(NSPredicate(format: "label == %@", title))
+            .firstMatch
+    }
+
+    /// 접근성 식별자와 보이는 문구를 함께 맞춘 alert 버튼. alert는 제목을 모르므로 앱 전체 alert에서 찾는다.
+    @MainActor
+    func alertButton(_ id: String, label: String) -> XCUIElement {
+        app.alerts.buttons
+            .matching(identifier: id)
+            .matching(NSPredicate(format: "label == %@", label))
+            .firstMatch
+    }
+
+    /// 저장된 바이트(base64)의 최상위 state 사전. 없으면 최상위 자체.
+    @MainActor
+    func persistedState() throws -> [String: Any] {
+        let raw = try persistedBytes()
+        let data = try XCTUnwrap(Data(base64Encoded: raw), "persistedBytes가 base64가 아님: \(raw)")
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return (root["state"] as? [String: Any]) ?? root
+    }
+
+    @MainActor
+    func persistedCurrentStation() throws -> (id: String?, direction: Int?) {
+        let station = try persistedState()["currentStation"] as? [String: Any]
+        return (station?["id"] as? String, station?["direction"] as? Int)
+    }
+
+    @MainActor
+    func persistedRecordCount() throws -> Int {
+        let records = try XCTUnwrap(try persistedState()["records"] as? [String: Any])
+        return try XCTUnwrap(records["items"] as? [Any]).count
+    }
+
+    /// 포기 흐름 진단(test.abandon): {"visible","confirming","showsFailure","focus"}.
+    @MainActor
+    func abandonDiagnostic() throws -> [String: Any] {
+        let raw = try diagnostic("test.abandon")
+        let data = try XCTUnwrap(raw.data(using: .utf8))
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+}
+
 /// 가상 코스 지도 UI 테스트 도우미.
 extension FocusMateUIHarness {
     /// 조건이 참이 될 때까지 폴링한다.

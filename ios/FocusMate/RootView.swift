@@ -10,6 +10,8 @@ struct RootView: View {
     @State private var cardImportTask: Task<Void, Never>?
     @State private var savedCardNotice = false
     @State private var announceSavedCard = false
+    @State private var confirmsNewJourney = false
+    @State private var mainActionFailed = false
     @AccessibilityFocusState private var cardFocus: Bool
     private enum RecoveryFocus: Hashable { case error, confirmation, failure }
     @AccessibilityFocusState private var recoveryFocus: RecoveryFocus?
@@ -37,7 +39,9 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization, services: services) }
+            .newJourneyConfirmation(isPresented: $confirmsNewJourney) { apply(model.confirmNewJourney()) }
         }
+        .onChange(of: model.path) { _, _ in mainActionFailed = false }
         .safeAreaInset(edge: .bottom) {
             if savedCardNotice {
                 Text("카드 외형을 저장했어요.")
@@ -95,6 +99,16 @@ struct RootView: View {
                 }
                 .accessibilityLabel("발급 해제")
                     .accessibilityIdentifier("test.releaseIssuance")
+            }
+            // 여행 화면의 test.failNextSave와 동시에 있으면 여러 개가 일치하므로 메인 전용 식별자·노출 조건을 둔다.
+            // 메인 메뉴·발급 해제 버튼을 가리지 않도록 수동 시계 실행(W07 생명주기 테스트)의 메인 화면에서만 둔다.
+            if services.testClock != nil, model.presentedRoute == .main, model.path.isEmpty, let failure = services.failNextSave {
+                Button { failure.arm() } label: {
+                    Text("메인 다음 저장 실패").font(.system(size: 1)).foregroundStyle(.clear)
+                        .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                }
+                .accessibilityLabel("메인 다음 저장 실패")
+                .accessibilityIdentifier("test.main.failNextSave")
             }
             if let testHoldGate {
                 Button { testHoldGate.release() } label: {
@@ -160,6 +174,10 @@ struct RootView: View {
         case .main:
             // 가장 큰 글자에서 진행 여정 안내가 더해져도 모든 메뉴에 닿도록 스크롤한다.
             ScrollView { VStack(alignment: .leading, spacing: 24) { mainContent } }
+                // 포기 안내는 바뀌는 순간 한 번만 낭독한다. 안내 뷰의 등장 횟수에 묶지 않는다.
+                .onChange(of: model.abandonNotice) { _, name in
+                    if let name { services.announcer.announce(JourneyLifecycleText.abandonNotice(stationName: name)) }
+                }
         case nil:
             EmptyView()
         }
@@ -172,23 +190,36 @@ struct RootView: View {
                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
             }
-            if model.activeJourney != nil {
-                // W07 이어가기 전 임시 안내: 여행 시작하기를 누르면 이 여정은 기록 없이 정리된다.
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("진행 중인 여정이 있어요").font(.headline)
-                    Text("여행 시작하기를 누르면 이 여정은 기록 없이 정리돼요.").font(.subheadline).foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine).accessibilityIdentifier("main.activeJourney")
+            if let stationName = model.abandonNotice {
+                MainAbandonNoticeView(stationName: stationName)
+            }
+            if mainActionFailed {
+                Text(JourneyLifecycleText.saveFailure).foregroundStyle(.orange).accessibilityIdentifier("main.saveFailure")
+            }
+            if let card = model.activeJourneyCard {
+                ActiveJourneyCardView(content: card) { apply(model.resumeJourney()) }
             }
             PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
             Button("카드 꾸미기", action: startCardCustomization)
                 .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
             ForEach(Destination.mainMenu, id: \.self) { destination in
-                Button(destination.mainMenuTitle) {
-                    if destination == .preparation { model.startTripFromMain() } else { model.open(destination.mainMenuTarget) }
+                Button(destination == .preparation ? model.mainStartTitle : destination.mainMenuTitle) {
+                    if destination != .preparation { model.open(destination.mainMenuTarget) }
+                    // 진행 여정은 확인을 거쳐서만 정리한다(W07).
+                    else if model.activeJourney != nil { confirmsNewJourney = true }
+                    else { model.startTripFromMain() }
                 }.buttonStyle(.bordered)
                     .accessibilityIdentifier("open.\(destination.rawValue)")
             }
+    }
+
+    /// 메인 동작 실패 안내는 이 화면에만 둔다. 거부(연타 등)는 안내를 바꾸지 않는다.
+    private func apply(_ result: LifecycleActionResult) {
+        switch result {
+        case .done: mainActionFailed = false
+        case .saveFailed: mainActionFailed = true
+        case .rejected: break
+        }
     }
 
     private func startCardCustomization() {
@@ -246,6 +277,7 @@ struct RootView: View {
                 Text("카드 외형 진단").accessibilityValue(testBootstrap.cardStyleJSON(model: model, controller: customization)).accessibilityIdentifier("test.cardStyleJSON")
                 Text("준비 확정 진단").accessibilityValue(preparedPreparationJSON).accessibilityIdentifier("test.preparedPreparation")
                 Text("동작 줄이기 진단").accessibilityValue(reduceMotion ? "true" : "false").accessibilityIdentifier("test.reduceMotion")
+                Text("쓰기 진단").accessibilityValue("\(testBootstrap.writeCounter.attempts)").accessibilityIdentifier("test.writeAttempts")
             }
             if let testRecorder {
                 Text("진동 진단").accessibilityValue("\(testRecorder.playCount)").accessibilityIdentifier("test.hapticCount")

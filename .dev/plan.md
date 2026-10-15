@@ -9,7 +9,7 @@
 | W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | feat/boarding-pass-tag | 완료 |
 | W05 | [P3] 실제 분 타이머·일시정지 | journey | journey FR-5 | W04 | feat/real-minute-timer-pause | 완료 |
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | feat/mapkit-virtual-course | 완료 |
-| W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | - | 대기 |
+| W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | feat/abandon-resume-lifecycle | 완료 |
 | W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 완료 |
 | W09 | [P4] 하차 태그·요약·기록·분석 | 통합 | journey FR-12, records FR-6 | W05, W08 | - | 대기 |
 | W10 | [P5] 카드 꾸미기 | card | card FR-4, NFR-2 | W01 | codex/feat-card-customization | 완료 |
@@ -61,9 +61,10 @@
 
 완료 인계:
 - W04(승차권·승차 태그·출발 안내, feat/boarding-pass-tag): 준비 확정 → 승차권 → 승차 태그(30% 겹침 놓기 전 인식, 0.3초 뒤 진행 여정 1회 저장, 1.4초+0.45초 뒤 여행) → 출발 안내('시작' = 출발 확인 저장) → 임시 '여행' 화면. 메인 진행 여정 안내와 '여행 시작하기' 자동 폐기(임시 동작). 기준선에서 W10 사진 UI 9건 실패(픽스처가 저장소에 없음)를 함께 고쳤다. 상세는 [W04 리뷰 유예](feat-boarding-pass-tag/reports/review-deferred.md).
-  - W05 완료 인계(2026-10-15): 저장 v4(`paused`), 타이머 `JourneyTimerController`. W07: 재실행 뒤 메인에서 타이머로 돌아오는 진입점(컨트롤러 autoStart=false로 생성 → 사용자가 재개)과 타이머 화면 나가기·포기를 만들고, 그때 `NavigationPopBlocker`·`AppModel.goBack`의 journey 가드 조건을 다시 정한다. 메인 '여행 시작하기'는 아직 진도가 있어도 기록 없이 정리한다(확인 단계는 W07). W06: 타이머 화면 위에 지도를 올린다(남은 시간 하단 좌측). W15: 컨트롤러의 status·remainingSeconds로 종료 시각을 계산해 Live Activity에 넘긴다(진도 계산은 바꾸지 않음).
+  - W05 완료 인계(2026-10-15): 저장 v4(`paused`), 타이머 `JourneyTimerController`. W07 항목(재실행 뒤 메인 진입점, 타이머 화면 나가기·포기, 메인 정리 확인)은 해결됨(아래 W07 완료 인계). W06: 타이머 화면 위에 지도를 올린다(남은 시간 하단 좌측). W15: 컨트롤러의 status·remainingSeconds로 종료 시각을 계산해 Live Activity에 넘긴다(진도 계산은 바꾸지 않음).
   - (W04 인계, 처리됨) W05: 진행 여정(`JourneySnapshot`, 버전 3 `journey.active`)에 새 필수 필드를 추가하면 currentVersion을 4로 올린다(W04 앱은 모르는 키를 버리고 다시 쓴다). 착수 전 처리할 것: ① 손상·검증 실패 active는 읽을 때 버려지고 다음 저장에서 사본 없이 사라짐 → 원본 `.backup` 보관 또는 안내 결정, ② 승차 성공 뒤에도 확정값이 남아 재승차가 진행 여정을 덮을 수 있음 → 진도가 생기기 전 정책 결정, ③ minutes·elapsedSeconds 상한과 카탈로그에 없는 정류장·버스 id 처리. 여행 임시 화면(`JourneyView` 시작 후 `journey.placeholder`)과 `DepartureBriefingController`의 '시작' 이후 자리에 실제 타이머를 넣는다.
-  - W07: 메인 '여행 시작하기' 자동 폐기(`AppModel.startTripFromMain`)와 진행 여정 안내(`main.activeJourney`)를 이어가기·포기로 바꾼다. 카드 교체 기능이 생기면 `activeJourney.cardID == currentCard.id` 불변식 처리(폐기/갱신)를 함께 정한다.
+  - (W07 인계, 처리됨) 메인 자동 폐기와 임시 안내를 이어가기·포기로 바꿨다. 남은 항목: 카드 교체 기능이 생기면 `activeJourney.cardID == currentCard.id` 불변식 처리(폐기/갱신)를 함께 정한다.
+  - W07 완료 인계(2026-10-15): 이어가기 카드·새 여정 확인·일시정지 중 포기 구현, 저장 형식 변경 없음. W09: 도착 여정의 메인 처리(도착지를 현재 정류장으로 하는 '새 여정 시작')는 임시다. 하차 저장은 `endingActiveJourney(at:)`와 `reachedStation`(도착이면 저장된 도착지)을 재사용하고 `ActiveJourneyCardContent.Kind.arrived`를 하차 진입으로 바꾼다. W06: 머지 후 AC-3·V7 AC29·AC-33을 재실행하고, 하단 `safeAreaInset` 포기 바와 지도 도구 배치를 조정하며, 포기 호출은 `abandonJourney(timerPaused:)` 계약을 지킨다. W15: 변경 없음. 출시 게이트: 도착 화면(`journey.arrived`)에는 나가는 길이 없어 앱을 다시 켜야 메인으로 간다 — W09 하차 전 외부 배포(TestFlight 포함) 금지. Release 빌드의 DEBUG 코드 제외 확인과 확인 창 첫 VoiceOver 포커스는 W14.
   - W09: 승차 태그(`BoardingTagController`·`BoardingRules`·`BoardingTagView`)를 하차에 재사용할 수 있다. 하차 LCD는 카드 이름(FLOWS 2차).
   - W14: 실제 VoiceOver 포커스('시작' 버튼)·카드 활성화(VoiceOver/Full Keyboard Access)·승차 햅틱 체감, 제스처 시스템 취소 후 재태그, Release 산출물에 `fm-ui` 문자열 부재를 실기기에서 확인. Phase 0 '최신 승차 단말기' 브라우저 확인은 사용자 결정으로 보류.
 - W06(MapKit 가상 코스, feat/mapkit-virtual-course, [#18](https://github.com/rnqhstmd/focus-mate/pull/18)): 여행 화면 배경 지도, 정류장 id별 좌표의 가상 코스, 진도 기반 버스 이동, 따라가기/자유 탐색, 지도 테마 시트, 하단 남은 시간·정류장·거리. 저장 형식 변경 없음.

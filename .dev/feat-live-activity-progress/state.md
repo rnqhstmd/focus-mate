@@ -1,5 +1,5 @@
 phase: complete
-status: in_progress
+status: completed
 pipeline: gx-tdd
 verify-status: pending
 verify-fingerprint: ""
@@ -19,8 +19,8 @@ last-known-head: 97738cc7384ca2099e846eb8be9ec76b7d6e6c1a
 auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 5
-current-step: "complete: verify"
-phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: in_progress }
+current-step: "done"
+phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed }
 steps:
   implement:
     - "RGR T1 (AC-26, AC-30)": { red: completed, test-file: ios/FocusMateTests/JourneyActivityDisplayTests.swift, test-file-hash: a85f0f39d9c49889bb346bc23b4d5f7952e04256, test-count: 9, report: reports/t1-impl.md, impl: completed, review: completed, review-report: reports/t1-review.md, deferred-minors: 4 }
@@ -81,3 +81,4 @@ execution-log:
   - { phase: complete, gate: verify, result: "전체 테스트 중단 — 사용자 지시로 focused만, 위험 수용(trust-ledger)" }
   - { phase: complete, result: "origin/main(W07 #19) 병합 — 충돌 3곳(JourneyView ensureTimer 결합, architecture·status 문서 병합) 해결, build ✓, focused 단위 120 + UI 17(W15 배선·JourneyResumeUITests) 0 failures" }
   - { phase: complete, result: "인수 검증은 reviewer SPEC PASS(33/33)로 갈음 — 사용자 지시(빠른 PR·머지)" }
+  - { phase: complete, result: "PR #20 생성, 사용자 지시로 squash 머지" }

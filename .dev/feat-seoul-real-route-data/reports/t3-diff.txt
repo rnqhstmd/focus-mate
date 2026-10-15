@@ -1,0 +1,247 @@
+diff --git a/scripts/route_data/segments.py b/scripts/route_data/segments.py
+new file mode 100644
+index 0000000..2b97a03
+--- /dev/null
++++ b/scripts/route_data/segments.py
+@@ -0,0 +1,72 @@
++"""Segment distances and per-segment seconds for one bus loop."""
++from decimal import Decimal
++from fractions import Fraction
++import math
++
++EARTH_RADIUS_M = 6371008.8
++MIN_SEGMENT_SECONDS = 30
++FALLBACK_SPEED_KMH = {
++    "간선": Decimal("13.4"), "지선": Decimal("11.6"), "마을": Decimal("8.8"), "광역": Decimal("19.6"),
++    "공항": Decimal("34.8"), "심야": Decimal("17.3"), "순환": Decimal("9.4"),
++}
++OTHER_SPEED_KMH = Decimal("11.6")
++# 운행시간이 뜻하는 직선 평균 속도가 이보다 느리면 원천 입력 오류로 보고 대체 속도를 쓴다(예: 541번 1190분).
++MIN_PLAUSIBLE_SPEED_KMH = Decimal("3")
++
++
++def distance_meters(a_lat_micro, a_lon_micro, b_lat_micro, b_lon_micro):
++    lat1, lon1, lat2, lon2 = (math.radians(value / 1_000_000)
++                              for value in (a_lat_micro, a_lon_micro, b_lat_micro, b_lon_micro))
++    h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
++    return math.floor(2 * EARTH_RADIUS_M * math.asin(math.sqrt(h)) + 0.5)
++
++
++def loop_meters(points):
++    count = len(points)
++    return [distance_meters(*points[i], *points[(i + 1) % count]) for i in range(count)]
++
++
++def uses_run_minutes(meters, run_minutes):
++    if run_minutes is None or run_minutes <= 0:
++        return False
++    total_meters = sum(meters)
++    if total_meters == 0:
++        return True
++    speed = Fraction(total_meters) * Fraction(36, 10) / _round_half_up(Fraction(run_minutes) * 60)
++    return speed >= Fraction(MIN_PLAUSIBLE_SPEED_KMH)
++
++
++def allocate_seconds(meters, run_minutes, kind):
++    if not uses_run_minutes(meters, run_minutes):
++        speed = Fraction(FALLBACK_SPEED_KMH.get(kind, OTHER_SPEED_KMH))
++        return [max(MIN_SEGMENT_SECONDS, _round_half_up(Fraction(m) * Fraction(36, 10) / speed)) for m in meters]
++    total = _round_half_up(Fraction(run_minutes) * 60)
++    count = len(meters)
++    if total < MIN_SEGMENT_SECONDS * count:
++        return [MIN_SEGMENT_SECONDS] * count
++
++    fixed = set()
++    while True:
++        free = [i for i in range(count) if i not in fixed]
++        budget = total - MIN_SEGMENT_SECONDS * len(fixed)
++        free_meters = sum(meters[i] for i in free)
++        ideal = {i: (Fraction(budget * meters[i], free_meters) if free_meters else Fraction(budget, len(free)))
++                 for i in free}
++        short = {i for i, value in ideal.items() if value < MIN_SEGMENT_SECONDS}
++        if not short:
++            break
++        fixed |= short
++
++    seconds = [MIN_SEGMENT_SECONDS] * count
++    for i, value in ideal.items():
++        seconds[i] = math.floor(value)
++    remainder = budget - sum(seconds[i] for i in free)
++    by_fraction = sorted(free, key=lambda i: (-(ideal[i] - math.floor(ideal[i])), i))
++    for i in by_fraction[:remainder]:
++        seconds[i] += 1
++    return seconds
++
++
++def _round_half_up(value):
++    """Rounds a non-negative Fraction to the nearest integer, halves up."""
++    return math.floor(value + Fraction(1, 2))
+diff --git a/scripts/tests/test_segments.py b/scripts/tests/test_segments.py
+new file mode 100644
+index 0000000..49c6a91
+--- /dev/null
++++ b/scripts/tests/test_segments.py
+@@ -0,0 +1,163 @@
++"""route_data.segments 구간 거리·시간 계산 테스트 (RED)."""
++import unittest
++from decimal import Decimal
++
++
++class DistanceTest(unittest.TestCase):
++    def test_위도_0_009도_차이는_1001m이다(self):
++        from route_data.segments import distance_meters
++        # 하버사인: 0.009도 * R * pi/180 = 1000.7557m -> 반올림 1001
++        self.assertEqual(
++            distance_meters(37500000, 127000000, 37509000, 127000000), 1001)
++
++    def test_같은_점의_거리는_0이다(self):
++        from route_data.segments import distance_meters
++        self.assertEqual(
++            distance_meters(37500000, 127000000, 37500000, 127000000), 0)
++
++    def test_한바퀴_구간은_마지막이_회차구간이다(self):
++        from route_data.segments import loop_meters
++        pts = [(37500000, 127000000), (37509000, 127000000),
++               (37518000, 127000000)]
++        # 1->2: 1000.756 -> 1001, 2->3: 1001, 3->1(회차): 0.018도 = 2001.511 -> 2002
++        self.assertEqual(loop_meters(pts), [1001, 1001, 2002])
++
++
++class AllocateWithRunMinutesTest(unittest.TestCase):
++    def alloc(self, meters, minutes, kind="간선"):
++        from route_data.segments import allocate_seconds
++        return allocate_seconds(meters, minutes, kind)
++
++    def test_AC61_동일_거리는_균등_배분한다(self):
++        self.assertEqual(self.alloc([1001, 1001], Decimal("2")), [60, 60])
++
++    def test_AC62_거리에_비례해_배분한다(self):
++        self.assertEqual(
++            self.alloc([1001, 1001, 2002], Decimal("4")), [60, 60, 120])
++
++    def test_AC65_남는_1초는_소수부가_큰_구간에_준다(self):
++        self.assertEqual(
++            self.alloc([1001, 1001, 1001, 3002], Decimal("10")),
++            [100, 100, 100, 300])
++
++    def test_AC66_남는_1초는_소수부_동률이_아니면_큰_쪽이다(self):
++        # 이상값 128.565, 171.435, 300.000 -> 내림 128,171,300, 1초는 첫째(.565)
++        self.assertEqual(
++            self.alloc([3002, 4003, 7005], Decimal("10")), [129, 171, 300])
++
++    def test_AC67_30초_미만_구간은_30초로_고정하고_재배분한다(self):
++        self.assertEqual(
++            self.alloc([11, 1001, 1012], Decimal("10")), [30, 283, 287])
++
++    def test_AC70_거리가_모두_0이면_균등_배분한다(self):
++        self.assertEqual(self.alloc([0, 0, 0], Decimal("10")), [200, 200, 200])
++
++    def test_운행시간이_부족하면_모두_30초이다(self):
++        self.assertEqual(
++            self.alloc([1001, 1001, 1001], Decimal("1")), [30, 30, 30])
++
++    def test_운행시간_소수는_초로_반올림한다(self):
++        self.assertEqual(self.alloc([1001, 1001], Decimal("2.5")), [75, 75])
++
++    def test_정확히_나누어떨어지면_잔여가_없다(self):
++        self.assertEqual(
++            self.alloc([1000, 1000, 1000], Decimal("10")), [200, 200, 200])
++
++    def test_S_603초는_3등분_201초이다(self):
++        self.assertEqual(
++            self.alloc([1000, 1000, 1000], Decimal("10.05")), [201, 201, 201])
++
++    def test_최대_잔여_동률은_색인_작은_구간이_먼저_받는다(self):
++        # S=602, 이상값 200.667 x3 -> 내림 600, 남는 2초는 첫째·둘째
++        self.assertEqual(
++            self.alloc([1000, 1000, 1000], Decimal("10.0333")), [201, 201, 200])
++
++    def test_배분_합은_항상_운행초와_같다(self):
++        cases = [
++            ([1001, 1001], Decimal("2"), 120),
++            ([1001, 1001, 2002], Decimal("4"), 240),
++            ([1001, 1001, 1001, 3002], Decimal("10"), 600),
++            ([3002, 4003, 7005], Decimal("10"), 600),
++            ([11, 1001, 1012], Decimal("10"), 600),
++            ([0, 0, 0], Decimal("10"), 600),
++            ([1001, 1001], Decimal("2.5"), 150),
++            ([1000, 1000, 1000], Decimal("10.05"), 603),
++            ([1000, 1000, 1000], Decimal("10.0333"), 602),
++        ]
++        for meters, minutes, total in cases:
++            with self.subTest(meters=meters, minutes=minutes):
++                result = self.alloc(meters, minutes)
++                self.assertEqual(sum(result), total)
++                self.assertTrue(all(s >= 30 for s in result))
++
++
++class AllocateFallbackSpeedTest(unittest.TestCase):
++    def alloc(self, meters, minutes, kind):
++        from route_data.segments import allocate_seconds
++        return allocate_seconds(meters, minutes, kind)
++
++    def test_AC68_지선_대체속도로_계산한다(self):
++        # 1001*3.6/11.6 = 310.655 -> 311
++        self.assertEqual(self.alloc([1001, 1001], None, "지선"), [311, 311])
++
++    def test_운행시간_0도_대체속도로_계산한다(self):
++        self.assertEqual(
++            self.alloc([1001, 1001], Decimal("0"), "지선"), [311, 311])
++
++    def test_AC69_심야_대체속도로_계산한다(self):
++        # 1001*3.6/17.3 = 208.300 -> 208
++        self.assertEqual(self.alloc([1001, 1001], None, "심야"), [208, 208])
++
++    def test_대체속도에서도_구간_최소는_30초이다(self):
++        # 50*3.6/13.4 = 13.43 -> 30 ; 1001*3.6/13.4 = 268.925 -> 269
++        self.assertEqual(self.alloc([50, 1001], None, "간선"), [30, 269])
++
++    def test_알수없는_유형은_11_6_속도를_쓴다(self):
++        self.assertEqual(self.alloc([1001], None, "알수없음"), [311])
++
++
++class ImplausibleRunMinutesTest(unittest.TestCase):
++    def alloc(self, meters, minutes, kind):
++        from route_data.segments import allocate_seconds
++        return allocate_seconds(meters, minutes, kind)
++
++    def uses(self, meters, minutes):
++        from route_data.segments import uses_run_minutes
++        return uses_run_minutes(meters, minutes)
++
++    def test_최소_허용_속도_상수는_3이다(self):
++        from route_data.segments import MIN_PLAUSIBLE_SPEED_KMH
++        self.assertEqual(MIN_PLAUSIBLE_SPEED_KMH, Decimal("3"))
++
++    def test_너무_느린_운행시간은_대체_속도로_계산한다(self):
++        # 2002*3.6/6000 = 1.2012 km/h < 3 -> 간선 13.4: 1001*3.6/13.4 = 268.925 -> 269
++        self.assertEqual(
++            self.alloc([1001, 1001], Decimal("100"), "간선"), [269, 269])
++
++    def test_너무_느린_운행시간은_비례_배분을_쓰지_않는다(self):
++        self.assertFalse(self.uses([1001, 1001], Decimal("100")))
++
++    def test_빠른_운행시간도_신뢰한다(self):
++        # 100 km/h 이어도 상한 검사 없음 -> S=3600 균등 1800
++        self.assertTrue(self.uses([50000, 50000], Decimal("60")))
++        self.assertEqual(
++            self.alloc([50000, 50000], Decimal("60"), "공항"), [1800, 1800])
++
++    def test_경계_속도_3은_운행시간을_신뢰한다(self):
++        # 5000*3.6/6000 = 3.0 km/h (포함) -> S=6000 균등
++        self.assertEqual(
++            self.alloc([2500, 2500], Decimal("100"), "간선"), [3000, 3000])
++        self.assertTrue(self.uses([2500, 2500], Decimal("100")))
++
++    def test_거리_합이_0이면_속도_검사_없이_운행시간을_쓴다(self):
++        self.assertTrue(self.uses([0, 0, 0], Decimal("10")))
++
++    def test_운행시간_None은_운행시간을_쓰지_않는다(self):
++        self.assertFalse(self.uses([1001], None))
++
++    def test_운행시간_0은_운행시간을_쓰지_않는다(self):
++        self.assertFalse(self.uses([1001], Decimal("0")))
++
++
++if __name__ == "__main__":
++    unittest.main()

@@ -18,7 +18,9 @@ started: 2026-10-15T19:10:00
 last-known-head: 2d4aeca510ca4f2df9529b27dd3c3bff04f9ba2e
 auto-stashed: false
 config-setup-attempts: 0
-current-step: "implement Step 0"
+warnings-baseline: 5
+simulator: FM-W16 9306E393-1808-45F1-8C65-CD6E57D7DF98
+current-step: "RGR T5: RED"
 user-scope: "W09 진행 중 — 사용자 결정(설계 승인 시): 설계 구현 순서 1~11(스크립트·데이터 + 새 파일 앱 계산 모듈)만 지금, 12~27은 W09 머지 후"
 phases: { setup: completed, requirements: completed, design: completed, implement: in_progress }
 execution-log:
@@ -28,3 +30,12 @@ execution-log:
   - { phase: design, agent: architect, result: "2회차 확정, 실제 원천 xlsx 2개 확인 반영" }
   - { phase: design, agent: design-critic, result: "MUST-ADDRESS 3 (로딩 경쟁·ARS 셀·결합) 반영" }
   - { phase: design, agent: test-architect, result: "testability score 8/10 PASS" }
+  - { phase: implement, gate: baseline, result: "ios build 0 exit·warning 5, node build/test 0. 전체 iOS 테스트는 사용자 상시 지시(작업 중 focused만)로 생략 — 기준 GREEN은 main 53d8281 머지 상태 가정" }
+steps:
+  implement:
+    - 태스크 분해 승인: completed
+    - "RGR T1 (AC-57,64,74 읽기)": { red: completed, test-file: scripts/tests/test_xlsx.py, test-file-hash: b7b917161e94589c04e104e74a741453636d447f, helper-hash: 570919f6b2ebd80dd26f0f2a78b775310c6065f4, test-count: 14, report: reports/t1-impl.md, impl: completed, review: completed, review-report: reports/t1-review.md, deferred-minors: 5 }
+    - "RGR T2 (AC-58~63,71,73)": { red: completed, test-file: scripts/tests/test_routes.py, test-file-hash: dee5858d190037ca8248d260632caa543fe06632, test-count: 29, report: reports/t2-impl.md, impl: completed, fix-round: 1/5, review: completed, review-report: reports/t2-review.md, deferred-minors: 7 }
+    - "RGR T3 (AC-61,62,65~70 시간)": { red: completed, test-file: scripts/tests/test_segments.py, test-file-hash: 9bf552d643be24c79c87b6783cb1d0dc8672bb89, test-count: 30, report: reports/t3-impl.md, impl: completed, fix-round: 1/5, review: completed, review-report: reports/t3-review.md, deferred-minors: 8 }
+    - "RGR T4 (AC-56,57,72,74,75,76)": { red: completed, test-file: scripts/tests/test_build_route_data.py, test-file-hash: 0ca3b4d24fdddd1b3307035b7295ffa8c43bf024, test-count: 15, report: reports/t4-impl.md, impl: completed, review: completed, review-report: reports/t4-review.md, deferred-minors: 7 }
+    - "AC-77 실데이터 변환": { completed, report: reports/ac77-real-data.md }

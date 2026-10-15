@@ -1,0 +1,479 @@
+diff --git a/ios/FocusMate/JourneyCourse.swift b/ios/FocusMate/JourneyCourse.swift
+new file mode 100644
+index 0000000..75c8f5e
+--- /dev/null
++++ b/ios/FocusMate/JourneyCourse.swift
+@@ -0,0 +1,44 @@
++import Foundation
++
++/// 지도 좌표. 순수 로직과 테스트가 CoreLocation 없이 돌도록 자체 타입을 둔다(지도 뷰에서만 변환한다).
++struct CoursePoint: Equatable, Hashable {
++    let latitude: Double
++    let longitude: Double
++}
++
++struct CourseStop: Equatable {
++    let index: Int
++    let id: String
++    let name: String
++    let point: CoursePoint
++}
++
++/// 앱 내 가상 코스(BR-1). 실제 버스 노선이 아니며 정류장 사이를 직선으로 잇는다.
++/// 좌표는 정류장 id에 묶어 두어, 카탈로그가 서울 전역으로 늘어도 이 표에 항목만 추가하면 된다.
++enum JourneyCourse {
++    static let seoulBounds: (latitude: ClosedRange<Double>, longitude: ClosedRange<Double>) =
++        (37.41...37.72, 126.76...127.19)
++
++    /// 각 정류장의 실제 위치 근사(소수 4자리).
++    static let coordinates: [String: CoursePoint] = [
++        "seongsu": CoursePoint(latitude: 37.5446, longitude: 127.0559),
++        "seongsuDong": CoursePoint(latitude: 37.5445, longitude: 127.0507),
++        "ttukseom": CoursePoint(latitude: 37.5474, longitude: 127.0474),
++        "seongdongSportsCenter": CoursePoint(latitude: 37.5466, longitude: 127.0429),
++        "seoulForest": CoursePoint(latitude: 37.5437, longitude: 127.0447),
++        "seoulForestGate": CoursePoint(latitude: 37.5432, longitude: 127.0396),
++        "seongsuBridgeNorth": CoursePoint(latitude: 37.5403, longitude: 127.0355),
++        "ttukseomHangangPark": CoursePoint(latitude: 37.5296, longitude: 127.0670),
++        "seongsuIntersection": CoursePoint(latitude: 37.5410, longitude: 127.0573),
++    ]
++
++    static let stops: [CourseStop] = RouteStops.all.enumerated().map { index, stop in
++        guard let point = coordinates[stop.id] else { preconditionFailure("좌표 없는 정류장: \(stop.id)") }
++        return CourseStop(index: index, id: stop.id, name: stop.name, point: point)
++    }
++
++    static func point(at index: Int) -> CoursePoint { stops[RouteStops.wrap(index)].point }
++
++    /// 마지막 정류장에서 첫 정류장으로 돌아오는 닫힌 선.
++    static var closedPath: [CoursePoint] { stops.map(\.point) + [stops[0].point] }
++}
+diff --git a/ios/FocusMate/JourneyCourseProgress.swift b/ios/FocusMate/JourneyCourseProgress.swift
+new file mode 100644
+index 0000000..992a06b
+--- /dev/null
++++ b/ios/FocusMate/JourneyCourseProgress.swift
+@@ -0,0 +1,90 @@
++import Foundation
++
++/// 지도 계산에 필요한 여정 입력. 진도 계산은 정수 초로 해서 경계 값이 정확히 맞게 한다.
++struct CourseJourney: Equatable {
++    let originIndex: Int
++    let direction: Int
++    let minutesPerStop: Int
++    let totalMinutes: Int
++
++    var totalStops: Int { totalMinutes / minutesPerStop }
++    var totalSeconds: Int { totalMinutes * 60 }
++    var destinationIndex: Int { RouteStops.wrap(originIndex + direction * totalStops) }
++
++    init(originIndex: Int, direction: Int, minutesPerStop: Int, totalMinutes: Int) {
++        self.originIndex = originIndex
++        self.direction = direction
++        self.minutesPerStop = minutesPerStop
++        self.totalMinutes = totalMinutes
++    }
++}
++
++struct CourseBusPosition: Equatable {
++    let point: CoursePoint
++    let headingDegrees: Double
++    let segmentFrom: Int
++    let segmentTo: Int
++    /// 구간 안 위치(0이면 segmentFrom 정류장 위).
++    let fraction: Double
++    let isArrived: Bool
++}
++
++/// 진도 → 버스 위치·남은 값(BR-2, BR-7). 진도 자체는 타이머가 소유하고 여기서는 읽기만 한다.
++enum JourneyCourseProgress {
++    private static let hundredthsKmPerStop = 55
++
++    static func position(of journey: CourseJourney, elapsedSeconds: Int) -> CourseBusPosition {
++        let (k, remainder) = travelled(journey, elapsedSeconds)
++        if k >= journey.totalStops {
++            let to = journey.destinationIndex
++            let from = RouteStops.wrap(to - journey.direction)
++            return CourseBusPosition(point: JourneyCourse.point(at: to), headingDegrees: heading(from: from, to: to),
++                                     segmentFrom: to, segmentTo: to, fraction: 0, isArrived: true)
++        }
++        let from = RouteStops.wrap(journey.originIndex + journey.direction * k)
++        let to = RouteStops.wrap(from + journey.direction)
++        let fraction = Double(remainder) / Double(secondsPerStop(journey))
++        let a = JourneyCourse.point(at: from), b = JourneyCourse.point(at: to)
++        let point = CoursePoint(latitude: a.latitude + (b.latitude - a.latitude) * fraction,
++                                longitude: a.longitude + (b.longitude - a.longitude) * fraction)
++        return CourseBusPosition(point: point, headingDegrees: heading(from: from, to: to),
++                                 segmentFrom: from, segmentTo: to, fraction: fraction, isArrived: false)
++    }
++
++    static func nextStopIndex(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
++        let k = travelled(journey, elapsedSeconds).stops
++        return RouteStops.wrap(journey.originIndex + journey.direction * min(journey.totalStops, k + 1))
++    }
++
++    static func remainingStops(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
++        journey.totalStops - min(journey.totalStops, travelled(journey, elapsedSeconds).stops)
++    }
++
++    /// 0.1km 단위 정수. 소수 첫째 자리 반올림(half-up)을 정수 산술로 한다.
++    static func remainingDistanceTenthsKm(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
++        let total = journey.totalSeconds
++        guard total > 0 else { return 0 }
++        let elapsed = clamped(journey, elapsedSeconds)
++        let scaled = journey.totalStops * hundredthsKmPerStop * (total - elapsed)
++        return (2 * scaled + 10 * total) / (20 * total)
++    }
++
++    private static func secondsPerStop(_ journey: CourseJourney) -> Int { journey.minutesPerStop * 60 }
++
++    private static func clamped(_ journey: CourseJourney, _ elapsed: Int) -> Int {
++        min(max(elapsed, 0), journey.totalSeconds)
++    }
++
++    private static func travelled(_ journey: CourseJourney, _ elapsed: Int) -> (stops: Int, remainder: Int) {
++        let e = clamped(journey, elapsed), sps = secondsPerStop(journey)
++        return (e / sps, e % sps)
++    }
++
++    /// 국지 평면 근사 방위(북쪽 0°, 시계 방향). 같은 구간을 반대로 가면 정확히 180° 차이가 난다.
++    private static func heading(from: Int, to: Int) -> Double {
++        let a = JourneyCourse.point(at: from), b = JourneyCourse.point(at: to)
++        let meanLatitude = (a.latitude + b.latitude) / 2 * .pi / 180
++        let degrees = atan2((b.longitude - a.longitude) * cos(meanLatitude), b.latitude - a.latitude) * 180 / .pi
++        return degrees < 0 ? degrees + 360 : degrees
++    }
++}
+diff --git a/ios/FocusMate/JourneyMapDisplay.swift b/ios/FocusMate/JourneyMapDisplay.swift
+new file mode 100644
+index 0000000..393726c
+--- /dev/null
++++ b/ios/FocusMate/JourneyMapDisplay.swift
+@@ -0,0 +1,21 @@
++import Foundation
++
++/// 지도·하단 정보 문구와 접근성 값(BR-8, FR-12, FR-15).
++enum JourneyMapDisplay {
++    static let mapLabel = "가상 코스 지도"
++    static let followLabel = "버스 따라가기"
++    static let themeLabel = "지도 테마"
++    static let darkLabel = "어두운 지도"
++    static let satelliteLabel = "위성"
++    static let stopsLabel = "정류장 표시"
++    static let remainingStopsLabel = "남은 정류장"
++    static let remainingDistanceLabel = "남은 거리"
++
++    static func mapValue(next: String, destination: String) -> String { "다음 정류장 \(next), 도착 정류장 \(destination)" }
++    static func selectedValue(_ on: Bool) -> String { on ? "선택됨" : "선택 안 됨" }
++    static func switchValue(_ on: Bool) -> String { on ? "켜짐" : "꺼짐" }
++    static func stopsText(_ count: Int) -> String { "\(count)" }
++    static func stopsAccessibilityValue(_ count: Int) -> String { "\(count)개" }
++    static func distanceText(tenthsKm: Int) -> String { "\(tenthsKm / 10).\(tenthsKm % 10)" }
++    static func distanceAccessibilityValue(tenthsKm: Int) -> String { distanceText(tenthsKm: tenthsKm) + "km" }
++}
+diff --git a/ios/FocusMateTests/JourneyCourseProgressTests.swift b/ios/FocusMateTests/JourneyCourseProgressTests.swift
+new file mode 100644
+index 0000000..9a0389b
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyCourseProgressTests.swift
+@@ -0,0 +1,187 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 경과 시간 -> 가상 코스 위치·남은 수치 (AC-6~9, AC-39 계산). 좌표는 JourneyCourse와 비교한다.
++final class JourneyCourseProgressTests: XCTestCase {
++    private let accuracy = 1e-9
++
++    private func wrap(_ i: Int) -> Int { ((i % 9) + 9) % 9 }
++
++    private func journey(_ origin: Int, _ dir: Int, per: Int = 5, total: Int = 25) -> CourseJourney {
++        CourseJourney(originIndex: origin, direction: dir, minutesPerStop: per, totalMinutes: total)
++    }
++
++    private func assertPoint(_ p: CoursePoint, equals q: CoursePoint, _ msg: String = "", file: StaticString = #filePath, line: UInt = #line) {
++        XCTAssertEqual(p.latitude, q.latitude, accuracy: accuracy, msg, file: file, line: line)
++        XCTAssertEqual(p.longitude, q.longitude, accuracy: accuracy, msg, file: file, line: line)
++    }
++
++    // 깨짐: 정방향 보간이 구간 인덱스를 잘못 고르면(k 계산 오류) 실패한다.
++    func test1_AC6_정방향_정류장_경계에서_위치가_정류장_좌표다() {
++        for i in 0..<9 {
++            let j = journey(i, 1)
++            for (elapsed, step) in [(0, 0), (300, 1), (600, 2)] {
++                let pos = JourneyCourseProgress.position(of: j, elapsedSeconds: elapsed)
++                assertPoint(pos.point, equals: JourneyCourse.point(at: i + step), "origin \(i) e \(elapsed)")
++                XCTAssertFalse(pos.isArrived, "origin \(i) e \(elapsed)")
++            }
++        }
++    }
++
++    // 깨짐: 선형 보간이 아니면(fraction/중간점 오류) 실패한다.
++    func test2_AC6_정방향_750초는_i2와_i3의_정확한_중간이다() {
++        for i in 0..<9 {
++            let pos = JourneyCourseProgress.position(of: journey(i, 1), elapsedSeconds: 750)
++            let a = JourneyCourse.point(at: i + 2), b = JourneyCourse.point(at: i + 3)
++            XCTAssertEqual(pos.fraction, 0.5, accuracy: accuracy)
++            XCTAssertEqual(pos.segmentFrom, wrap(i + 2))
++            XCTAssertEqual(pos.segmentTo, wrap(i + 3))
++            XCTAssertEqual(pos.point.latitude, (a.latitude + b.latitude) / 2, accuracy: accuracy)
++            XCTAssertEqual(pos.point.longitude, (a.longitude + b.longitude) / 2, accuracy: accuracy)
++            XCTAssertFalse(pos.isArrived)
++        }
++    }
++
++    // 깨짐: 총 시간에 도달해도 도착 정류장(i+5)에 고정하지 않으면 실패한다.
++    func test3_AC6_정방향_1500초는_도착_정류장에_도착한다() {
++        for i in 0..<9 {
++            let j = journey(i, 1)
++            let pos = JourneyCourseProgress.position(of: j, elapsedSeconds: 1500)
++            XCTAssertTrue(pos.isArrived, "origin \(i)")
++            XCTAssertEqual(j.destinationIndex, wrap(i + 5))
++            assertPoint(pos.point, equals: JourneyCourse.point(at: i + 5), "origin \(i)")
++        }
++    }
++
++    // 깨짐: 역방향이 정방향과 같은 쪽으로 진행하면 실패한다.
++    func test4_AC7_역방향_300초는_i_minus_1이고_1500초는_i_minus_5로_순환한다() {
++        for i in 0..<9 {
++            let j = journey(i, -1)
++            let p300 = JourneyCourseProgress.position(of: j, elapsedSeconds: 300)
++            assertPoint(p300.point, equals: JourneyCourse.point(at: wrap(i - 1)), "origin \(i)")
++            let p1500 = JourneyCourseProgress.position(of: j, elapsedSeconds: 1500)
++            assertPoint(p1500.point, equals: JourneyCourse.point(at: wrap(i - 5)), "origin \(i)")
++            XCTAssertTrue(p1500.isArrived)
++            XCTAssertEqual(j.destinationIndex, wrap(i - 5))
++        }
++    }
++
++    // 깨짐: 방향이 반대인 같은 구간의 heading이 180도 차이가 아니면 실패한다.
++    func test5_AC7_같은_구간_반대_방향의_heading_차이는_180도다() {
++        for i in 0..<9 {
++            let fwd = JourneyCourseProgress.position(of: journey(i, 1), elapsedSeconds: 150)
++            let rev = JourneyCourseProgress.position(of: journey(wrap(i + 1), -1), elapsedSeconds: 150)
++            var diff = (fwd.headingDegrees - rev.headingDegrees).truncatingRemainder(dividingBy: 360)
++            if diff < 0 { diff += 360 }
++            XCTAssertEqual(diff, 180, accuracy: accuracy, "origin \(i)")
++            XCTAssertTrue((0..<360).contains(fwd.headingDegrees))
++            XCTAssertTrue((0..<360).contains(rev.headingDegrees))
++        }
++    }
++
++    // 깨짐: 360분 여정에서 9정류장 순환(wrap) 또는 도착 고정이 틀리면 실패한다.
++    func test6_AC8_360분_2014_한_바퀴_후_출발_정류장으로_돌아오고_도착_고정된다() {
++        for dir in [1, -1] {
++            for i in 0..<9 {
++                let j = journey(i, dir, per: 5, total: 360)
++                XCTAssertEqual(j.totalStops, 72)
++                let lap = JourneyCourseProgress.position(of: j, elapsedSeconds: 2700)
++                assertPoint(lap.point, equals: JourneyCourse.point(at: i), "dir \(dir) origin \(i) lap")
++                XCTAssertFalse(lap.isArrived)
++                let end = JourneyCourseProgress.position(of: j, elapsedSeconds: 21600)
++                XCTAssertTrue(end.isArrived)
++                assertPoint(end.point, equals: JourneyCourse.point(at: j.destinationIndex), "dir \(dir) origin \(i) end")
++                let after = JourneyCourseProgress.position(of: j, elapsedSeconds: 30000)
++                XCTAssertTrue(after.isArrived)
++                assertPoint(after.point, equals: end.point)
++            }
++        }
++    }
++
++    private func sweep(per: Int, total: Int, file: StaticString = #filePath, line: UInt = #line) {
++        let closed = JourneyCourse.closedPath
++        var maxSegment = 0.0
++        for n in 1..<closed.count {
++            maxSegment = max(maxSegment, hypot(closed[n].latitude - closed[n - 1].latitude,
++                                               closed[n].longitude - closed[n - 1].longitude))
++        }
++        let sps = per * 60
++        let stopPoints = JourneyCourse.stops.map(\.point)
++        for (origin, dir) in [(0, 1), (3, -1), (8, 1), (5, -1)] {
++            let j = journey(origin, dir, per: per, total: total)
++            var prev = JourneyCourseProgress.position(of: j, elapsedSeconds: 0).point
++            for e in 0...(total * 60) {
++                let pos = JourneyCourseProgress.position(of: j, elapsedSeconds: e)
++                let step = hypot(pos.point.latitude - prev.latitude, pos.point.longitude - prev.longitude)
++                XCTAssertLessThanOrEqual(step, maxSegment + 1e-12, "per \(per) o \(origin) d \(dir) e \(e)", file: file, line: line)
++                let atStop = stopPoints.contains {
++                    hypot($0.latitude - pos.point.latitude, $0.longitude - pos.point.longitude) < 1e-12
++                }
++                XCTAssertEqual(atStop, e % sps == 0, "per \(per) o \(origin) d \(dir) e \(e)", file: file, line: line)
++                prev = pos.point
++            }
++        }
++    }
++
++    // 깨짐: 5분 버스에서 위치가 점프하거나 정류장 사이에서 정류장 좌표에 멈추면 실패한다.
++    func test7_AC9_5분_버스_전_구간_1초_스윕은_연속이고_정류장_좌표는_경계에서만() {
++        sweep(per: 5, total: 25)
++    }
++
++    // 깨짐: 6분 버스에서 위치가 점프하거나 정류장 사이에서 정류장 좌표에 멈추면 실패한다.
++    func test8_AC9_6분_버스_전_구간_1초_스윕은_연속이고_정류장_좌표는_경계에서만() {
++        sweep(per: 6, total: 30)
++    }
++
++    // 깨짐: 8분 버스에서 위치가 점프하거나 정류장 사이에서 정류장 좌표에 멈추면 실패한다.
++    func test9_AC9_8분_버스_전_구간_1초_스윕은_연속이고_정류장_좌표는_경계에서만() {
++        sweep(per: 8, total: 40)
++    }
++
++    // 깨짐: 경과 0에서 남은 정류장/거리가 총량과 다르면 실패한다. (5 x 0.55 = 2.75 -> half-up 2.8)
++    func test10_AC39_경과_0에서는_총_정류장과_총거리가_남는다() {
++        let j = journey(2, 1)
++        XCTAssertEqual(JourneyCourseProgress.remainingStops(of: j, elapsedSeconds: 0), 5)
++        XCTAssertEqual(JourneyCourseProgress.remainingDistanceTenthsKm(of: j, elapsedSeconds: 0), 28)
++        let long = journey(2, 1, per: 5, total: 360) // 72 x 0.55 = 39.6km
++        XCTAssertEqual(JourneyCourseProgress.remainingStops(of: long, elapsedSeconds: 0), 72)
++        XCTAssertEqual(JourneyCourseProgress.remainingDistanceTenthsKm(of: long, elapsedSeconds: 0), 396)
++    }
++
++    // 깨짐: 도착(및 그 이후)에 남은 정류장/거리가 0이 아니면 실패한다.
++    func test11_AC39_도착하면_남은_정류장과_거리는_0이다() {
++        let j = journey(2, 1)
++        for e in [1500, 1800] {
++            XCTAssertEqual(JourneyCourseProgress.remainingStops(of: j, elapsedSeconds: e), 0)
++            XCTAssertEqual(JourneyCourseProgress.remainingDistanceTenthsKm(of: j, elapsedSeconds: e), 0)
++        }
++    }
++
++    // 깨짐: 남은 거리의 반올림/비율 공식이 틀리면 실패한다. 손 계산: 2.75 x (1500-e)/1500.
++    func test12_AC39_중간_경과의_남은_정류장과_거리() {
++        let j = journey(2, 1)
++        // (경과초, 남은 정류장, 남은 거리 0.1km) 90: 2.585->26, 300: 2.2->22, 750: 1.375->14, 1000: 0.9167->9, 1499: 0.0018->0
++        let cases: [(Int, Int, Int)] = [(90, 5, 26), (299, 5, 22), (300, 4, 22), (750, 3, 14), (1000, 2, 9), (1499, 1, 0)]
++        for c in cases {
++            XCTAssertEqual(JourneyCourseProgress.remainingStops(of: j, elapsedSeconds: c.0), c.1, "stops e \(c.0)")
++            if c.0 != 299 {
++                XCTAssertEqual(JourneyCourseProgress.remainingDistanceTenthsKm(of: j, elapsedSeconds: c.0), c.2, "dist e \(c.0)")
++            }
++        }
++    }
++
++    // 깨짐: 다음 정류장이 from이 아닌 to(k+1) 기준이 아니거나 도착 후 목적지에 고정되지 않으면 실패한다.
++    func test13_AC39_다음_정류장은_구간_끝이고_도착하면_도착_정류장이다() {
++        for i in 0..<9 {
++            let fwd = journey(i, 1)
++            XCTAssertEqual(JourneyCourseProgress.nextStopIndex(of: fwd, elapsedSeconds: 0), wrap(i + 1))
++            XCTAssertEqual(JourneyCourseProgress.nextStopIndex(of: fwd, elapsedSeconds: 299), wrap(i + 1))
++            XCTAssertEqual(JourneyCourseProgress.nextStopIndex(of: fwd, elapsedSeconds: 300), wrap(i + 2))
++            XCTAssertEqual(JourneyCourseProgress.nextStopIndex(of: fwd, elapsedSeconds: 1500), wrap(i + 5))
++            let rev = journey(i, -1)
++            XCTAssertEqual(JourneyCourseProgress.nextStopIndex(of: rev, elapsedSeconds: 0), wrap(i - 1))
++            XCTAssertEqual(JourneyCourseProgress.nextStopIndex(of: rev, elapsedSeconds: 1800), wrap(i - 5))
++        }
++    }
++}
+diff --git a/ios/FocusMateTests/JourneyCourseTests.swift b/ios/FocusMateTests/JourneyCourseTests.swift
+new file mode 100644
+index 0000000..5c1f204
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyCourseTests.swift
+@@ -0,0 +1,43 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 가상 코스 정류장 좌표 (AC-5). 좌표 값 자체는 하드코딩하지 않고 성질만 검증한다.
++final class JourneyCourseTests: XCTestCase {
++    // 깨짐: 정류장 수가 9개가 아니거나 RouteStops.all의 순서·id와 달라지면 실패한다.
++    func test1_AC5_정류장은_9개이고_순서와_id가_RouteStops와_같다() {
++        XCTAssertEqual(JourneyCourse.stops.count, 9)
++        XCTAssertEqual(JourneyCourse.stops.map(\.id), RouteStops.all.map(\.id))
++        XCTAssertEqual(JourneyCourse.stops.map(\.index), Array(0..<9))
++        XCTAssertEqual(JourneyCourse.stops.map(\.name), RouteStops.all.map(\.name))
++    }
++
++    // 깨짐: 두 정류장이 같은 좌표를 가지면 실패한다.
++    func test2_AC5_정류장_좌표는_서로_모두_다르다() {
++        let points = JourneyCourse.stops.map(\.point)
++        XCTAssertEqual(Set(points).count, 9)
++    }
++
++    // 깨짐: 한 정류장이라도 서울 경계 상자(37.41~37.72, 126.76~127.19) 밖이면 실패한다.
++    func test3_AC5_모든_좌표는_서울_경계_상자_안이다() {
++        for stop in JourneyCourse.stops {
++            XCTAssertTrue((37.41...37.72).contains(stop.point.latitude), stop.id)
++            XCTAssertTrue((126.76...127.19).contains(stop.point.longitude), stop.id)
++        }
++    }
++
++    // 깨짐: 닫힌 경로가 10점이 아니거나 마지막 점이 첫 점이 아니면 실패한다.
++    func test4_AC5_닫힌_경로는_10점이고_마지막이_첫_점이다() {
++        let path = JourneyCourse.closedPath
++        XCTAssertEqual(path.count, 10)
++        XCTAssertEqual(path.last, path.first)
++        XCTAssertEqual(Array(path.prefix(9)), JourneyCourse.stops.map(\.point))
++    }
++
++    // 깨짐: point(at:)가 9 순환(wrap)을 적용하지 않으면 실패한다.
++    func test5_AC5_point_at은_인덱스를_9로_순환한다() {
++        XCTAssertEqual(JourneyCourse.point(at: 9), JourneyCourse.stops[0].point)
++        XCTAssertEqual(JourneyCourse.point(at: -1), JourneyCourse.stops[8].point)
++        XCTAssertEqual(JourneyCourse.point(at: 4), JourneyCourse.stops[4].point)
++    }
++}
+diff --git a/ios/FocusMateTests/JourneyMapDisplayTests.swift b/ios/FocusMateTests/JourneyMapDisplayTests.swift
+new file mode 100644
+index 0000000..357bd56
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyMapDisplayTests.swift
+@@ -0,0 +1,58 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 지도 화면 표시 문구·수치 형식. 접근성 문구는 PRD가 정한 사용자 노출 계약이다.
++final class JourneyMapDisplayTests: XCTestCase {
++    // 깨짐: 거리 표기가 소수 1자리가 아니게 되면(2.6 → "3", "2.60") 실패한다.
++    func test1_AC39_거리_텍스트는_소수_1자리다() {
++        XCTAssertEqual(JourneyMapDisplay.distanceText(tenthsKm: 26), "2.6")
++        XCTAssertEqual(JourneyMapDisplay.distanceText(tenthsKm: 0), "0.0")
++        XCTAssertEqual(JourneyMapDisplay.distanceText(tenthsKm: 28), "2.8")
++    }
++
++    // 깨짐: 낭독 값에 km 단위가 빠지면 실패한다.
++    func test2_AC39_거리_낭독_값은_km_단위를_붙인다() {
++        XCTAssertEqual(JourneyMapDisplay.distanceAccessibilityValue(tenthsKm: 26), "2.6km")
++        XCTAssertEqual(JourneyMapDisplay.distanceAccessibilityValue(tenthsKm: 0), "0.0km")
++    }
++
++    // 깨짐: 정류장 수 텍스트/낭독 값 형식이 "5"/"5개"에서 벗어나면 실패한다.
++    func test3_AC39_정류장_수_텍스트와_낭독_값() {
++        XCTAssertEqual(JourneyMapDisplay.stopsText(5), "5")
++        XCTAssertEqual(JourneyMapDisplay.stopsAccessibilityValue(5), "5개")
++        XCTAssertEqual(JourneyMapDisplay.stopsAccessibilityValue(0), "0개")
++    }
++
++    // 깨짐: 다음/도착 정류장 이름 중 하나라도 지도 낭독 값에서 빠지면 실패한다.
++    func test4_AC39_지도_낭독_값은_다음_정류장과_도착_정류장을_모두_포함한다() {
++        let value = JourneyMapDisplay.mapValue(next: "서울숲역", destination: "성수사거리")
++        XCTAssertTrue(value.contains("서울숲역"))
++        XCTAssertTrue(value.contains("성수사거리"))
++        XCTAssertEqual(value, "다음 정류장 서울숲역, 도착 정류장 성수사거리")
++    }
++
++    // 깨짐: 선택 상태 낭독 값이 뒤바뀌거나 바뀌면 실패한다.
++    func test5_AC39_선택_상태_낭독_값() {
++        XCTAssertEqual(JourneyMapDisplay.selectedValue(true), "선택됨")
++        XCTAssertEqual(JourneyMapDisplay.selectedValue(false), "선택 안 됨")
++    }
++
++    // 깨짐: 스위치 상태 낭독 값이 뒤바뀌거나 바뀌면 실패한다.
++    func test6_AC39_스위치_상태_낭독_값() {
++        XCTAssertEqual(JourneyMapDisplay.switchValue(true), "켜짐")
++        XCTAssertEqual(JourneyMapDisplay.switchValue(false), "꺼짐")
++    }
++
++    // 깨짐: 컨트롤·통계 라벨 문구가 PRD 계약과 달라지면 실패한다.
++    func test7_AC39_컨트롤_라벨은_PRD_문구다() {
++        XCTAssertEqual(JourneyMapDisplay.mapLabel, "가상 코스 지도")
++        XCTAssertEqual(JourneyMapDisplay.followLabel, "버스 따라가기")
++        XCTAssertEqual(JourneyMapDisplay.themeLabel, "지도 테마")
++        XCTAssertEqual(JourneyMapDisplay.darkLabel, "어두운 지도")
++        XCTAssertEqual(JourneyMapDisplay.satelliteLabel, "위성")
++        XCTAssertEqual(JourneyMapDisplay.stopsLabel, "정류장 표시")
++        XCTAssertEqual(JourneyMapDisplay.remainingStopsLabel, "남은 정류장")
++        XCTAssertEqual(JourneyMapDisplay.remainingDistanceLabel, "남은 거리")
++    }
++}

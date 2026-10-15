@@ -8,7 +8,7 @@
 | W03 | [P2] 준비 허브·태그·소리 | journey | journey FR-9, FR-10 | W02 | codex/feat-preparation-tags-sound | 완료 |
 | W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | feat/boarding-pass-tag | 완료 |
 | W05 | [P3] 실제 분 타이머·일시정지 | journey | journey FR-5 | W04 | feat/real-minute-timer-pause | 완료 |
-| W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | feat/mapkit-virtual-course | 진행 |
+| W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | feat/mapkit-virtual-course | 완료 |
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | - | 대기 |
 | W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 완료 |
 | W09 | [P4] 하차 태그·요약·기록·분석 | 통합 | journey FR-12, records FR-6 | W05, W08 | - | 대기 |
@@ -66,6 +66,11 @@
   - W07: 메인 '여행 시작하기' 자동 폐기(`AppModel.startTripFromMain`)와 진행 여정 안내(`main.activeJourney`)를 이어가기·포기로 바꾼다. 카드 교체 기능이 생기면 `activeJourney.cardID == currentCard.id` 불변식 처리(폐기/갱신)를 함께 정한다.
   - W09: 승차 태그(`BoardingTagController`·`BoardingRules`·`BoardingTagView`)를 하차에 재사용할 수 있다. 하차 LCD는 카드 이름(FLOWS 2차).
   - W14: 실제 VoiceOver 포커스('시작' 버튼)·카드 활성화(VoiceOver/Full Keyboard Access)·승차 햅틱 체감, 제스처 시스템 취소 후 재태그, Release 산출물에 `fm-ui` 문자열 부재를 실기기에서 확인. Phase 0 '최신 승차 단말기' 브라우저 확인은 사용자 결정으로 보류.
+- W06(MapKit 가상 코스, feat/mapkit-virtual-course, [#18](https://github.com/rnqhstmd/focus-mate/pull/18)): 여행 화면 배경 지도, 정류장 id별 좌표의 가상 코스, 진도 기반 버스 이동, 따라가기/자유 탐색, 지도 테마 시트, 하단 남은 시간·정류장·거리. 저장 형식 변경 없음.
+  - W07: 여행 화면 나가기를 만들면 `JourneyView.onDisappear`의 `map.leave()`가 시트를 닫는다(AC-23 UI 검증은 W07에서 추가). 일시정지 버튼은 왼쪽 위 원형으로 옮겼다.
+  - W09: 저장 도착지가 계산 도착지와 다르면 지도를 생략한다(`CourseJourney.init?`) — 도착 안내도 같은 규칙. 도착 상태에서 지도 도구 활성 여부와 정류장 목록 펼침을 함께 정한다.
+  - W14: 실기기 M-1(법적 표기 가림)·M-2(VoiceOver 낭독·초기 포커스)·M-3(제스처 충돌, 가만히 둬도 따라가기 유지)·M-4(큰 글자 겹침·값 잘림)·M-5(어두운 지도·위성 모양)·M-6(오프라인)·M-7(렌더), 배터리 부담(1초 카메라 애니메이션), 앱 개인정보 라벨(타일 요청 시 IP·지도 영역).
+  - 후속 과제(유예): 시각적 "가상 코스" 표기 여부(사용자 결정), 좌표 없는 정류장 추가 시 크래시 대신 지도 생략, CourseJourney 입력 불변식(direction ±1·minutesPerStop>0), 따라가기 아이콘이 '내 위치'로 오해될 수 있음.
 - W10(구현·리뷰·제한 범위 검증 완료, [#15](https://github.com/rnqhstmd/focus-mate/pull/15)): 카드 외형·사진 편집, 단일 버전 3 저장과 버전 1·2 호환, 실패/취소 보존, W11 마이페이지 실제 편집 연결·공통 외형 표시를 구현했다. 최종 단위547건·Release 빌드·웹31건과 edge QA 통과, 제품 인수 ACCEPT. 전체 UI115건 중108건은 사용자 요청으로 중단하여 미완료다. [W10 최종 검증](codex-feat-card-customization/reports/final-verification.md)에 실행 범위를 구분했다.
   - W04: PassFace(style: model.currentCardStyle)에서 저장 외형을 읽는다. 카드 도메인은 접촉 성공·여행 완료를 결정하지 않으며 LCD에는 기존 이름·체크 정책을 유지한다.
   - W14: 실제 iPhone의 PhotosPicker·앱 생명주기·큰 글자·VoiceOver 조작·햅틱 및 출시 QA가 남아 있다. VO width swipe 추가 경로와 가져오기 안내의 지속 시각 초점도 미확정이다.

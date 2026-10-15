@@ -9,10 +9,13 @@ struct JourneyView: View {
     /// 출발 안내·타이머 컨트롤러는 화면이 처음 나타날 때 한 번만 만든다.
     @State private var briefing: DepartureBriefingController?
     @State private var timer: JourneyTimerController?
+    /// 지도 상태는 이 화면 수명 동안만 있다. 다시 들어오면 기본값으로 시작한다(FR-9).
+    @State private var map: JourneyMapController?
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
         Group {
-            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing, timer: timer) }
+            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing, timer: timer, map: map) }
             else { Color.clear }
         }
         .onAppear {
@@ -21,7 +24,10 @@ struct JourneyView: View {
         }
         .onChange(of: model.activeJourney?.phase) { _, _ in ensureTimer() }
         // 정상 경로에서는 이탈이 없다. 재생성될 때 일시정지 규칙과 저장을 맞추기 위한 방어다.
-        .onDisappear { timer?.leave() }
+        .onDisappear {
+            timer?.leave()
+            map?.leave()
+        }
     }
 
     /// '시작'을 이 화면에서 직접 본 경우에만 바로 진행한다. 저장된 진행 상태만으로는 자동 시작하지 않는다.
@@ -29,6 +35,11 @@ struct JourneyView: View {
         guard timer == nil, let journey = model.activeJourney, journey.phase == .departed else { return }
         timer = JourneyTimerController(journey: journey, autoStart: briefing?.isConfirmed == true, saver: model,
                                        clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer)
+        // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
+        if let timer, let course = CourseJourney(journey: journey) {
+            map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,
+                                       reduceMotion: services.reduceMotion(system: systemReduceMotion))
+        }
     }
 }
 
@@ -38,6 +49,7 @@ private struct JourneyScreen: View {
     let services: JourneyServices
     let briefing: DepartureBriefingController
     let timer: JourneyTimerController?
+    let map: JourneyMapController?
     @AccessibilityFocusState private var startFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -51,9 +63,9 @@ private struct JourneyScreen: View {
             if awaitingDeparture { departureBriefing }
             else if let timer {
                 #if DEBUG
-                JourneyTimerView(controller: timer, reduceMotion: reduceMotion, path: model.path)
+                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, path: model.path)
                 #else
-                JourneyTimerView(controller: timer, reduceMotion: reduceMotion)
+                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion)
                 #endif
             } else { Color.clear }
         }
@@ -82,7 +94,7 @@ private struct JourneyScreen: View {
         .onChange(of: briefing.focusTarget) { _, target in startFocused = target == .startButton }
         #if DEBUG
         .overlay(alignment: .topLeading) { diagnostics }
-        .safeAreaInset(edge: .top) { testControls }
+        .overlay(alignment: .top) { testControls }
         #endif
     }
 
@@ -141,7 +153,8 @@ private struct JourneyScreen: View {
     }
 
     #if DEBUG
-    /// 수동 시계일 때만 상단 한 줄에 둔다. 레이아웃이 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다.
+    /// 수동 시계일 때만 상단 가운데에 겹쳐 둔다. 왼쪽 위 일시정지와 오른쪽 위 지도 도구 사이 빈 자리라 겹치지 않고,
+    /// 자리를 예약하지 않으므로 상단 20% 배치(AC-2)를 밀어내지 않는다. 아래에 두면 지도 테마 시트에 가려진다.
     @ViewBuilder private var testControls: some View {
         if let clock = services.testClock {
             HStack(spacing: 0) {
@@ -153,7 +166,6 @@ private struct JourneyScreen: View {
                 if let failure = services.failNextSave {
                     testButton("다음 저장 실패", id: "test.failNextSave") { failure.arm() }
                 }
-                Spacer(minLength: 0)
             }
             .frame(height: 44)
         }

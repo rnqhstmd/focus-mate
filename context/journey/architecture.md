@@ -14,7 +14,7 @@
 
 ## 향후 네이티브와 후순위
 
-iOS 실제 분 타이머는 W05에서 구현됐다: `JourneyTimerController`(단조 시계 `JourneyClock`·틱 `JourneyTicker` 주입, 상태 running/paused/arrived)가 진도를 소유하고 `AppModel.saveJourneyProgress`로 저장한다(저장 형식 v4). 앱 생명주기(포기·이어가기)와 MapKit 기본 지도/앱 내 가상 코스는 iOS MVP 예정(W07·W06). 실제 GPS·버스 API·실시간 위치·기기 간 재개는 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
+iOS 실제 분 타이머는 W05에서 구현됐다: `JourneyTimerController`(단조 시계 `JourneyClock`·틱 `JourneyTicker` 주입, 상태 running/paused/arrived)가 진도를 소유하고 `AppModel.saveJourneyProgress`로 저장한다(저장 형식 v4). MapKit 가상 코스는 W06에서 구현됐다: 순수 규칙 `JourneyCourse`(정류장 id별 실제 위치 근사 좌표, 서울 경계 상자, 정류장 사이 직선 닫힌 코스)·`JourneyCourseProgress`(`CourseJourney` 입력으로 진도 → 버스 위치·방향·다음/남은 정류장·남은 거리, 정수 초 산술)·`JourneyMapState`(따라가기/자유 탐색·테마·정류장 표시·시트·도구 활성 상태 머신과 `JourneyCameraPolicy`), 연결부 `JourneyMapController`(저장자·타이머 의존 없음 — 지도는 진도·저장을 바꾸지 않는다), 화면 `JourneyMapView`(SwiftUI `Map`, 실제 POI 숨김, 사용자 제스처는 카메라 바인딩 setter의 `positionedByUser`로 판정)·`JourneyMapThemeSheet`. 지도 상태는 저장하지 않고 여행 화면 수명 동안만 둔다. **도착지 일관성 규칙**: 저장된 `destinationStopID`가 출발 정류장·방향·분·버스로 계산한 도착지와 다르면 `CourseJourney.init?(journey:)`가 nil이고 여행 화면은 지도 없이 W05 배치로 보인다. W09 도착 안내도 같은 규칙을 따른다. 앱 생명주기(포기·이어가기)는 iOS MVP 예정(W07). 실제 GPS·버스 API·실시간 위치·기기 간 재개는 후순위. 상세 범위는 [MVP](../../docs/MVP.md)에 있다. 새로운 계층·파일·API를 이미 구현된 것으로 표시하지 않는다.
 
 ## 주제 문서
 

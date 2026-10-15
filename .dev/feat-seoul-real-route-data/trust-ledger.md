@@ -189,3 +189,4 @@ security_verdict:
 - 1회차: SPEC FAIL(AC-77 부분) · Important 3 [동작결함](요약 집계 누락) → 재현 RED R1 후 수정
 - 2회차: SPEC PASS 47/47 · Important 2 [동작불변] → 정리 완료 · Minor 4 유예
 - security: CRITICAL 0 · HIGH 0 · MEDIUM 11 (2 정리, 9 유예 — reports/review-deferred.md)
+- [UI 테스트 일부 미실행] 사용자 지시("빼고 끝내줘")로 verify 중 iOS UI 테스트 277개 중 165개(실패 0) 실행 후 중단. 이번 범위는 기존 앱 파일 무수정·새 파일만이라 UI 영향 없음. W16b에서 전체 UI 실행 (complete/Step -1)

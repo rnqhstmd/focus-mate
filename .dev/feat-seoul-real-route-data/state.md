@@ -1,8 +1,8 @@
 phase: complete
 status: in_progress
 pipeline: gx-tdd
-verify-status: pending
-verify-fingerprint: ""
+verify-status: passed
+verify-fingerprint: "c38bba1:e4ebaed934b6"
 model-profile: standard
 mode: all
 intent-source: user-selection
@@ -20,7 +20,7 @@ auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 5
 simulator: FM-W16 9306E393-1808-45F1-8C65-CD6E57D7DF98
-current-step: "complete Step -1 verify"
+current-step: "complete Step 0 인수 검증"
 user-scope: "W09 진행 중 — 사용자 결정(설계 승인 시): 설계 구현 순서 1~11(스크립트·데이터 + 새 파일 앱 계산 모듈)만 지금, 12~27은 W09 머지 후"
 phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: in_progress }
 execution-log:
@@ -47,3 +47,4 @@ steps:
   - { phase: review, step: mechanical-gate, result: "ios build OK(경고 0), python 88 OK, node OK — iOS 전체 테스트는 verify에서 1회" }
   - { phase: review, agent: reviewer, result: "R1 SPEC FAIL(AC-77) Important 3 동작결함 → RED R1 수정; R2 SPEC PASS 47/47, Important 2 동작불변 정리, Minor 4 유예" }
   - { phase: review, agent: security-auditor, result: "CRITICAL 0, HIGH 0, MEDIUM 11 (2 정리, 9 유예)" }
+  - { phase: complete, gate: verify, result: "통과 — 단위 1059/0, Python 93, UI 165/0(112 미실행, 사용자 결정), 빌드 3종 성공, 경고 1(기준 5)" }

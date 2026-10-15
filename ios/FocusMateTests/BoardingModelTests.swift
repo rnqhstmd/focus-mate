@@ -301,13 +301,27 @@ final class BoardingModelTests: XCTestCase {
 
     // MARK: AC-27
 
-    // 깨짐: 새 여행 시작이 active를 폐기하지 않거나 .time을 열지 않거나 records를 건드리면 실패.
+    // 깨짐: 확인 없이 startTripFromMain이 active를 폐기하면 true/쓰기 발생으로 실패.
     @MainActor
-    func testAC27_진행여정이_있으면_폐기하고_시간선택을_연다() throws {
+    func testAC27_진행여정이_있으면_startTripFromMain은_false이고_쓰기없이_유지한다() throws {
+        let probe = Probe()
+        let old = F.journey()
+        let model = try makeModel(active: old, probe: probe)
+
+        XCTAssertFalse(model.startTripFromMain())
+
+        XCTAssertEqual(probe.writes.count, 0)
+        XCTAssertEqual(model.activeJourney, old)
+        XCTAssertEqual(model.path, [])
+    }
+
+    // 깨짐: 새 여정 확정이 active를 폐기하지 않거나 .time을 열지 않거나 records를 건드리면 실패.
+    @MainActor
+    func testAC27_새여정_확정이_진행여정을_폐기하고_시간선택을_연다() throws {
         let probe = Probe()
         let model = try makeModel(active: F.journey(), probe: probe)
 
-        XCTAssertTrue(model.startTripFromMain())
+        XCTAssertEqual(model.confirmNewJourney(), .done)
 
         XCTAssertEqual(model.path.last, .time)
         XCTAssertNil(model.activeJourney)
@@ -316,19 +330,19 @@ final class BoardingModelTests: XCTestCase {
         XCTAssertEqual(model.snapshot?.records.items.count, 0)
     }
 
-    // 깨짐: 폐기 실패인데 .time으로 이동하거나 active를 지우면 실패.
+    // 깨짐: 폐기 실패인데 .time으로 이동하거나 active를 지우거나 일반 saveFailure를 남기면 실패.
     @MainActor
-    func testAC27_폐기가_실패하면_이동하지_않고_진행여정이_남는다() throws {
+    func testAC27_새여정_확정이_실패하면_이동하지_않고_진행여정이_남는다() throws {
         let probe = Probe()
         let old = F.journey()
         let model = try makeModel(active: old, probe: probe)
         probe.shouldFail = true
 
-        XCTAssertFalse(model.startTripFromMain())
+        XCTAssertEqual(model.confirmNewJourney(), .saveFailed)
 
         XCTAssertEqual(model.path, [])
         XCTAssertEqual(model.activeJourney, old)
-        XCTAssertEqual(model.saveFailure, .writeFailed)
+        XCTAssertNil(model.saveFailure)
     }
 
     // 깨짐: active가 없는데 저장하면 실패.

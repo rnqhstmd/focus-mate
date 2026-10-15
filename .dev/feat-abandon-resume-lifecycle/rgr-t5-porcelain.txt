@@ -1,0 +1,25 @@
+ M ios/FocusMate/AppModel+Boarding.swift
+ M ios/FocusMate/AppModel.swift
+ M ios/FocusMate/RootView.swift
+ M ios/FocusMate/UITestBootstrap.swift
+ M ios/FocusMateTests/BoardingModelTests.swift
+ M ios/FocusMateUITests/ActiveJourneyMainUITests.swift
+ M ios/FocusMateUITests/BoardingLargeTextUITests.swift
+ M ios/FocusMateUITests/UITestLaunchSupport.swift
+?? .dev/feat-abandon-resume-lifecycle/
+?? ios/FocusMate/ActiveJourneyCardContent.swift
+?? ios/FocusMate/AppModel+JourneyLifecycle.swift
+?? ios/FocusMate/JourneyAbandonController.swift
+?? ios/FocusMate/JourneyLifecycleText.swift
+?? ios/FocusMate/JourneyReach.swift
+?? ios/FocusMate/MainActiveJourneyView.swift
+?? ios/FocusMateTests/ActiveJourneyCardContentTests.swift
+?? ios/FocusMateTests/JourneyAbandonControllerTests.swift
+?? ios/FocusMateTests/JourneyLifecycleModelTests.swift
+?? ios/FocusMateTests/JourneyLifecycleTestDoubles.swift
+?? ios/FocusMateTests/JourneyReachTests.swift
+?? ios/FocusMateTests/LifecycleSeedTests.swift
+?? ios/FocusMateUITests/JourneyAbandonUITests.swift
+?? ios/FocusMateUITests/JourneyResumeUITests.swift
+?? ios/FocusMateUITests/MainActiveJourneyCardUITests.swift
+?? ios/FocusMateUITests/NewJourneyUITests.swift

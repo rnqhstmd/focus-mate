@@ -1,0 +1,20 @@
+ M ios/FocusMate/AppModel+JourneyStart.swift
+ M ios/FocusMate/AppModel.swift
+ M ios/FocusMate/AppSnapshot.swift
+ M ios/FocusMate/IssuanceHapticPattern.swift
+ M ios/FocusMate/JourneySection.swift
+ M ios/FocusMate/PreparationDraft.swift
+ M ios/FocusMate/SnapshotCodec.swift
+ M ios/FocusMate/UITestBootstrap.swift
+?? .dev/feat-boarding-pass-tag/
+?? ios/FocusMate/AppModel+Boarding.swift
+?? ios/FocusMate/BoardingPassContent.swift
+?? ios/FocusMate/BoardingRules.swift
+?? ios/FocusMate/JourneySnapshot.swift
+?? ios/FocusMateTests/BoardingModelTests.swift
+?? ios/FocusMateTests/BoardingPassContentTests.swift
+?? ios/FocusMateTests/BoardingRulesTests.swift
+?? ios/FocusMateTests/BoardingTagControllerTests.swift
+?? ios/FocusMateTests/BoardingTestDoubles.swift
+?? ios/FocusMateTests/JourneySnapshotStorageTests.swift
+?? ios/FocusMateTests/JourneySnapshotTests.swift

@@ -44,6 +44,20 @@ final class PreparationFlowUITests: XCTestCase {
         XCTAssertFalse(element("preparation.confirm", in: app).isEnabled)
     }
 
+    // 깨짐: 미완성 상태에서 승차권 보기가 board로 이동한다.
+    func testTappingDisabledConfirmDoesNotOpenBoardingPass() throws {
+        let app = launchCardOnly()
+        try openTimeScreenFromSearch(in: app)
+        try selectSixtyMinutesBus2014(in: app)
+        element("time.proceed", in: app).tap()
+        XCTAssertTrue(element("screen.preparation", in: app).waitForExistence(timeout: timeout))
+
+        element("preparation.confirm", in: app).tap()
+
+        XCTAssertFalse(element("screen.board", in: app).waitForExistence(timeout: 1))
+        XCTAssertTrue(element("screen.preparation", in: app).exists)
+    }
+
     func testRapidDoubleTapOnProceedPushesPreparationOnlyOnce() throws {
         let app = launchCardOnly()
         try openTimeScreenFromSearch(in: app)
@@ -64,7 +78,7 @@ final class PreparationFlowUITests: XCTestCase {
     func testReturningFromPreparationKeepsSelectionAndItSurvivesLeavingToMainInSameRun() throws {
         let app = launchReady()
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
-        app.buttons["여행 준비"].tap()
+        app.buttons["open.preparation"].tap()
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.origin", in: app), "서울숲")
         try selectSixtyMinutesBus2014(in: app)
@@ -79,7 +93,7 @@ final class PreparationFlowUITests: XCTestCase {
 
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
-        app.buttons["여행 준비"].tap()
+        app.buttons["open.preparation"].tap()
 
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
@@ -104,7 +118,7 @@ final class PreparationFlowUITests: XCTestCase {
             (button: "기록", screen: "screen.records"),
             (button: "설정", screen: "screen.settings"),
             (button: "마이페이지", screen: "screen.profile"),
-            (button: "여행 준비", screen: "screen.time"),
+            (button: "open.preparation", screen: "screen.time"),
         ]
         for destination in destinations {
             app.buttons[destination.button].tap()
@@ -132,7 +146,7 @@ final class PreparationFlowUITests: XCTestCase {
         launch(app, testID: testID, seed: nil)
 
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
-        app.buttons["여행 준비"].tap()
+        app.buttons["open.preparation"].tap()
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.minutesLabel", in: app), "25")
         let selected = app.buttons.matching(

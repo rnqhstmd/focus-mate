@@ -1,0 +1,4 @@
+ios-test exit 65
+ios-build exit 0
+node-test exit 0
+node-build exit 0

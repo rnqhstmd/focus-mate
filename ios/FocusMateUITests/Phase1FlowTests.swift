@@ -47,7 +47,7 @@ final class Phase1FlowTests: XCTestCase {
         let initialSnapshot = try diagnosticValue("test.snapshot", in: app)
         let initialBytes = try diagnosticValue("test.persistedBytes", in: app)
         let destinations = [
-            (button: "여행 준비", screen: "screen.time"),
+            (button: "open.preparation", screen: "screen.time"),
             (button: "기록", screen: "screen.records"),
             (button: "설정", screen: "screen.settings"),
             (button: "마이페이지", screen: "screen.profile"),

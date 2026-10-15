@@ -1,0 +1,1075 @@
+diff --git a/ios/FocusMate/BoardingTagView.swift b/ios/FocusMate/BoardingTagView.swift
+new file mode 100644
+index 0000000..f2e3254
+--- /dev/null
++++ b/ios/FocusMate/BoardingTagView.swift
+@@ -0,0 +1,222 @@
++import SwiftUI
++
++/// 승차 태그(시안 kxUUR·JmXmQ·Vts6F). 화면에는 단말기·카드·올림 안내만 두고, 제목·정류장·단계·안내 문구는 낭독용으로만 둔다.
++@MainActor
++struct BoardingTagView: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    @State private var controller: BoardingTagController
++    @State private var entered = false
++    @State private var blink = false
++    @Environment(\.scenePhase) private var scenePhase
++    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
++
++    private static let space = "boarding"
++    private let geometry = BoardingGeometry()
++
++    init(model: AppModel, services: JourneyServices) {
++        self.model = model
++        self.services = services
++        var finish: () -> Void = {}
++        let controller = BoardingTagController(
++            boarder: services.makeBoarder(model), haptics: services.haptics, announcer: services.announcer,
++            sleep: services.sleep, holdSleep: services.boardingHoldSleep, onFinished: { finish() })
++        _controller = State(initialValue: controller)
++        finish = { [weak model] in
++            var transaction = Transaction()
++            transaction.disablesAnimations = true
++            withTransaction(transaction) { model?.finishBoardingTransition() }
++        }
++        _ = finish
++    }
++
++    private var reduceMotion: Bool { services.reduceMotion(system: systemReduceMotion) }
++
++    var body: some View {
++        VStack(spacing: 0) {
++            Text(titleLabel).font(.system(size: 1)).foregroundStyle(.clear).frame(width: 1, height: 1)
++                .accessibilityLabel(titleLabel).accessibilityAddTraits(.isHeader).accessibilityIdentifier("boarding.title")
++            Spacer(minLength: 24)
++            terminal
++                .opacity(entered || reduceMotion ? 1 : 0)
++            Spacer(minLength: 40)
++            Image(systemName: "chevron.up.2").font(.title2).foregroundStyle(.white.opacity(0.85))
++                .accessibilityHidden(true)
++                .padding(.bottom, 12)
++            card
++                .offset(y: entered || reduceMotion ? 0 : 80)
++                .opacity(entered || reduceMotion ? 1 : 0)
++            Spacer(minLength: 32)
++        }
++        .frame(maxWidth: .infinity, maxHeight: .infinity)
++        .coordinateSpace(name: Self.space)
++        .background(Color(red: 0x0F / 255, green: 0x13 / 255, blue: 0x11 / 255).ignoresSafeArea())
++        .overlay(alignment: .bottom) { notices }
++        .opacity(controller.phase == .fading || controller.phase == .finished ? 0 : 1)
++        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: controller.phase == .fading)
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier("screen.boarding")
++        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
++        // 인식 후에도 뒤로가기는 남긴다 — 이탈하면 늦은 전환만 취소하고 저장은 유지한다(AC-14).
++        .onAppear {
++            guard !reduceMotion else { entered = true; return }
++            withAnimation(.easeOut(duration: 0.38).delay(0.12)) { entered = true }
++            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { blink = true }
++        }
++        .onDisappear {
++            controller.cancelPendingTransition()
++        }
++        .onChange(of: scenePhase) { _, phase in
++            if phase == .background { controller.cancelPendingTransition() }
++            else if phase == .active { controller.returnToForeground() }
++        }
++        #if DEBUG
++        .overlay(alignment: .topLeading) { diagnostics }
++        #endif
++    }
++
++    private var titleLabel: String {
++        let origin = model.confirmedPreparation?.originName ?? ""
++        return "승차 태그, \(origin), 승차 단계. 카드를 위로 밀어 단말기에 대주세요"
++    }
++
++    private var terminal: some View {
++        TimelineView(.everyMinute) { context in
++            let time = BoardingClock.text(for: context.date)
++            VStack(spacing: 16) {
++                Capsule().fill(controller.isRecognized ? Color(red: 0.7, green: 0.85, blue: 0.75) : .gray.opacity(0.6))
++                    .frame(height: 4).padding(.horizontal, 24)
++                lcd(time: time)
++                RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.06))
++                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.18)))
++                    .overlay(Image(systemName: "wave.3.right").font(.system(size: 40)).foregroundStyle(.white.opacity(0.7)))
++                    .frame(width: geometry.tagAreaSize.width, height: geometry.tagAreaSize.height)
++                    .background(GeometryReader { proxy in
++                        Color.clear.onAppear { tagFrame = proxy.frame(in: .named(Self.space)); syncLayout() }
++                            .onChange(of: proxy.frame(in: .named(Self.space))) { _, frame in tagFrame = frame; syncLayout() }
++                    })
++                    .accessibilityHidden(true)
++                    .overlay(Color.clear.accessibilityElement().accessibilityLabel("태그 영역").accessibilityIdentifier("boarding.tagArea"))
++            }
++            .padding(.vertical, 18)
++            .frame(width: 274)
++            .background(RoundedRectangle(cornerRadius: 28).fill(Color(white: 0.11)))
++            .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.2)))
++            .accessibilityElement(children: .ignore)
++            .accessibilityLabel("Focus Mate 승차 단말기, \(time), \(controller.isRecognized ? "집중동행카드 인식됨" : "승차 준비")")
++            .accessibilityIdentifier("boarding.terminal")
++        }
++        .dynamicTypeSize(.large)
++    }
++
++    private func lcd(time: String) -> some View {
++        VStack(spacing: 8) {
++            HStack {
++                Text("Focus Mate").font(.footnote).foregroundStyle(.secondary)
++                Spacer()
++                Text(time).font(.footnote.weight(.semibold)).monospacedDigit()
++            }
++            Divider()
++            Group {
++                if controller.isRecognized {
++                    VStack(spacing: 6) {
++                        Text(PassIdentity.displayName).font(.title3.bold())
++                        Image(systemName: "checkmark").font(.title3).foregroundStyle(Color(red: 0.7, green: 0.85, blue: 0.75))
++                    }
++                } else {
++                    Text("승차 준비").font(.title3.bold())
++                }
++            }
++            .frame(maxWidth: .infinity, minHeight: 64)
++            .accessibilityElement(children: .ignore)
++            .accessibilityValue(controller.isRecognized ? PassIdentity.displayName : "승차 준비")
++            .accessibilityIdentifier("boarding.lcdStatus")
++        }
++        .padding(14)
++        .background(RoundedRectangle(cornerRadius: 16).fill(Color.black))
++        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2)))
++        .padding(.horizontal, 18)
++    }
++
++    @State private var tagFrame: CGRect = .zero
++
++    @State private var cardRest: CGRect = .zero
++
++    /// 바깥 틀(움직이지 않음)로 카드 기준 위치를 재고, 안쪽 카드만 오프셋으로 움직인다.
++    private var card: some View {
++        ZStack {
++            PassFace(style: model.currentCardStyle)
++                .frame(width: geometry.cardWidth)
++                .padding(8)
++                .overlay(RoundedRectangle(cornerRadius: 22)
++                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
++                    .foregroundStyle(.white.opacity(controller.isRecognized ? 0 : (blink && !reduceMotion ? 0.25 : 0.7))))
++                .offset(controller.cardOffset)
++                .animation(reduceMotion ? nil : .spring(duration: 0.3), value: controller.cardOffset)
++                .contentShape(Rectangle())
++                .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
++                    .onChanged { controller.dragChanged(translation: $0.translation, reduceMotion: reduceMotion) }
++                    .onEnded { controller.dragEnded(translation: $0.translation, reduceMotion: reduceMotion) })
++                .accessibilityElement(children: .ignore)
++                .accessibilityLabel(PassIdentity.displayName)
++                .accessibilityHint("카드를 여기에 대면 승차해요. 눌러서 태그하기")
++                .accessibilityAddTraits(.isButton)
++                .accessibilityAction { controller.activate(reduceMotion: reduceMotion) }
++                .accessibilityIdentifier("boarding.card")
++        }
++        .background(GeometryReader { proxy in
++            Color.clear
++                .onAppear { cardRest = proxy.frame(in: .named(Self.space)).insetBy(dx: 8, dy: 8); syncLayout() }
++                .onChange(of: proxy.frame(in: .named(Self.space))) { _, frame in cardRest = frame.insetBy(dx: 8, dy: 8); syncLayout() }
++        })
++    }
++
++    private func syncLayout() { controller.updateLayout(cardRest: cardRest, tagArea: tagFrame) }
++
++    @ViewBuilder private var notices: some View {
++        VStack(spacing: 8) {
++            if controller.showsTapHint {
++                Text("카드를 위로 밀어 단말기에 대주세요").font(.subheadline)
++                    .accessibilityIdentifier("boarding.tapHint")
++            }
++            if controller.showsSaveFailure {
++                Text("승차 정보를 저장하지 못했어요. 카드를 다시 대주세요.").font(.subheadline).foregroundStyle(.orange)
++                    .accessibilityIdentifier("boarding.saveFailure")
++            }
++        }
++        .multilineTextAlignment(.center)
++        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
++        .padding(.horizontal, 24).padding(.bottom, 8)
++    }
++
++    #if DEBUG
++    private var diagnostics: some View {
++        VStack(spacing: 0) {
++            Text("승차 진단").accessibilityValue(diagnosticJSON).accessibilityIdentifier("test.boarding")
++            Button { controller.activate(reduceMotion: reduceMotion) } label: {
++                Text("카드 활성화").font(.system(size: 1)).foregroundStyle(.clear)
++                    .frame(width: 44, height: 44).contentShape(Rectangle())
++            }
++            .accessibilityLabel("카드 활성화").accessibilityIdentifier("test.activateBoardingCard")
++        }
++        .font(.system(size: 1)).foregroundStyle(.clear)
++    }
++
++    private var diagnosticJSON: String {
++        let phase: String = switch controller.phase {
++        case .ready: "ready"
++        case .dragging: "dragging"
++        case .contacting: "contacting"
++        case .held: "held"
++        case .fading: "fading"
++        case .finished: "finished"
++        case .failed: "failed"
++        case .abandoned: "abandoned"
++        }
++        let object: [String: Any] = ["phase": phase, "offsetY": Double(controller.cardOffset.height),
++                                     "showsTapHint": controller.showsTapHint]
++        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return "null" }
++        return String(decoding: data, as: UTF8.self)
++    }
++    #endif
++}
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index 487f176..dc701d7 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -6,11 +6,16 @@ struct DestinationScreen: View {
+     let destination: Destination
+     @Bindable var model: AppModel
+     let onCardCustomization: () -> Void
++    let services: JourneyServices
+ 
+     var body: some View {
+         // 마이페이지는 시안대로 자체 여백·좌측 제목을 쓰므로 공통 자리표시 체인 밖에서 그린다.
+         if destination == .profile {
+             ProfileView(model: model, onCustomize: onCardCustomization)
++        } else if destination == .board {
++            BoardingPassView(model: model)
++        } else if destination == .boarding {
++            BoardingTagView(model: model, services: services)
+         } else {
+             placeholderOrTime
+         }
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+index 02950ae..a2ad65f 100644
+--- a/ios/FocusMate/FocusMateApp.swift
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -9,6 +9,8 @@ struct FocusMateApp: App {
+     private let testBootstrap: UITestBootstrap?
+     private let testRecorder: UITestFeedbackRecorder?
+     private let testGate: UITestIssuanceGate?
++    private let testServices: JourneyServices?
++    private let testHoldGate: UITestHoldGate?
+     @State private var testSetupError: String?
+     #endif
+ 
+@@ -29,12 +31,17 @@ struct FocusMateApp: App {
+                 let gate = bootstrap.makeGate()
+                 testRecorder = recorder
+                 testGate = gate
++                let made = bootstrap.makeJourneyServices(recorder: recorder)
++                testServices = made.0
++                testHoldGate = made.1
+                 _issuance = State(initialValue: gate.map {
+                     CardIssuanceController(issuer: model, haptics: recorder, announcer: recorder, sleep: $0.wait)
+                 } ?? CardIssuanceController(issuer: model, haptics: recorder, announcer: recorder))
+             } else {
+                 testRecorder = nil
+                 testGate = nil
++                testServices = nil
++                testHoldGate = nil
+                 _issuance = State(initialValue: Self.makeIssuance(for: model))
+             }
+             #else
+@@ -53,6 +60,8 @@ struct FocusMateApp: App {
+             testBootstrap = nil
+             testRecorder = nil
+             testGate = nil
++            testServices = nil
++            testHoldGate = nil
+             if ProcessInfo.processInfo.arguments.contains("--fm-ui-test-id") {
+                 _testSetupError = State(initialValue: String(describing: error))
+             }
+@@ -63,14 +72,19 @@ struct FocusMateApp: App {
+     var body: some Scene {
+         WindowGroup {
+             #if DEBUG
+-            RootView(model: model, issuance: issuance, testBootstrap: testBootstrap, testRecorder: testRecorder,
+-                     testGate: testGate, testSetupError: testSetupError).task { start() }
++            RootView(model: model, issuance: issuance, services: journeyServices, testBootstrap: testBootstrap, testRecorder: testRecorder,
++                     testGate: testGate, testHoldGate: testHoldGate, testSetupError: testSetupError).task { start() }
+             #else
+             RootView(model: model, issuance: issuance).task { start() }
+             #endif
+         }
+     }
+ 
++    #if DEBUG
++    /// UI 테스트면 진동·낭독을 기록기로 바꿔 진단에 노출한다.
++    private var journeyServices: JourneyServices { testServices ?? .live() }
++    #endif
++
+     private static func makeIssuance(for model: AppModel) -> CardIssuanceController {
+         CardIssuanceController(issuer: model, haptics: CoreHapticsIssuancePlayer(), announcer: SystemAccessibilityAnnouncer())
+     }
+@@ -85,8 +99,10 @@ struct FocusMateApp: App {
+         #endif
+         model.start()
+         #if DEBUG
+-        do { try testBootstrap?.applySaveScenario(to: model) }
+-        catch { testSetupError = String(describing: error) }
++        do {
++            try testBootstrap?.applySaveScenario(to: model)
++            try testBootstrap?.applyRoute(to: model)
++        } catch { testSetupError = String(describing: error) }
+         #endif
+     }
+ }
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index 5533528..1f10302 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -4,6 +4,7 @@ import SwiftUI
+ struct RootView: View {
+     @Bindable var model: AppModel
+     let issuance: CardIssuanceController
++    var services: JourneyServices = .live()
+     @State private var customization: CardCustomizationController?
+     @State private var showsCustomization = false
+     @State private var cardImportTask: Task<Void, Never>?
+@@ -18,6 +19,7 @@ struct RootView: View {
+     var testBootstrap: UITestBootstrap?
+     var testRecorder: UITestFeedbackRecorder?
+     var testGate: UITestIssuanceGate?
++    var testHoldGate: UITestHoldGate?
+     var testSetupError: String?
+     #endif
+ 
+@@ -34,7 +36,7 @@ struct RootView: View {
+             .padding(24)
+             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
+-            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization) }
++            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization, services: services) }
+         }
+         .safeAreaInset(edge: .bottom) {
+             if savedCardNotice {
+@@ -94,6 +96,14 @@ struct RootView: View {
+                 .accessibilityLabel("발급 해제")
+                     .accessibilityIdentifier("test.releaseIssuance")
+             }
++            if let testHoldGate {
++                Button { testHoldGate.release() } label: {
++                    Text("승차 유지 해제").font(.system(size: 1)).foregroundStyle(.clear)
++                        .frame(width: 44, height: 44).contentShape(Rectangle())
++                }
++                .accessibilityLabel("승차 유지 해제")
++                .accessibilityIdentifier("test.releaseBoardingHold")
++            }
+         }
+         #endif
+     }
+@@ -154,11 +164,21 @@ struct RootView: View {
+                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
+                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
+             }
++            if model.activeJourney != nil {
++                // W07 이어가기 전 임시 안내: 여행 시작하기를 누르면 이 여정은 기록 없이 정리된다.
++                VStack(alignment: .leading, spacing: 4) {
++                    Text("진행 중인 여정이 있어요").font(.headline)
++                    Text("여행 시작하기를 누르면 이 여정은 기록 없이 정리돼요.").font(.subheadline).foregroundStyle(.secondary)
++                }
++                .accessibilityElement(children: .combine).accessibilityIdentifier("main.activeJourney")
++            }
+             PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
+             Button("카드 꾸미기", action: startCardCustomization)
+                 .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
+             ForEach(Destination.mainMenu, id: \.self) { destination in
+-                Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
++                Button(destination.mainMenuTitle) {
++                    if destination == .preparation { model.startTripFromMain() } else { model.open(destination.mainMenuTarget) }
++                }.buttonStyle(.bordered)
+                     .accessibilityIdentifier("open.\(destination.rawValue)")
+             }
+         case nil:
+@@ -219,6 +239,7 @@ struct RootView: View {
+                 Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
+                 Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
+                 Text("카드 외형 진단").accessibilityValue(testBootstrap.cardStyleJSON(model: model, controller: customization)).accessibilityIdentifier("test.cardStyleJSON")
++                Text("준비 확정 진단").accessibilityValue(preparedPreparationJSON).accessibilityIdentifier("test.preparedPreparation")
+                 Text("동작 줄이기 진단").accessibilityValue(reduceMotion ? "true" : "false").accessibilityIdentifier("test.reduceMotion")
+             }
+             if let testRecorder {
+@@ -228,6 +249,20 @@ struct RootView: View {
+             if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
+         }.font(.system(size: 1)).foregroundStyle(.clear).allowsHitTesting(false)
+     }
++    /// 준비 화면을 벗어난 뒤(승차권 등)에도 확정값을 읽도록 전역에 둔다.
++    private var preparedPreparationJSON: String {
++        guard let details = model.confirmedPreparation else { return "null" }
++        let object: [String: Any] = [
++            "journey": ["minutes": details.journey.minutes, "busID": details.journey.busID,
++                        "busNumber": details.journey.busNumber, "destination": details.journey.destination,
++                        "stops": details.journey.stops],
++            "tag": ["id": details.tag.id, "name": details.tag.name, "icon": details.tag.icon.rawValue,
++                    "color": details.tag.color.rawValue],
++            "task": details.task, "sound": details.sound.rawValue,
++        ]
++        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return "null" }
++        return String(decoding: data, as: UTF8.self)
++    }
+     private var snapshotJSON: String {
+         guard let snapshot = model.snapshot else { return "null" }
+         let diagnostic = snapshot.updating(cards: CardSection(items: snapshot.cards.items.map { $0.updating(style: CardStyle(background: $0.style.background, photos: [])) }))
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index ab0709a..586c270 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -2,6 +2,7 @@
+ import Foundation
+ import Observation
+ import CryptoKit
++import UIKit
+ 
+ struct UITestBootstrap {
+     let photoManifestURL: URL?
+@@ -12,6 +13,10 @@ struct UITestBootstrap {
+     let shouldFailSound: Bool
+     let shouldFailSave: Bool
+     let issueHold: IssueHold
++    let boardingHoldManual: Bool
++    let forcedReduceMotion: Bool
++    let route: String?
++    let boardingSaveFailure: UITestCardSaveFailure
+     enum IssueHold { case standard, manual }
+     private let recoveryScenario: String?
+     enum SetupIssue: Error { case invalidArguments, existingSeed, invalidSaveState }
+@@ -30,6 +35,7 @@ struct UITestBootstrap {
+             let url = (manifest.hasPrefix("/") ? URL(fileURLWithPath: manifest) : support.appendingPathComponent(manifest)).standardizedFileURL.resolvingSymlinksInPath()
+             guard url.path.hasPrefix(support.path + "/") else { throw SetupIssue.invalidArguments }
+             photoManifestURL = url
++            Self.stagePhotoFixtures(support: support)
+         } else { photoManifestURL = nil }
+         let cardHold = try argument("--fm-ui-card-import-hold")
+         guard cardHold == nil || cardHold == "manual" else { throw SetupIssue.invalidArguments }
+@@ -40,8 +46,17 @@ struct UITestBootstrap {
+         seed = try argument("--fm-ui-seed")
+         guard seed == nil || Self.seeds.contains(seed!) else { throw SetupIssue.invalidArguments }
+         let save = try argument("--fm-ui-save")
+-        guard save == nil || save == "fail" else { throw SetupIssue.invalidArguments }
++        guard save == nil || save == "fail" || save == "fail-once-boarding" else { throw SetupIssue.invalidArguments }
+         shouldFailSave = save == "fail"
++        boardingSaveFailure = UITestCardSaveFailure(enabled: save == "fail-once-boarding")
++        let boardingHold = try argument("--fm-ui-boarding-hold")
++        guard boardingHold == nil || boardingHold == "manual" else { throw SetupIssue.invalidArguments }
++        boardingHoldManual = boardingHold == "manual"
++        let reduce = try argument("--fm-ui-reduce-motion")
++        guard reduce == nil || reduce == "on" else { throw SetupIssue.invalidArguments }
++        forcedReduceMotion = reduce == "on"
++        route = try argument("--fm-ui-route")
++        guard route == nil || (route == "boarding" && seed == "ready") else { throw SetupIssue.invalidArguments }
+         let sound = try argument("--fm-ui-sound")
+         guard sound == nil || sound == "fail" else { throw SetupIssue.invalidArguments }
+         shouldFailSound = sound == "fail"
+@@ -54,6 +69,39 @@ struct UITestBootstrap {
+             .appendingPathComponent(uuid.uuidString, isDirectory: true).appendingPathComponent("app-state.json")
+     }
+ 
++    /// UI 테스트용 사진 픽스처를 앱 컨테이너에 직접 만든다. 시뮬레이터마다 수동 배치하던 방식은 새 기기에서 재현되지 않았다.
++    /// 이미 있는 파일은 덮어쓰지 않는다.
++    private static func stagePhotoFixtures(support: URL) {
++        let base = support.appendingPathComponent("FocusMate", isDirectory: true)
++        let directory = base.appendingPathComponent("UITestPhotoFixtures", isDirectory: true)
++        let manager = FileManager.default
++        try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
++        func png(_ width: Int, _ height: Int, hue: CGFloat, alpha: Bool = false) -> Data {
++            let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = !alpha
++            return UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).pngData { context in
++                UIColor(hue: hue, saturation: 0.6, brightness: 0.9, alpha: 1).setFill()
++                context.fill(CGRect(x: 0, y: 0, width: width, height: height))
++                UIColor(hue: hue, saturation: 0.9, brightness: 0.4, alpha: alpha ? 0.25 : 1).setFill()
++                context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height / 2))
++            }
++        }
++        func manifest(_ names: [String]) -> Data {
++            Data(("{\"items\":[" + names.map { "{\"path\":\"\($0)\"}" }.joined(separator: ",") + "]}").utf8)
++        }
++        var files: [(URL, Data)] = [
++            (base.appendingPathComponent("escape.png"), png(48, 32, hue: 0.9)),
++            (directory.appendingPathComponent("a.png"), png(120, 80, hue: 0.1)),
++            (directory.appendingPathComponent("b.png"), png(80, 120, hue: 0.5, alpha: true)),
++            (directory.appendingPathComponent("unreadable.bin"), Data("not an image: unreadable fixture for card photo import".utf8)),
++            (directory.appendingPathComponent("valid2.json"), manifest(["a.png", "b.png"])),
++            (directory.appendingPathComponent("mixed.json"), manifest(["unreadable.bin", "a.png"])),
++            (directory.appendingPathComponent("invalidPaths.json"), manifest(["../escape.png", "missing.png"])),
++            (directory.appendingPathComponent("hold.json"), manifest(["a.png"])),
++            (directory.appendingPathComponent("seven.json"), manifest((1...7).map { "p\($0).png" }))]
++        for n in 1...7 { files.append((directory.appendingPathComponent("p\(n).png"), png(100 + n, 80, hue: CGFloat(n) / 8))) }
++        for (url, data) in files where !manager.fileExists(atPath: url.path) { try? data.write(to: url, options: .atomic) }
++    }
++
+     @MainActor func cardPhotoInputs(gate: UITestCardImportGate?) -> [CardPhotoInput] {
+         guard let manifest = photoManifestURL else { return [] }
+         struct Manifest: Decodable { struct Item: Decodable { let path: String }; let items: [Item] }
+@@ -91,7 +139,7 @@ struct UITestBootstrap {
+         return String(decoding: data, as: UTF8.self)
+     }
+ 
+-    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard"]).union(rawSeeds.keys)
++    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"]).union(rawSeeds.keys)
+ 
+     func prepare() throws {
+         guard let seed else { return }
+@@ -101,6 +149,9 @@ struct UITestBootstrap {
+         case "cardOnly": try LocalSnapshotStore(fileURL: fileURL).save(AppSnapshot.empty.issuingCard(Self.fixedCard))
+         case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard))
+         case "issuedWithoutCard": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
++        case "activeJourney":
++            try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard)
++                .updating(journey: JourneySection(active: Self.seededJourney)))
+         default:
+             guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
+             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+@@ -113,6 +164,7 @@ struct UITestBootstrap {
+         let scenario = recoveryScenario
+         let failSave = shouldFailSave
+         let cardFailure = cardSaveFailure
++        let boardingFailure = boardingSaveFailure
+         var activeReads = 0
+         return LocalSnapshotStore(fileURL: activeURL, readData: { url in
+             if url == activeURL {
+@@ -123,7 +175,7 @@ struct UITestBootstrap {
+             }
+             return try Data(contentsOf: url)
+         }, writeData: { data, url in
+-            if failSave || cardFailure.consume() { throw StorageIssue.writeFailed }
++            if failSave || cardFailure.consume() || boardingFailure.consume() { throw StorageIssue.writeFailed }
+             try data.write(to: url, options: .atomic)
+         }, writeBackup: { data, url in
+             if scenario == "backupFail" { throw StorageRecoveryIssue.backupFailed }
+@@ -144,6 +196,30 @@ struct UITestBootstrap {
+                                           currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+     }
+ 
++    /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
++    @MainActor func applyRoute(to model: AppModel) throws {
++        guard route == "boarding" else { return }
++        guard model.launchState == .ready(.main), let origin = model.journeyOrigin else { throw SetupIssue.invalidSaveState }
++        model.journeyPlan.setMinutes(60)
++        _ = model.journeyPlan.choose(busID: "2014", from: origin)
++        model.preparation.chooseTag(id: "reading")
++        model.preparation.setTask("라우트 할 일")
++        guard model.confirmPreparation() else { throw SetupIssue.invalidSaveState }
++        model.path = [.time, .preparation, .board, .boarding]
++    }
++
++    @MainActor func makeJourneyServices(recorder: UITestFeedbackRecorder) -> (JourneyServices, UITestHoldGate?) {
++        let gate = boardingHoldManual ? UITestHoldGate() : nil
++        var services = JourneyServices.live()
++        services.haptics = recorder
++        services.announcer = recorder
++        services.boardingHoldSleep = gate.map { gate in { await gate.wait($0) } }
++        services.forcedReduceMotion = forcedReduceMotion
++        let failure = boardingSaveFailure
++        services.makeBoarder = { ArmingBoarder(base: $0, failure: failure) }
++        return (services, gate)
++    }
++
+     @MainActor func makeSoundPreview() -> SoundPreviewController? {
+         guard shouldFailSound else { return nil }
+         return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
+@@ -158,6 +234,13 @@ struct UITestBootstrap {
+         catch { return "unreadable" }
+     }
+ 
++    /// 승차 직후(출발 확인 전) 진행 여정 1건.
++    private static let seededJourney = JourneySnapshot(
++        id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
++        destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
++        tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
++        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start)
++
+     private static let fixedCard = CardSnapshot(id: "FM-20261013", issuedAt: Date(timeIntervalSince1970: 1_791_882_000))
+ 
+     var backupBytes: String {
+@@ -230,6 +313,31 @@ final class UITestIssuanceGate {
+         waiter.resume()
+     }
+ }
++/// `--fm-ui-boarding-hold manual`: 인식 유지(1400ms)를 테스트가 해제할 때까지 붙잡는다. 여러 대기자를 모두 받고, 해제는 지금 기다리는 것만 푼다.
++@MainActor @Observable
++final class UITestHoldGate {
++    @ObservationIgnored private var waiters: [CheckedContinuation<Void, Never>] = []
++    func wait(_ duration: Duration) async { await withCheckedContinuation { waiters.append($0) } }
++    func release() {
++        let pending = waiters
++        waiters = []
++        pending.forEach { $0.resume() }
++    }
++}
++
++/// `--fm-ui-save fail-once-boarding`: 승차 저장 직전에만 한 번 실패를 건다.
++@MainActor
++final class ArmingBoarder: JourneyBoarding {
++    private let base: JourneyBoarding
++    private let failure: UITestCardSaveFailure
++    init(base: JourneyBoarding, failure: UITestCardSaveFailure) { self.base = base; self.failure = failure }
++    func boardJourney() -> Bool {
++        failure.arm()
++        defer { _ = failure.consume() }
++        return base.boardJourney()
++    }
++}
++
+ /// Only the editor Save action arms this shared box; bootstrap and unrelated saves never arm it.
+ final class UITestCardSaveFailure {
+     private let enabled: Bool
+diff --git a/ios/FocusMateUITests/BoardingFlowUITests.swift b/ios/FocusMateUITests/BoardingFlowUITests.swift
+new file mode 100644
+index 0000000..ed2f212
+--- /dev/null
++++ b/ios/FocusMateUITests/BoardingFlowUITests.swift
+@@ -0,0 +1,188 @@
++import Foundation
++import XCTest
++
++@MainActor
++final class BoardingFlowUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // 깨짐: 메인 버튼 라벨이 '여행 시작하기'가 아니거나 식별자 open.preparation이 없다.
++    func testMainTripButtonIsLabeledStartTripAndHasStableIdentifier() throws {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        let button = h.app.buttons["open.preparation"]
++        XCTAssertTrue(button.waitForExistence(timeout: timeout))
++        XCTAssertEqual(button.label, "여행 시작하기")
++    }
++
++    // 깨짐: 확정이 승차권으로 이동하지 않거나, 승차권 값/버스·분 노출 위치/탑승·뒤로 흐름/무저장이 깨진다.
++    func testConfirmOpensBoardingPassWithValuesBoardsToTagScreenAndBackWritesNothing() throws {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        let startBytes = try h.diagnostic("test.persistedBytes")
++        h.app.buttons["open.preparation"].tap()
++        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
++        let wheel = h.app.pickerWheels.firstMatch
++        XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
++        wheel.adjust(toPickerWheelValue: "60분")
++        let bus = h.element("time.candidate.2014")
++        XCTAssertTrue(bus.waitForExistence(timeout: timeout))
++        bus.tap()
++        h.element("time.proceed").tap()
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++
++        let tag = h.element("preparation.tag.reading")
++        XCTAssertTrue(tag.waitForExistence(timeout: timeout))
++        tag.tap()
++        let field = h.element("preparation.task")
++        XCTAssertTrue(field.waitForExistence(timeout: timeout))
++        field.tap()
++        field.typeText("보고서 읽기")
++        let confirm = h.app.buttons["preparation.confirm"]
++        XCTAssertTrue(confirm.waitForExistence(timeout: timeout))
++        XCTAssertEqual(confirm.label, "승차권 보기")
++        var attempts = 0
++        while !confirm.isHittable && attempts < 4 { h.app.swipeUp(); attempts += 1 }
++        confirm.tap()
++
++        XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.diagnostic("board.origin"), "서울숲역")
++        XCTAssertFalse(try h.diagnostic("board.destination").isEmpty)
++        XCTAssertEqual(try h.diagnostic("board.stops"), "12개")
++        XCTAssertFalse(try h.diagnostic("board.distance").isEmpty)
++        XCTAssertEqual(try h.diagnostic("board.boarding"), "지금")
++        let date = try h.diagnostic("board.date")
++        XCTAssertNotNil(date.range(of: #"^\d{4}/\d{2}/\d{2}$"#, options: .regularExpression), date)
++        XCTAssertEqual(try h.diagnostic("board.tag"), "독서")
++        XCTAssertEqual(try h.diagnostic("board.task"), "보고서 읽기")
++
++        let route = h.element("board.route")
++        XCTAssertTrue(route.waitForExistence(timeout: timeout))
++        XCTAssertTrue(route.label.contains("2014"), route.label)
++        XCTAssertTrue(route.label.contains("60분"), route.label)
++        let leaking = h.app.staticTexts.allElementsBoundByIndex.filter {
++            $0.identifier != "board.route" && ($0.label.contains("2014") || $0.label.contains("60분"))
++        }
++        XCTAssertEqual(leaking.count, 0, leaking.map(\.label).joined(separator: ","))
++
++        let boardBus = h.app.buttons["board.boardBus"]
++        XCTAssertTrue(boardBus.waitForExistence(timeout: timeout))
++        XCTAssertEqual(boardBus.label, "버스에 탑승하기")
++        boardBus.tap()
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++
++        h.app.navigationBars.buttons.firstMatch.tap()
++        XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
++        h.app.navigationBars.buttons.firstMatch.tap()
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++
++        let journey = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
++        XCTAssertTrue(journey["active"] is NSNull)
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), startBytes)
++    }
++
++    // MARK: - U3 (AC-14, 25, 28)
++
++    private func fillPreparation(_ h: FocusMateUIHarness, task: String, replacing old: String? = nil) {
++        let field = h.element("preparation.task")
++        XCTAssertTrue(field.waitForExistence(timeout: timeout))
++        field.tap()
++        if let old {
++            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count))
++        }
++        field.typeText(task)
++    }
++
++    private func confirmAndBoard(_ h: FocusMateUIHarness) {
++        let confirm = h.app.buttons["preparation.confirm"]
++        XCTAssertTrue(confirm.waitForExistence(timeout: timeout))
++        var attempts = 0
++        while !confirm.isHittable && attempts < 4 { h.app.swipeUp(); attempts += 1 }
++        confirm.tap()
++        let boardBus = h.app.buttons["board.boardBus"]
++        XCTAssertTrue(boardBus.waitForExistence(timeout: timeout))
++        boardBus.tap()
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++    }
++
++    private func recognizeAndWaitHeld(_ h: FocusMateUIHarness) throws {
++        let card = h.element("boarding.card")
++        XCTAssertTrue(card.waitForExistence(timeout: timeout))
++        let area = h.element("boarding.tagArea")
++        card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
++            .press(forDuration: 0.2,
++                   thenDragTo: area.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
++        let deadline = Date().addingTimeInterval(timeout)
++        var phase = ""
++        while Date() < deadline {
++            let raw = try h.diagnostic("test.boarding")
++            let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
++            phase = obj["phase"] as? String ?? ""
++            if phase == "held" { return }
++            Thread.sleep(forTimeInterval: 0.1)
++        }
++        XCTAssertEqual(phase, "held")
++    }
++
++    private func activeTask(_ h: FocusMateUIHarness) throws -> String? {
++        let journey = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
++        return (journey["active"] as? [String: Any])?["task"] as? String
++    }
++
++    // 깨짐: hold 중 뒤로가 전환을 취소하지 않거나, 재인식이 여정을 중복/미교체하거나, 메인 안내가 안 뜬다.
++    func testU3_인식_후_뒤로가면_전환이_취소되고_수정해_재인식하면_교체되며_메인에_안내가_뜬다() throws {
++        let h = FocusMateUIHarness.launch(
++            seed: "ready",
++            extraArguments: ["--fm-ui-boarding-hold", "manual"]
++        )
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        h.app.buttons["open.preparation"].tap()
++        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
++        let wheel = h.app.pickerWheels.firstMatch
++        XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
++        wheel.adjust(toPickerWheelValue: "60분")
++        let bus = h.element("time.candidate.2014")
++        XCTAssertTrue(bus.waitForExistence(timeout: timeout))
++        bus.tap()
++        h.element("time.proceed").tap()
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++        let tag = h.element("preparation.tag.reading")
++        XCTAssertTrue(tag.waitForExistence(timeout: timeout))
++        tag.tap()
++
++        let taskA = "보고서 읽기"
++        let taskB = "논문 읽기"
++        fillPreparation(h, task: taskA)
++        confirmAndBoard(h)
++        try recognizeAndWaitHeld(h)
++        XCTAssertEqual(try activeTask(h), taskA)
++
++        h.app.navigationBars.buttons.firstMatch.tap()
++        XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
++        let release = h.element("test.releaseBoardingHold")
++        if release.waitForExistence(timeout: 1) { release.tap() }
++        XCTAssertFalse(h.element("screen.journey").waitForExistence(timeout: 1))
++        XCTAssertEqual(try activeTask(h), taskA)
++
++        h.app.navigationBars.buttons.firstMatch.tap()
++        XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
++        fillPreparation(h, task: taskB, replacing: taskA)
++        confirmAndBoard(h)
++        try recognizeAndWaitHeld(h)
++
++        let journey = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
++        let active = try XCTUnwrap(journey["active"] as? [String: Any])
++        XCTAssertEqual(active["task"] as? String, taskB)
++
++        for expected in ["screen.board", "screen.preparation", "screen.time", "screen.main"] {
++            h.app.navigationBars.buttons.firstMatch.tap()
++            XCTAssertTrue(h.element(expected).waitForExistence(timeout: timeout), expected)
++        }
++        XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try activeTask(h), taskB)
++    }
++}
+diff --git a/ios/FocusMateUITests/BoardingTagUITests.swift b/ios/FocusMateUITests/BoardingTagUITests.swift
+new file mode 100644
+index 0000000..89ed81b
+--- /dev/null
++++ b/ios/FocusMateUITests/BoardingTagUITests.swift
+@@ -0,0 +1,252 @@
++import Foundation
++import XCTest
++
++// 주의: 이 파일의 testU7은 이 저장소 최초로 XCUIDevice.shared.press(.home)을 쓴다.
++// 시뮬레이터에서 scenePhase가 background로 넘어가는지는 이 테스트 자체가 첫 확인이다.
++@MainActor
++final class BoardingTagUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // MARK: - 도우미
++
++    private func launchBoarding(
++        hold: Bool = false,
++        reduceMotion: Bool = false,
++        save: String? = nil
++    ) -> FocusMateUIHarness {
++        var extra = ["--fm-ui-route", "boarding"]
++        if hold { extra += ["--fm-ui-boarding-hold", "manual"] }
++        if reduceMotion { extra += ["--fm-ui-reduce-motion", "on"] }
++        return FocusMateUIHarness.launch(seed: "ready", save: save, extraArguments: extra)
++    }
++
++    private func boardingDiag(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        let raw = try h.diagnostic("test.boarding")
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++
++    private func activeJourney(_ h: FocusMateUIHarness) throws -> [String: Any]? {
++        let journey = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
++        return journey["active"] as? [String: Any]
++    }
++
++    private func hapticCount(_ h: FocusMateUIHarness) throws -> Int {
++        try XCTUnwrap(Int(try h.diagnostic("test.hapticCount")))
++    }
++
++    private func announcements(_ h: FocusMateUIHarness) throws -> String {
++        try h.diagnostic("test.announcements")
++    }
++
++    private func waitForBoarding(_ h: FocusMateUIHarness) {
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("boarding.card").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("boarding.tagArea").waitForExistence(timeout: timeout))
++    }
++
++    private func dragCardToTagArea(_ h: FocusMateUIHarness) {
++        let card = h.element("boarding.card")
++        let area = h.element("boarding.tagArea")
++        card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
++            .press(forDuration: 0.2,
++                   thenDragTo: area.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
++    }
++
++    private func lcd(_ h: FocusMateUIHarness) throws -> String {
++        try h.diagnostic("boarding.lcdStatus")
++    }
++
++    private func waitForPhase(_ phase: String, _ h: FocusMateUIHarness) throws {
++        let deadline = Date().addingTimeInterval(timeout)
++        while Date() < deadline {
++            if try boardingDiag(h)["phase"] as? String == phase { return }
++            Thread.sleep(forTimeInterval: 0.1)
++        }
++        XCTAssertEqual(try boardingDiag(h)["phase"] as? String, phase)
++    }
++
++    private func releaseHold(_ h: FocusMateUIHarness) {
++        let release = h.element("test.releaseBoardingHold")
++        XCTAssertTrue(release.waitForExistence(timeout: timeout))
++        release.tap()
++    }
++
++    // MARK: - AC-5
++
++    // 깨짐: LCD 상표/시각/상태, 낭독 라벨이 빠지거나 카드 번호·옛 안내 문구가 보인다.
++    func testU4_AC5_승차_태그_화면_초기_요소와_번호_비노출() throws {
++        let h = launchBoarding()
++        waitForBoarding(h)
++
++        let terminal = h.element("boarding.terminal")
++        XCTAssertTrue(terminal.waitForExistence(timeout: timeout))
++        XCTAssertTrue(terminal.label.contains("Focus Mate"), terminal.label)
++        XCTAssertNotNil(terminal.label.range(of: #"\d{2}:\d{2}"#, options: .regularExpression), terminal.label)
++        XCTAssertEqual(try lcd(h), "승차 준비")
++
++        let title = h.element("boarding.title")
++        XCTAssertTrue(title.waitForExistence(timeout: timeout))
++        for part in ["승차 태그", "승차 단계", "카드를 위로 밀어 단말기에 대주세요"] {
++            XCTAssertTrue(title.label.contains(part), title.label)
++        }
++        XCTAssertEqual(h.element("boarding.card").label, "집중동행카드")
++
++        let texts = h.app.staticTexts.allElementsBoundByIndex.map(\.label)
++        XCTAssertEqual(texts.filter { $0.contains("FM-") }.count, 0, texts.joined(separator: ","))
++        XCTAssertFalse(h.app.staticTexts["카드를 여기에"].exists)
++        XCTAssertFalse(h.app.staticTexts["눌러서 태그하기"].exists)
++    }
++
++    // MARK: - U4 태그 구간
++
++    // 깨짐: 끌기 도중 인식(dragChanged) 연결, 햅틱 1회, 즉시 1회 저장, 중복 인식 방지, hold 해제 후 전환이 깨진다.
++    func testU4_끌어서_인식하면_저장되고_재시도에_불변이며_해제하면_안내로_전환된다() throws {
++        let h = launchBoarding(hold: true)
++        waitForBoarding(h)
++        XCTAssertNil(try activeJourney(h))
++        let hapticsBefore = try hapticCount(h)
++        XCTAssertEqual(hapticsBefore, 0)
++
++        dragCardToTagArea(h)
++        try waitForPhase("held", h)
++
++        XCTAssertEqual(try hapticCount(h), 1)
++        XCTAssertEqual(try lcd(h), "집중동행카드")
++        XCTAssertLessThan(try XCTUnwrap(try boardingDiag(h)["offsetY"] as? Double), 0)
++        let active = try XCTUnwrap(try activeJourney(h))
++        XCTAssertEqual(active["phase"] as? String, "awaitingDeparture")
++        let progress = try XCTUnwrap(active["progress"] as? [String: Any])
++        XCTAssertEqual(progress["elapsedSeconds"] as? Int, 0)
++        XCTAssertTrue(h.element("screen.boarding").exists)
++        XCTAssertFalse(h.element("screen.journey").exists)
++
++        let bytes = try h.diagnostic("test.persistedBytes")
++        let id = try XCTUnwrap(active["id"] as? String)
++        let announced = try announcements(h)
++
++        dragCardToTagArea(h)
++        let activate = h.element("test.activateBoardingCard")
++        XCTAssertTrue(activate.waitForExistence(timeout: timeout))
++        activate.tap()
++
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        XCTAssertEqual(try XCTUnwrap(try activeJourney(h))["id"] as? String, id)
++        XCTAssertEqual(try hapticCount(h), 1)
++        XCTAssertEqual(try announcements(h), announced)
++        XCTAssertFalse(h.element("screen.journey").exists)
++
++        releaseHold(h)
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++    }
++
++    // MARK: - U5
++
++    // 깨짐: 짧은 끌기가 인식되거나, 원위치로 돌아가지 않거나, 터치 안내가 안 뜨거나, 숨김 복귀가 전환/저장을 일으킨다.
++    func testU5_짧은_끌기는_미인식이고_터치하면_안내가_뜨며_복귀해도_전환되지_않는다() throws {
++        let h = launchBoarding()
++        waitForBoarding(h)
++
++        let card = h.element("boarding.card")
++        let start = card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
++        start.press(forDuration: 0.2, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 40)))
++
++        XCTAssertEqual(try hapticCount(h), 0)
++        XCTAssertEqual(try lcd(h), "승차 준비")
++        XCTAssertEqual(try boardingDiag(h)["offsetY"] as? Double, 0)
++
++        card.tap()
++        XCTAssertTrue(h.element("boarding.tapHint").waitForExistence(timeout: timeout))
++
++        XCUIDevice.shared.press(.home)
++        h.app.activate()
++
++        XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.journey").waitForExistence(timeout: 1))
++        XCTAssertNil(try activeJourney(h))
++    }
++
++    // MARK: - U6
++
++    // 깨짐: 활성화 경로가 인식/낭독/저장으로 연결되지 않거나 낭독이 중복된다.
++    func testU6_활성화하면_인식되고_낭독이_한_번이며_저장된다() throws {
++        let h = launchBoarding(hold: true)
++        waitForBoarding(h)
++        let activate = h.element("test.activateBoardingCard")
++        XCTAssertTrue(activate.waitForExistence(timeout: timeout))
++        activate.tap()
++
++        try waitForPhase("held", h)
++        XCTAssertEqual(try lcd(h), "집중동행카드")
++        let spoken = try announcements(h)
++        let count = spoken.components(separatedBy: "집중동행카드 인식됨, 승차했습니다").count - 1
++        XCTAssertEqual(count, 1, spoken)
++        XCTAssertNotNil(try activeJourney(h))
++    }
++
++    // MARK: - U7
++
++    // 깨짐: 앱이 숨겨진 동안 대기 중인 전환이 취소되지 않아 해제 후 안내 화면으로 넘어가 버린다.
++    func testU7_인식_후_홈으로_나가면_전환이_취소되고_해제해도_넘어가지_않는다() throws {
++        let h = launchBoarding(hold: true)
++        waitForBoarding(h)
++        dragCardToTagArea(h)
++        try waitForPhase("held", h)
++        let id = try XCTUnwrap(try activeJourney(h)?["id"] as? String)
++
++        XCUIDevice.shared.press(.home)
++        h.app.activate()
++
++        try waitForPhase("ready", h)
++        XCTAssertEqual(try lcd(h), "승차 준비")
++
++        releaseHold(h)
++        XCTAssertFalse(h.element("screen.journey").waitForExistence(timeout: 1))
++        XCTAssertTrue(h.element("screen.boarding").exists)
++        XCTAssertEqual(try XCTUnwrap(try activeJourney(h))["id"] as? String, id)
++    }
++
++    // MARK: - U8
++
++    // 깨짐: 저장 실패가 오류로 안 보이거나, 실패했는데 인식·여정이 생기거나, 재시도가 성공 전환으로 이어지지 않는다.
++    func testU8_저장_실패는_오류를_보이고_다시_끌면_성공해_전환된다() throws {
++        let h = launchBoarding(save: "fail-once-boarding")
++        waitForBoarding(h)
++        let bytes = try h.diagnostic("test.persistedBytes")
++
++        dragCardToTagArea(h)
++
++        XCTAssertTrue(h.element("boarding.saveFailure").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try lcd(h), "승차 준비")
++        XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
++        XCTAssertNil(try activeJourney(h))
++
++        dragCardToTagArea(h)
++
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++        XCTAssertNotNil(try activeJourney(h))
++    }
++
++    // MARK: - U9
++
++    // 깨짐: 동작 줄이기에서 햅틱이 울리거나, 유지 시간이 보존되지 않아 해제 전에 전환되거나, 해제 후 전환이 안 된다.
++    func testU9_동작_줄이기에서도_인식은_햅틱_없이_되고_해제하면_전환된다() throws {
++        let h = launchBoarding(hold: true, reduceMotion: true)
++        waitForBoarding(h)
++
++        dragCardToTagArea(h)
++        try waitForPhase("held", h)
++
++        XCTAssertEqual(try hapticCount(h), 0)
++        XCTAssertEqual(try lcd(h), "집중동행카드")
++        XCTAssertFalse(h.element("screen.journey").exists)
++
++        releaseHold(h)
++        XCTAssertTrue(h.element("screen.journey").waitForExistence(timeout: timeout))
++    }
++}

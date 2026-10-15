@@ -1,6 +1,6 @@
 import Foundation
 
-enum PreparationTagIcon: String, CaseIterable, Equatable {
+enum PreparationTagIcon: String, CaseIterable, Equatable, Codable {
     case reading, work, study, development, writing
     var title: String {
         switch self {
@@ -21,7 +21,7 @@ enum PreparationTagIcon: String, CaseIterable, Equatable {
         }
     }
 }
-enum PreparationTagColor: String, CaseIterable, Equatable {
+enum PreparationTagColor: String, CaseIterable, Equatable, Codable {
     case sand, blue, purple, green, pink
     var title: String {
         switch self {
@@ -60,7 +60,7 @@ enum TagNameIssue: Error, Equatable {
         }
     }
 }
-enum JourneySound: String, CaseIterable, Equatable {
+enum JourneySound: String, CaseIterable, Equatable, Codable {
     case bus, rainBus, subway, forest, none
     var title: String {
         switch self {

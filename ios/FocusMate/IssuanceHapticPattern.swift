@@ -32,6 +32,14 @@ struct IssuanceHapticPattern: Equatable {
         taps: [Tap(time: CardIssuanceTiming.hapticDuration, intensity: 1.0, sharpness: 0.9)]
     )
 
+    /// 승차 접촉: 짧고 약한 연속 진동 뒤 또렷한 탭 한 번("딸깍").
+    static let boardingContact = IssuanceHapticPattern(
+        continuousDuration: 0.12,
+        continuousSharpness: 0.4,
+        intensityCurve: [CurvePoint(time: 0, intensity: 0.35), CurvePoint(time: 0.12, intensity: 0.5)],
+        taps: [Tap(time: 0.12, intensity: 0.9, sharpness: 0.8)]
+    )
+
     func makeCHHapticPattern() throws -> CHHapticPattern {
         let continuous = CHHapticEvent(
             eventType: .hapticContinuous,

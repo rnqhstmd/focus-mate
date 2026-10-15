@@ -42,6 +42,9 @@ extension AppModel {
 extension Destination {
     static var mainMenu: [Destination] { [.preparation, .records, .settings, .profile] }
 
-    /// 메인 "여행 준비"는 시간 선택을 거쳐 준비로 간다.
+    /// 메인 "여행 시작하기"는 시간 선택을 거쳐 준비로 간다.
     var mainMenuTarget: Destination { self == .preparation ? .time : self }
+
+    /// 메인 버튼 글자. 준비 목적지의 화면 제목("여행 준비")과 따로 둔다.
+    var mainMenuTitle: String { self == .preparation ? "여행 시작하기" : title }
 }

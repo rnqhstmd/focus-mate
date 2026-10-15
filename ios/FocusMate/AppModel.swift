@@ -3,10 +3,13 @@ import Observation
 
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
-    case preparation, records, settings, profile, time
+    case preparation, records, settings, profile, time, board, boarding, journey
     var title: String {
         switch self {
         case .time: "시간 선택"
+        case .board: "승차권"
+        case .boarding: "승차 태그"
+        case .journey: "여행"
         case .preparation: "여행 준비"
         case .records: "기록"
         case .settings: "설정"
@@ -42,6 +45,12 @@ final class AppModel {
         storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
     }
     var canConfirmPreparation: Bool { currentPreparationDetails != nil }
+    /// 승차권 보기로 확정한 준비 값. 승차 저장은 이 값을 쓴다(인식 뒤 초안이 바뀌어도 확정 당시 값).
+    var boardingDetails: PreparedJourneyDetails? { storedConfirmedPreparation }
+    func discardConfirmedPreparation() {
+        storedConfirmedPreparation = nil
+        storedPreparationRequest = nil
+    }
     @discardableResult func confirmPreparation() -> Bool {
         guard let details = currentPreparationDetails else {
             storedConfirmedPreparation = nil
@@ -75,13 +84,15 @@ final class AppModel {
     var isCleanupConfirmationPresented: Bool { cleanupSource != nil }
     private let store: LocalSnapshotStore
     private let cardFactory: CardSnapshotFactory
+    let journeyFactory: ActiveJourneyFactory
     let soundPreview: SoundPreviewController
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var hasAttemptedSupplement = false
     init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
-         soundPreview: SoundPreviewController? = nil) {
+         soundPreview: SoundPreviewController? = nil, journeyFactory: ActiveJourneyFactory = .init()) {
         self.store = store
         self.cardFactory = cardFactory
+        self.journeyFactory = journeyFactory
         self.soundPreview = soundPreview ?? SoundPreviewController(sound: .bus,
             makePlayer: { try await AVSoundPreviewPlayer.make(sound: $0) })
     }
@@ -249,6 +260,9 @@ final class AppModel {
 
     func open(_ destination: Destination) {
         guard launchState == .ready(.main) else { return }
+        // 승차권·승차 태그는 확정된 준비가 있을 때만 열린다(어떤 경로로도 미완성 준비로 들어가지 않는다).
+        if destination == .board || destination == .boarding, confirmedPreparation == nil { return }
+        if destination == .journey, activeJourney == nil { return }
         path.append(destination)
     }
     func goBack() {

@@ -6,7 +6,7 @@
 | W01 | [P2] 카드 발급·접촉 카드 | card | card FR-3 | W00 | feat/card-issuance-contact-card | 완료 |
 | W02 | [P2] 첫 출발지·시간·버스·도착지 선택 | journey | journey FR-7, FR-8 | W00 | feat/first-station-time-bus-destination | 완료 |
 | W03 | [P2] 준비 허브·태그·소리 | journey | journey FR-9, FR-10 | W02 | codex/feat-preparation-tags-sound | 완료 |
-| W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | - | 대기 |
+| W04 | [P2] 승차권·승차 태그 | journey | journey FR-11 | W01, W03 | feat/boarding-pass-tag | 완료 |
 | W05 | [P3] 실제 분 타이머·일시정지 | journey | journey FR-5 | W04 | - | 대기 |
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | - | 대기 |
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | - | 대기 |
@@ -36,6 +36,15 @@
 - 같은 묶음이라도 W03·W04는 아래 Phase 0 확인이 끝나야 착수한다.
 - 묶음 2의 W08·W13은 W00이 만든 저장 섹션만 고치고 저장 파일 구조를 다시 바꾸지 않는다.
 
+묶음 5~6 진행 순서(2026-10-15 결정):
+- W04 → W05는 순차다. W05와 병렬로 돌릴 수 있는 작업은 없다(W06·W07·W09 모두 W05 선행).
+- W05 완료 후 **W07 + W06을 병렬**로 먼저 진행하고, **W09는 W07 머지 뒤** 시작한다.
+  - W07 우선: W04의 임시 동작(메인 '여행 시작하기'가 진행 여정을 확인 없이 폐기)을 이어가기·포기로 바꾼다. 사용자가 여정을 잃을 수 있는 유일한 지점이다. 생명주기 안전(NFR-2 Simulator)도 여기서 다룬다.
+  - W06 병렬: 여행 화면 위 지도 중심의 화면 작업이라 저장·진행 여정 로직과 겹침이 적다.
+  - W09 후순위: W07과 진행 여정 제거·현재 정류장 변경·메인 진입을 함께 고쳐 동시 진행 시 충돌 위험이 크다. W07이 정한 여정 정리 방식 위에 하차를 얹는다.
+- 출시는 W05·W07까지 끝낸 뒤 묶어서 한다(W04 단독이면 '시작' 이후 여정을 끝낼 수단이 없다).
+- 병렬 세션은 작업마다 워크트리·시뮬레이터·빌드 폴더를 따로 쓰고, 한 세션 안에서 빌드를 겹치지 않는다(디스크 부족 전력).
+
 착수 조건:
 - W03은 Phase 0의 **태그 선택 중간 화면** 확인, W04는 **최신 승차 단말기** 확인이 끝나야 착수한다([Phase 0 남은 확인](../docs/PHASE-0-BASELINE.md#남은-확인)).
 - W14는 서명·배포 정보와 실기기가 준비돼야 착수한다.
@@ -50,6 +59,11 @@
 - W12(폐기, 2026-10-13): 앱 내 동작 줄이기 토글 없이 시스템 설정만 따르기로 하면서 사용자에게 보이는 기능이 남지 않았다. 시스템 값은 SwiftUI `accessibilityReduceMotion`으로 바로 읽고, 접근성은 각 작업이 새 화면에 적용한다.
 
 완료 인계:
+- W04(승차권·승차 태그·출발 안내, feat/boarding-pass-tag): 준비 확정 → 승차권 → 승차 태그(30% 겹침 놓기 전 인식, 0.3초 뒤 진행 여정 1회 저장, 1.4초+0.45초 뒤 여행) → 출발 안내('시작' = 출발 확인 저장) → 임시 '여행' 화면. 메인 진행 여정 안내와 '여행 시작하기' 자동 폐기(임시 동작). 기준선에서 W10 사진 UI 9건 실패(픽스처가 저장소에 없음)를 함께 고쳤다. 상세는 [W04 리뷰 유예](feat-boarding-pass-tag/reports/review-deferred.md).
+  - W05: 진행 여정(`JourneySnapshot`, 버전 3 `journey.active`)에 새 필수 필드를 추가하면 currentVersion을 4로 올린다(W04 앱은 모르는 키를 버리고 다시 쓴다). 착수 전 처리할 것: ① 손상·검증 실패 active는 읽을 때 버려지고 다음 저장에서 사본 없이 사라짐 → 원본 `.backup` 보관 또는 안내 결정, ② 승차 성공 뒤에도 확정값이 남아 재승차가 진행 여정을 덮을 수 있음 → 진도가 생기기 전 정책 결정, ③ minutes·elapsedSeconds 상한과 카탈로그에 없는 정류장·버스 id 처리. 여행 임시 화면(`JourneyView` 시작 후 `journey.placeholder`)과 `DepartureBriefingController`의 '시작' 이후 자리에 실제 타이머를 넣는다.
+  - W07: 메인 '여행 시작하기' 자동 폐기(`AppModel.startTripFromMain`)와 진행 여정 안내(`main.activeJourney`)를 이어가기·포기로 바꾼다. 카드 교체 기능이 생기면 `activeJourney.cardID == currentCard.id` 불변식 처리(폐기/갱신)를 함께 정한다.
+  - W09: 승차 태그(`BoardingTagController`·`BoardingRules`·`BoardingTagView`)를 하차에 재사용할 수 있다. 하차 LCD는 카드 이름(FLOWS 2차).
+  - W14: 실제 VoiceOver 포커스('시작' 버튼)·카드 활성화(VoiceOver/Full Keyboard Access)·승차 햅틱 체감, 제스처 시스템 취소 후 재태그, Release 산출물에 `fm-ui` 문자열 부재를 실기기에서 확인. Phase 0 '최신 승차 단말기' 브라우저 확인은 사용자 결정으로 보류.
 - W10(구현·리뷰·제한 범위 검증 완료, [#15](https://github.com/rnqhstmd/focus-mate/pull/15)): 카드 외형·사진 편집, 단일 버전 3 저장과 버전 1·2 호환, 실패/취소 보존, W11 마이페이지 실제 편집 연결·공통 외형 표시를 구현했다. 최종 단위547건·Release 빌드·웹31건과 edge QA 통과, 제품 인수 ACCEPT. 전체 UI115건 중108건은 사용자 요청으로 중단하여 미완료다. [W10 최종 검증](codex-feat-card-customization/reports/final-verification.md)에 실행 범위를 구분했다.
   - W04: PassFace(style: model.currentCardStyle)에서 저장 외형을 읽는다. 카드 도메인은 접촉 성공·여행 완료를 결정하지 않으며 LCD에는 기존 이름·체크 정책을 유지한다.
   - W14: 실제 iPhone의 PhotosPicker·앱 생명주기·큰 글자·VoiceOver 조작·햅틱 및 출시 QA가 남아 있다. VO width swipe 추가 경로와 가져오기 안내의 지속 시각 초점도 미확정이다.

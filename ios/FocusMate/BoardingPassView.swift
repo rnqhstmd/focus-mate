@@ -1,0 +1,98 @@
+import SwiftUI
+
+/// 승차권(시안 TUNX2). 지도 배경 위 티켓 카드와 하단 '버스에 탑승하기'. 버스 번호·여행 시간은 낭독 라벨에만 있다.
+@MainActor
+struct BoardingPassView: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        ZStack {
+            Image("BoardMap").resizable().scaledToFill().ignoresSafeArea()
+                .overlay(Color.black.opacity(0.35).ignoresSafeArea())
+                .accessibilityHidden(true)
+            if let details = model.confirmedPreparation {
+                let content = BoardingPassContent(details: details, now: .now, timeZone: .current)
+                ScrollView {
+                    VStack { Spacer(minLength: 0); ticket(content) }
+                        .padding(.horizontal, 24).padding(.vertical, 24)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .safeAreaInset(edge: .bottom) { boardButton }
+            } else {
+                Text("준비를 다시 확인해주세요").font(.headline).padding(24)
+                    .accessibilityIdentifier("board.unavailable")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("screen.board")
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func ticket(_ content: BoardingPassContent) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            // 버스 번호·여행 시간은 화면 글자가 아니라 낭독 요소로만 둔다.
+            Color.clear.frame(width: 1, height: 1).accessibilityElement()
+                .accessibilityLabel(content.routeAccessibilityLabel).accessibilityIdentifier("board.route")
+            row(("출발", content.originName, "board.origin"), ("도착", content.destinationName, "board.destination"),
+                valueFont: .system(size: content.stationFontSize, weight: .bold), lineLimit: 2)
+            row(("정류장", content.stopsText, "board.stops"), ("거리", content.distanceText, "board.distance"),
+                valueFont: .title3.monospacedDigit().weight(.semibold))
+            row(("탑승", content.boardingText, "board.boarding"), ("날짜", content.dateText, "board.date"),
+                valueFont: .title3.monospacedDigit().weight(.semibold))
+            row(("태그", content.tagName, "board.tag"), ("할 일", content.task, "board.task"),
+                valueFont: .title3.weight(.semibold), lineLimit: 3)
+                .padding(.top, 18)
+        }
+        .padding(24)
+        .background {
+            ZStack {
+                Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255)
+                Image("TicketDots").resizable().scaledToFit().opacity(0.28).padding(36)
+            }
+            .clipShape(TicketShape(), style: FillStyle(eoFill: true))
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func row(_ left: (String, String, String), _ right: (String, String, String),
+                     valueFont: Font, lineLimit: Int = 1) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            cell(left, valueFont: valueFont, lineLimit: lineLimit, alignment: .leading)
+            cell(right, valueFont: valueFont, lineLimit: lineLimit, alignment: .trailing)
+        }
+    }
+
+    private func cell(_ item: (label: String, value: String, id: String), valueFont: Font, lineLimit: Int,
+                      alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 6) {
+            Text(item.label).font(.footnote).foregroundStyle(.secondary)
+            Text(item.value).font(valueFont).lineLimit(lineLimit).minimumScaleFactor(0.7)
+                .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
+                .accessibilityValue(item.value).accessibilityIdentifier(item.id)
+        }
+        .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .trailing)
+    }
+
+    private var boardButton: some View {
+        Button { model.openBoarding() } label: {
+            Text("버스에 탑승하기 →").font(.headline).foregroundStyle(.black)
+                .frame(maxWidth: .infinity, minHeight: 44).padding(.vertical, 12)
+                .background(.white, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityLabel("버스에 탑승하기").accessibilityIdentifier("board.boardBus")
+        .padding(.horizontal, 24).padding(.bottom, 12)
+    }
+}
+
+/// 절취선 없이 양옆 노치만 남긴 티켓 모양.
+private struct TicketShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let radius: CGFloat = 24, notch: CGFloat = 12, notchY = rect.height * 0.62
+        var path = Path(roundedRect: rect, cornerRadius: radius)
+        path.addEllipse(in: CGRect(x: rect.minX - notch, y: notchY - notch, width: notch * 2, height: notch * 2))
+        path.addEllipse(in: CGRect(x: rect.maxX - notch, y: notchY - notch, width: notch * 2, height: notch * 2))
+        return path
+    }
+}

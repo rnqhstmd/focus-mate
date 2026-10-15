@@ -23,13 +23,24 @@ struct LegacyCardV2DTO: Decodable {
     }
 }
 
+/// v2 시절 진행 여정은 정의되지 않아 null만 있을 수 있다. 객체가 들어 있으면 손상으로 본다.
+struct LegacyJourneySectionV2: Decodable {
+    private enum CodingKeys: String, CodingKey { case active }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        guard c.contains(.active), try c.decodeNil(forKey: .active) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: c.codingPath, debugDescription: "v2 journey.active must be null"))
+        }
+    }
+}
+
 struct LegacySnapshotV2: Decodable {
     struct Cards: Decodable { let items: [LegacyCardV2DTO] }
     let cardIssued: Bool
     let initialStation: StationSnapshot?
     let currentStation: StationSnapshot?
     let cards: Cards
-    let journey: JourneySection
+    let journey: LegacyJourneySectionV2
     let records: RecordSection
 }
 
@@ -56,9 +67,17 @@ enum SnapshotCodec {
             }
         } catch let issue as StorageIssue { throw issue }
         catch { throw StorageIssue.corrupt }
-        do { try state.validate() }
+        let readable = dropInvalidActiveJourney(state)
+        do { try readable.validate() }
         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
-        return state.updating(records: state.records.sortedNewestFirst())
+        return readable.updating(records: readable.records.sortedNewestFirst())
+    }
+
+    /// 읽기 전용 완화: 검증을 통과하지 못하는 진행 여정만 버린다. 쓰기(`LocalSnapshotStore.save`)는 그대로 엄격하다.
+    private static func dropInvalidActiveJourney(_ state: AppSnapshot) -> AppSnapshot {
+        guard let active = state.journey.active else { return state }
+        let valid = state.currentStation != nil && (try? active.validate(currentCardID: state.currentCard?.id)) != nil
+        return valid ? state : state.updating(journey: .empty)
     }
 
     static func encode(_ snapshot: AppSnapshot) throws -> Data {
@@ -72,7 +91,7 @@ enum SnapshotCodec {
                                         initialStation: legacy.initialStation,
                                         currentStation: legacy.currentStation)
             .updating(cards: CardSection(items: legacy.cards.items.map { CardSnapshot(id: $0.id, issuedAt: $0.issuedAt) }))
-            .updating(journey: legacy.journey)
+            .updating(journey: .empty)
             .updating(records: legacy.records)
     }
 

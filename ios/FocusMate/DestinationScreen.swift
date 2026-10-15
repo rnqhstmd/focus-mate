@@ -6,11 +6,18 @@ struct DestinationScreen: View {
     let destination: Destination
     @Bindable var model: AppModel
     let onCardCustomization: () -> Void
+    let services: JourneyServices
 
     var body: some View {
         // 마이페이지는 시안대로 자체 여백·좌측 제목을 쓰므로 공통 자리표시 체인 밖에서 그린다.
         if destination == .profile {
             ProfileView(model: model, onCustomize: onCardCustomization)
+        } else if destination == .board {
+            BoardingPassView(model: model)
+        } else if destination == .boarding {
+            BoardingTagView(model: model, services: services)
+        } else if destination == .journey {
+            JourneyView(model: model, services: services)
         } else {
             placeholderOrTime
         }

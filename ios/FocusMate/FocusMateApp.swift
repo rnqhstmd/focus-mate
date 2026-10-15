@@ -9,6 +9,8 @@ struct FocusMateApp: App {
     private let testBootstrap: UITestBootstrap?
     private let testRecorder: UITestFeedbackRecorder?
     private let testGate: UITestIssuanceGate?
+    private let testServices: JourneyServices?
+    private let testHoldGate: UITestHoldGate?
     @State private var testSetupError: String?
     #endif
 
@@ -29,12 +31,17 @@ struct FocusMateApp: App {
                 let gate = bootstrap.makeGate()
                 testRecorder = recorder
                 testGate = gate
+                let made = bootstrap.makeJourneyServices(recorder: recorder)
+                testServices = made.0
+                testHoldGate = made.1
                 _issuance = State(initialValue: gate.map {
                     CardIssuanceController(issuer: model, haptics: recorder, announcer: recorder, sleep: $0.wait)
                 } ?? CardIssuanceController(issuer: model, haptics: recorder, announcer: recorder))
             } else {
                 testRecorder = nil
                 testGate = nil
+                testServices = nil
+                testHoldGate = nil
                 _issuance = State(initialValue: Self.makeIssuance(for: model))
             }
             #else
@@ -53,6 +60,8 @@ struct FocusMateApp: App {
             testBootstrap = nil
             testRecorder = nil
             testGate = nil
+            testServices = nil
+            testHoldGate = nil
             if ProcessInfo.processInfo.arguments.contains("--fm-ui-test-id") {
                 _testSetupError = State(initialValue: String(describing: error))
             }
@@ -63,13 +72,18 @@ struct FocusMateApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            RootView(model: model, issuance: issuance, testBootstrap: testBootstrap, testRecorder: testRecorder,
-                     testGate: testGate, testSetupError: testSetupError).task { start() }
+            RootView(model: model, issuance: issuance, services: journeyServices, testBootstrap: testBootstrap, testRecorder: testRecorder,
+                     testGate: testGate, testHoldGate: testHoldGate, testSetupError: testSetupError).task { start() }
             #else
             RootView(model: model, issuance: issuance).task { start() }
             #endif
         }
     }
+
+    #if DEBUG
+    /// UI 테스트면 진동·낭독을 기록기로 바꿔 진단에 노출한다.
+    private var journeyServices: JourneyServices { testServices ?? .live() }
+    #endif
 
     private static func makeIssuance(for model: AppModel) -> CardIssuanceController {
         CardIssuanceController(issuer: model, haptics: CoreHapticsIssuancePlayer(), announcer: SystemAccessibilityAnnouncer())
@@ -85,8 +99,10 @@ struct FocusMateApp: App {
         #endif
         model.start()
         #if DEBUG
-        do { try testBootstrap?.applySaveScenario(to: model) }
-        catch { testSetupError = String(describing: error) }
+        do {
+            try testBootstrap?.applySaveScenario(to: model)
+            try testBootstrap?.applyRoute(to: model)
+        } catch { testSetupError = String(describing: error) }
         #endif
     }
 }

@@ -1,0 +1,586 @@
+diff --git a/docs/CURRENT-STATE.md b/docs/CURRENT-STATE.md
+index 56b7748..3d8fc46 100644
+--- a/docs/CURRENT-STATE.md
++++ b/docs/CURRENT-STATE.md
+@@ -65,3 +65,7 @@
+ 사진은 입력 장당 8MiB 이하를 처리하여 보존 장당 1MiB·전체 6MiB 이하로 줄이고 외형과 함께 버전 3 app-state.json에 저장한다. 버전 1·2는 기존 데이터를 보존하며 기본 외형으로 읽는다. W13의 명시적 백업 검증·정리도 같은 저장 파일을 다룬다. 외부 내보내기·공유·클라우드는 제공하지 않는다. 실제 PhotosPicker·배치·사용자 색 편집과 저장/동일 UUID 재실행, 소유 Photos 원본 2장 삭제 후 사진 ID·이미지 hash·치수·배치·색 보존을 확인했다. 전체 파일 bytes 비교는 삭제 후 두 cold launch 사이만 확인했다.
+ 
+ 최종 단위 547건과 Release 빌드, 웹 31건·edge QA·빌드를 통과했고 Debug 빌드 근거도 확보했다. 리뷰 수용 기준35/35, 차단 결함0건, 비차단4건 유예, 제품 인수 ACCEPT다. 안내 수정 전 통합 focused UI6건·중단 실행의 완료 UI7건은 별도 근거다. 전체 UI115건 중 나머지108건은 사용자 요청으로 중단하여 미완료이며 전체 회귀 통과로 해석하지 않는다. 실제 VoiceOver 선택·상태·현재값 및 X/Y 조작은 확인했으나 width swipe 추가 경로와 가져오기 안내의 지속 시각 초점은 미확정이다. 실제 iPhone·햅틱 체감·출시 접근성 QA는 W14 대기다. 실행 시점과 범위는 [W10 최종 검증](../.dev/codex-feat-card-customization/reports/final-verification.md)·[제품 인수](../.dev/codex-feat-card-customization/reports/acceptance.md)를 참조한다.
++
++## iOS 승차권·승차 태그 — 2026-10-15 (W04)
++
++준비를 마치면 '승차권 보기'로 승차권(지도 배경 티켓: 출발/도착·정류장 수/거리·탑승 지금/날짜·태그/할 일)을 보고 '버스에 탑승하기'로 승차 태그 화면에 간다. 카드를 끌어 태그 영역에 30% 이상 겹치면 놓기 전에 진동·LCD(카드 이름+체크)로 인식하고, 0.3초 뒤 진행 여정을 1회 저장한 다음 1.4초 유지·0.45초 페이드 후 여행 화면의 출발 안내(세 문장 → '시작')로 간다. '시작'은 출발 확인만 저장하며 실제 분 타이머·지도는 W05·W06이다. 인식 뒤 이탈·백그라운드는 전환만 취소하고 저장은 남긴다. iOS 승차 화면은 왼쪽 위 뒤로가기를 유지한다(웹 프로토타입과 다름). 진행 여정이 있으면 메인에 안내가 뜨고, 메인 '여행 시작하기'는 진행 여정을 기록 없이 정리한 뒤 새 여행을 시작한다(W07 전 임시 동작). 진행 여정만 손상되면 그 여정만 버리고 카드·기록은 유지한다. 상세 계약은 [FLOWS iOS 승차](FLOWS.md#ios-승차권승차-태그--2026-10-15-w04). Phase 0 '최신 승차 단말기' 브라우저 확인은 사용자 결정으로 보류(미검증)했고, 실제 VoiceOver 포커스·키보드 활성화·햅틱 체감은 W14 실기기 확인 대기다. 검증 수치는 [W04 최종 검증](../.dev/feat-boarding-pass-tag/reports/final-verification.md)을 본다.
+diff --git a/docs/FLOWS.md b/docs/FLOWS.md
+index a523d05..bbc73d7 100644
+--- a/docs/FLOWS.md
++++ b/docs/FLOWS.md
+@@ -59,6 +59,8 @@ LCD 상단은 Focus Mate와 실제 로컬 HH:mm이고 버스 번호를 표시하
+ 
+ ## 출발 안내 — 2026-10-13
+ 
++> iOS(W04)는 이 절이 아니라 위 [2차](#태그안내승차권준비-허브--2026-10-13-2차)의 출발 안내(세 문장 약 1.7초씩, 마지막 문장과 **시작** 버튼, 노선 정보 없음)를 따른다. 최신 시안 DO8HO와 일치하기 때문이다. 이 절의 '노선 + 0.7초 간격 + 확인' 계약 정리는 별도 문서 작업으로 남긴다.
++
+ 승차 인식 뒤 여행 화면으로 바뀌면 지도와 버스 위에 출발 안내 패널을 띄운다. 노선(버스 번호 · 출발 → 도착)과 ‘문을 닫습니다 · 자리에 앉아주세요 · 버스 출발합니다’ 세 줄을 0.7초 간격으로 보여주고, **확인**을 눌러야 버스가 움직이고 남은 시간이 줄어든다. 안내 중에는 하단 남은 시간·정류장·거리, 지도 도구, 일시정지·정류장 목록을 숨기고 일시정지할 수 없다. 포커스는 확인 버튼에 두고 확인 뒤 일시정지 버튼으로 옮긴다. 동작 줄이기에서는 세 줄을 한 번에 보여준다.
+ 
+ 진행 여정은 승차 인식 접촉에서 이미 저장되므로 안내 중 앱을 벗어나도 저장은 남는다. 메인에서 이어가기로 돌아오면 안내 없이 바로 여행 화면으로 간다. 장면이 바뀌면 안내를 닫는다.
+@@ -76,3 +78,13 @@ iOS에서는 지도 테마 시트·버스 따라가기를 직접 구현한다. A
+ 브라우저 localStorage에 카드·꾸미기·위치·기록·메모·진행 여정을 저장합니다. 저장 차단은 세션 사용을 허용하지만 재실행 복원을 보장하지 않음을 안내합니다. 손상/다른 버전 데이터는 안내하고 명시적 정리 전까지 보존합니다. 앱 밖 시간은 진도에 추가하지 않습니다. 동작 줄이기에서는 경로 미리보기·카메라 회전·카드 공간 이동을 줄입니다. 닫기·확인·장면 전환은 숨긴 컨트롤에 포커스를 남기지 않습니다.
+ 
+ 검증 시점과 한계는 [현재 상태](CURRENT-STATE.md), 변경 근거는 [승차 단말기 보고서](../reports/boarding-reader-refinement-2026-10-12.md)를 봅니다.
++
++## iOS 승차권·승차 태그 — 2026-10-15 (W04)
++
++- 준비 허브 '승차권 보기'는 준비(여정·태그·공백 아닌 할 일)가 완성됐을 때만 승차권을 연다. 승차권 단계는 아무것도 저장하지 않는다. 버스 번호·여행 시간은 화면 글자가 아니라 낭독 라벨에만 있다.
++- 승차 태그는 끌어서 태그 영역과 30% 이상 겹치는 순간(놓기 전) 인식한다. 터치만 하면 카드가 살짝 튀고 '카드를 위로 밀어 단말기에 대주세요'를 보여 준다. VoiceOver·키보드 활성화는 카드를 태그 영역 아래 가장자리에 걸쳐 바로 인식한다.
++- 인식 0.3초 뒤 진행 여정을 1회 저장한다(승차권 보기로 확정한 준비 값). 인식 뒤에도 왼쪽 위 뒤로가기는 남고, 이탈·백그라운드는 늦은 화면 전환만 취소하며 저장은 유지한다. 백그라운드에서 돌아오면 다시 태그할 수 있다(새 인식은 진행 여정을 교체, 최대 1건). 저장 실패면 전환하지 않고 같은 화면에서 다시 태그한다.
++- 1400ms 유지·450ms 페이드 뒤 여행 화면으로 바뀌며 경로에는 여행만 남는다. 출발 안내 중에는 뒤로가기가 없고, '시작'을 누르면 출발 확인을 저장하고 W05 전까지의 임시 '여행' 화면을 보여 준다(뒤로가기 → 메인).
++- 진행 여정이 있으면 메인에 '진행 중인 여정이 있어요' 안내가 뜬다(재실행·이탈 복귀 모두). 메인 '여행 시작하기'를 누르면 진행 여정을 완료 기록 없이 정리하고 시간 선택으로 간다(정리 저장 실패면 이동하지 않음). W07 이어가기·포기 전까지의 임시 동작이다.
++- 저장 형식: `app-state.json` 버전 3의 `journey.active`는 null 또는 진행 여정 1건이다(선택 입력·태그 정의·소리·승차 시각·phase·진도만, 정류장 이름·거리는 저장하지 않음). 진행 여정만 손상되면 그 여정만 버리고 카드·기록은 그대로 읽는다. 쓰기는 구조 검증을 통과한 값만 받는다.
++- 동작 줄이기는 진입 연출·점선 깜빡임·접촉 이동·페이드·진동을 생략하고 1400ms 유지와 상태 안내는 남긴다. 출발 안내는 세 문장을 한꺼번에 보여 준다.
+diff --git a/ios/FocusMate/AppModel+Boarding.swift b/ios/FocusMate/AppModel+Boarding.swift
+index a5a8a86..9ce5d08 100644
+--- a/ios/FocusMate/AppModel+Boarding.swift
++++ b/ios/FocusMate/AppModel+Boarding.swift
+@@ -24,7 +24,7 @@ extension AppModel {
+     /// 접촉 인식 순간 진행 여정을 저장한다. 실패하면 snapshot은 그대로이고 `saveFailure`가 남는다.
+     func boardJourney() -> Bool {
+         guard launchState == .ready(.main), let snapshot, let card = snapshot.currentCard,
+-              let details = confirmedPreparation else { return false }
++              let details = boardingDetails else { return false }
+         let journey = journeyFactory.make(details: details, cardID: card.id)
+         return save(snapshot.updating(journey: JourneySection(active: journey)))
+     }
+@@ -50,6 +50,8 @@ extension AppModel {
+         if let snapshot, snapshot.journey.active != nil {
+             guard save(snapshot.updating(journey: .empty)) else { return false }
+         }
++        // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.
++        discardConfirmedPreparation()
+         open(Destination.preparation.mainMenuTarget)
+         return true
+     }
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index 7df6ac6..b87fd57 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -45,6 +45,12 @@ final class AppModel {
+         storedPreparationRequest == currentPreparationDetails ? storedPreparationRequest : nil
+     }
+     var canConfirmPreparation: Bool { currentPreparationDetails != nil }
++    /// 승차권 보기로 확정한 준비 값. 승차 저장은 이 값을 쓴다(인식 뒤 초안이 바뀌어도 확정 당시 값).
++    var boardingDetails: PreparedJourneyDetails? { storedConfirmedPreparation }
++    func discardConfirmedPreparation() {
++        storedConfirmedPreparation = nil
++        storedPreparationRequest = nil
++    }
+     @discardableResult func confirmPreparation() -> Bool {
+         guard let details = currentPreparationDetails else {
+             storedConfirmedPreparation = nil
+@@ -256,6 +262,7 @@ final class AppModel {
+         guard launchState == .ready(.main) else { return }
+         // 승차권·승차 태그는 확정된 준비가 있을 때만 열린다(어떤 경로로도 미완성 준비로 들어가지 않는다).
+         if destination == .board || destination == .boarding, confirmedPreparation == nil { return }
++        if destination == .journey, activeJourney == nil { return }
+         path.append(destination)
+     }
+     func goBack() {
+diff --git a/ios/FocusMate/BoardingTagController.swift b/ios/FocusMate/BoardingTagController.swift
+index e5267d9..5b2e4b5 100644
+--- a/ios/FocusMate/BoardingTagController.swift
++++ b/ios/FocusMate/BoardingTagController.swift
+@@ -47,6 +47,8 @@ final class BoardingTagController {
+     @ObservationIgnored private var resetWhenSettled = false
+     /// 이번 손가락 동작이 터치 한계를 넘어 끌기가 된 적이 있는지.
+     @ObservationIgnored private var hasDragged = false
++    /// 저장 실패 뒤에는 손을 뗄 때까지 같은 동작으로 다시 인식하지 않는다(실패 안내 반복 방지).
++    @ObservationIgnored private var awaitingRelease = false
+ 
+     init(boarder: JourneyBoarding, haptics: IssuanceHaptics, announcer: AccessibilityAnnouncing,
+          geometry: BoardingGeometry = .init(), timing: BoardingTiming = .standard,
+@@ -71,7 +73,7 @@ final class BoardingTagController {
+     func dragChanged(translation: CGSize, reduceMotion: Bool) {
+         switch phase {
+         case .ready, .failed:
+-            guard !geometry.isTap(translation) else { return }
++            guard !awaitingRelease, !geometry.isTap(translation) else { return }
+             hasDragged = true
+             showsTapHint = false
+             phase = .dragging
+@@ -89,7 +91,7 @@ final class BoardingTagController {
+ 
+     /// 손을 뗄 때는 절대 인식하지 않는다. 인식은 `dragChanged`와 `activate`에서만 일어난다.
+     func dragEnded(translation: CGSize, reduceMotion: Bool) {
+-        defer { hasDragged = false }
++        defer { hasDragged = false; awaitingRelease = false }
+         switch phase {
+         case .ready, .failed:
+             guard !hasDragged else { return }
+@@ -165,6 +167,7 @@ final class BoardingTagController {
+     private func commit(_ id: Int, reduceMotion: Bool) {
+         guard recognitionID == id, phase == .contacting else { return }
+         guard boarder.boardJourney() else {
++            awaitingRelease = hasDragged
+             phase = .failed
+             cardOffset = .zero
+             showsSaveFailure = true
+diff --git a/ios/FocusMate/JourneySection.swift b/ios/FocusMate/JourneySection.swift
+index 07d5c1e..8e99127 100644
+--- a/ios/FocusMate/JourneySection.swift
++++ b/ios/FocusMate/JourneySection.swift
+@@ -13,7 +13,8 @@ extension JourneySection {
+         guard c.contains(.active) else {
+             throw DecodingError.keyNotFound(CodingKeys.active, .init(codingPath: c.codingPath, debugDescription: "journey.active is required"))
+         }
+-        active = try c.decodeNil(forKey: .active) ? nil : c.decode(JourneySnapshot.self, forKey: .active)
++        // 진행 여정은 언제든 버릴 수 있는 임시 값이다. 손상되면 여정만 없던 것으로 읽고 카드·기록은 지킨다.
++        active = try c.decodeNil(forKey: .active) ? nil : try? c.decode(JourneySnapshot.self, forKey: .active)
+     }
+     func encode(to encoder: Encoder) throws {
+         var c = encoder.container(keyedBy: CodingKeys.self)
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index 1f10302..7918191 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -158,6 +158,14 @@ struct RootView: View {
+         case .initialStationEntry:
+             InitialStationSearchView(model: model)
+         case .main:
++            // 가장 큰 글자에서 진행 여정 안내가 더해져도 모든 메뉴에 닿도록 스크롤한다.
++            ScrollView { VStack(alignment: .leading, spacing: 24) { mainContent } }
++        case nil:
++            EmptyView()
++        }
++    }
++
++    @ViewBuilder private var mainContent: some View {
+             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
+             if let station = model.snapshot?.currentStation {
+                 Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
+@@ -181,9 +189,6 @@ struct RootView: View {
+                 }.buttonStyle(.bordered)
+                     .accessibilityIdentifier("open.\(destination.rawValue)")
+             }
+-        case nil:
+-            EmptyView()
+-        }
+     }
+ 
+     private func startCardCustomization() {
+diff --git a/ios/FocusMate/SnapshotCodec.swift b/ios/FocusMate/SnapshotCodec.swift
+index 30937bb..bb56eb3 100644
+--- a/ios/FocusMate/SnapshotCodec.swift
++++ b/ios/FocusMate/SnapshotCodec.swift
+@@ -67,9 +67,17 @@ enum SnapshotCodec {
+             }
+         } catch let issue as StorageIssue { throw issue }
+         catch { throw StorageIssue.corrupt }
+-        do { try state.validate() }
++        let readable = dropInvalidActiveJourney(state)
++        do { try readable.validate() }
+         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
+-        return state.updating(records: state.records.sortedNewestFirst())
++        return readable.updating(records: readable.records.sortedNewestFirst())
++    }
++
++    /// 읽기 전용 완화: 검증을 통과하지 못하는 진행 여정만 버린다. 쓰기(`LocalSnapshotStore.save`)는 그대로 엄격하다.
++    private static func dropInvalidActiveJourney(_ state: AppSnapshot) -> AppSnapshot {
++        guard let active = state.journey.active else { return state }
++        let valid = state.currentStation != nil && (try? active.validate(currentCardID: state.currentCard?.id)) != nil
++        return valid ? state : state.updating(journey: .empty)
+     }
+ 
+     static func encode(_ snapshot: AppSnapshot) throws -> Data {
+diff --git a/ios/FocusMateTests/AppSnapshotSectionsTests.swift b/ios/FocusMateTests/AppSnapshotSectionsTests.swift
+index b284859..fc39413 100644
+--- a/ios/FocusMateTests/AppSnapshotSectionsTests.swift
++++ b/ios/FocusMateTests/AppSnapshotSectionsTests.swift
+@@ -175,14 +175,18 @@ final class AppSnapshotSectionsTests: XCTestCase {
+         XCTAssertNil(section.active)
+     }
+ 
+-    // 깨짐: active를 빈 객체로 받아 통과시키면 실패
+-    func testJourneySectionWithEmptyObjectActiveFailsToDecode() {
+-        XCTAssertThrowsError(try decode(JourneySection.self, #"{"active":{}}"#))
++    // 깨짐: 손상된 빈 객체 active에서 던지면(영역 전체 손상 처리) 실패 (F1 여정만 버리기)
++    func testJourneySectionWithEmptyObjectActiveDecodesToNil() throws {
++        let section = try decode(JourneySection.self, #"{"active":{}}"#)
++
++        XCTAssertNil(section.active)
+     }
+ 
+-    // 깨짐: active를 문자열로 받아 통과시키면 실패
+-    func testJourneySectionWithStringActiveFailsToDecode() {
+-        XCTAssertThrowsError(try decode(JourneySection.self, #"{"active":"x"}"#))
++    // 깨짐: 손상된 문자열 active에서 던지면 실패
++    func testJourneySectionWithStringActiveDecodesToNil() throws {
++        let section = try decode(JourneySection.self, #"{"active":"x"}"#)
++
++        XCTAssertNil(section.active)
+     }
+ 
+     // MARK: - helpers
+diff --git a/ios/FocusMateTests/BoardingModelTests.swift b/ios/FocusMateTests/BoardingModelTests.swift
+index a8c2cb1..1b1497a 100644
+--- a/ios/FocusMateTests/BoardingModelTests.swift
++++ b/ios/FocusMateTests/BoardingModelTests.swift
+@@ -343,6 +343,58 @@ final class BoardingModelTests: XCTestCase {
+         XCTAssertEqual(probe.writes.count, 0)
+     }
+ 
++    // MARK: 리뷰 R1 — 확정값 저장 (F4)
++
++    // 깨짐: boardJourney 가 확정 시점이 아니라 현재 준비 초안을 다시 읽으면 false/다른 할 일로 저장되어 실패.
++    @MainActor
++    func testR1_인식_뒤_준비_초안이_바뀌어도_확정_당시_값으로_저장한다() throws {
++        let probe = Probe()
++        let model = try boardingModel(probe: probe)
++        model.preparation.setTask("바뀐 일")
++
++        XCTAssertTrue(model.boardJourney())
++
++        XCTAssertEqual(probe.writes.count, 1)
++        let active = try XCTUnwrap(try lastSaved(probe).journey.active)
++        XCTAssertEqual(active.task, "책 읽기")
++    }
++
++    // 깨짐: 메인에서 새 여행 시작(폐기)으로 확정값이 사라진 뒤에도 승차를 저장하면 실패.
++    @MainActor
++    func testR1_메인에서_새_여행을_시작한_뒤의_승차는_저장하지_않고_false다() throws {
++        let probe = Probe()
++        let model = try boardingModel(probe: probe)
++        XCTAssertTrue(model.startTripFromMain())
++        let writesBefore = probe.writes.count
++
++        XCTAssertFalse(model.boardJourney())
++
++        XCTAssertEqual(probe.writes.count, writesBefore)
++        XCTAssertNil(model.activeJourney)
++    }
++
++    // MARK: 리뷰 R1 — open(.journey) 가드 (F5)
++
++    // 깨짐: 진행 여정이 없는데 open(.journey)가 빈 여행 화면을 열면 실패.
++    @MainActor
++    func testR1_진행여정이_없으면_open_journey는_무시된다() throws {
++        let model = try makeModel(active: nil, probe: Probe())
++
++        model.open(.journey)
++
++        XCTAssertEqual(model.path, [])
++    }
++
++    // 깨짐: 가드가 과해 진행 여정이 있어도 여행 화면이 안 열리면 실패.
++    @MainActor
++    func testR1_진행여정이_있으면_open_journey가_열린다() throws {
++        let model = try makeModel(active: F.journey(), probe: Probe())
++
++        model.open(.journey)
++
++        XCTAssertEqual(model.path, [.journey])
++    }
++
+     // MARK: 메인 버튼 라벨
+ 
+     // 깨짐: mainMenuTitle이 준비 항목을 "여행 준비" 그대로 두거나 다른 항목 title을 바꾸면 실패.
+diff --git a/ios/FocusMateTests/BoardingTagControllerTests.swift b/ios/FocusMateTests/BoardingTagControllerTests.swift
+index eaa41f4..ee73123 100644
+--- a/ios/FocusMateTests/BoardingTagControllerTests.swift
++++ b/ios/FocusMateTests/BoardingTagControllerTests.swift
+@@ -350,4 +350,62 @@ final class BoardingTagControllerTests: XCTestCase {
+         XCTAssertEqual(r.sleeper.requested.count, 0)
+         XCTAssertEqual(r.box.finishedPhases, [.finished])
+     }
++
++    // MARK: 리뷰 R1 — 실패 뒤 같은 동작 재인식 금지
++
++    // 깨짐: failed 뒤 손가락을 떼지 않은 채 이어지는 dragChanged 가 다시 접촉을 인식하면 저장·낭독·햅틱이 늘어 실패.
++    func testR1_저장_실패_뒤_같은_동작의_dragChanged는_다시_인식하지_않는다() async {
++        let r = rig(results: [false, true])
++        dragToContact(r)
++        await r.sleeper.untilSuspended()
++        r.sleeper.resume()
++        await r.controller.pendingSave?.value
++        XCTAssertEqual(r.controller.phase, .failed)
++
++        r.controller.dragChanged(translation: CGSize(width: 0, height: -20), reduceMotion: false)
++        r.controller.dragChanged(translation: CGSize(width: 0, height: -240), reduceMotion: false)
++        r.controller.dragChanged(translation: CGSize(width: 0, height: -250), reduceMotion: false)
++        await r.controller.pendingSave?.value
++
++        XCTAssertEqual(r.boarder.calls, 1)
++        XCTAssertEqual(r.announcer.messages, [Self.failure])
++        XCTAssertEqual(r.haptics.patterns.count, 1)
++        XCTAssertEqual(r.sleeper.requested.count, 1)
++    }
++
++    // 깨짐: 동작 줄이기에서도 같은 동작의 dragChanged 로 저장이 반복되면 실패.
++    func testR1_동작_줄이기에서도_저장_실패_뒤_같은_동작은_다시_인식하지_않는다() async {
++        let r = rig(results: [false, true])
++        dragToContact(r, reduceMotion: true)
++        await r.controller.pendingSave?.value
++        XCTAssertEqual(r.controller.phase, .failed)
++
++        r.controller.dragChanged(translation: CGSize(width: 0, height: -20), reduceMotion: true)
++        r.controller.dragChanged(translation: CGSize(width: 0, height: -240), reduceMotion: true)
++        r.controller.dragChanged(translation: CGSize(width: 0, height: -250), reduceMotion: true)
++        await r.controller.pendingSave?.value
++
++        XCTAssertEqual(r.boarder.calls, 1)
++        XCTAssertEqual(r.announcer.messages, [Self.failure])
++        XCTAssertEqual(r.haptics.patterns.count, 0)
++    }
++
++    // 깨짐: dragEnded 뒤의 새 동작까지 막아 재시도가 영영 안 되면 실패.
++    func testR1_손을_뗀_뒤_새_동작에서는_실패_후에도_다시_태그할_수_있다() async {
++        let r = rig(results: [false, true])
++        dragToContact(r)
++        await r.sleeper.untilSuspended()
++        r.sleeper.resume()
++        await r.controller.pendingSave?.value
++        XCTAssertEqual(r.controller.phase, .failed)
++        r.controller.dragEnded(translation: CGSize(width: 0, height: -240), reduceMotion: false)
++
++        dragToContact(r)
++        await r.sleeper.untilSuspended()
++        r.sleeper.resume()
++        await r.controller.pendingSave?.value
++
++        XCTAssertEqual(r.boarder.calls, 2)
++        XCTAssertEqual(r.controller.phase, .held)
++    }
+ }
+diff --git a/ios/FocusMateTests/JourneySnapshotStorageTests.swift b/ios/FocusMateTests/JourneySnapshotStorageTests.swift
+index fed5564..dc837c8 100644
+--- a/ios/FocusMateTests/JourneySnapshotStorageTests.swift
++++ b/ios/FocusMateTests/JourneySnapshotStorageTests.swift
+@@ -78,30 +78,72 @@ final class JourneySnapshotStorageTests: XCTestCase {
+         }
+     }
+ 
+-    // 깨짐: {} 를 active로 받아들이면 실패 (AppSnapshotSectionsTests 의 손상 계약 유지).
+-    func testV3_active가_빈_객체면_corrupt다() throws {
++    // 깨짐: active 손상 때 파일 전체를 .corrupt로 던지거나 active를 살려두면 실패. (F1 여정만 버리기)
++    func testV3_active가_빈_객체면_진행여정만_버리고_읽힌다() throws {
+         try withTemporaryFile { fileURL in
+             try seed(fileURL, Self.v3(active: "{}"))
+ 
+-            assertStorageIssue(.corrupt) { _ = try LocalSnapshotStore(fileURL: fileURL).load() }
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
+         }
+     }
+ 
+-    // 깨짐: 문자열 active를 받아들이면 실패.
+-    func testV3_active가_문자열이면_corrupt다() throws {
++    // 깨짐: 문자열 active 때 파일 전체를 .corrupt로 던지면 실패.
++    func testV3_active가_문자열이면_진행여정만_버리고_읽힌다() throws {
+         try withTemporaryFile { fileURL in
+             try seed(fileURL, Self.v3(active: #""x""#))
+ 
+-            assertStorageIssue(.corrupt) { _ = try LocalSnapshotStore(fileURL: fileURL).load() }
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1))
+         }
+     }
+ 
+-    // 깨짐: 모르는 태그 아이콘 raw 값을 기본값으로 보정하면 실패.
+-    func testV3_모르는_아이콘_값은_corrupt다() throws {
++    // 깨짐: 모르는 아이콘 때 .corrupt로 던지거나 카드를 함께 버리면 실패.
++    func testV3_모르는_아이콘_값이면_진행여정만_버리고_카드는_유지된다() throws {
+         try withTemporaryFile { fileURL in
+-            try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: F.awaiting()))
+-            let text = try XCTUnwrap(String(data: Data(contentsOf: fileURL), encoding: .utf8))
+-            try seed(fileURL, Data(text.replacingOccurrences(of: #""icon":"reading""#, with: #""icon":"no-such-icon""#).utf8))
++            try saveThenRewrite(fileURL, replacing: #""icon":"reading""#, with: #""icon":"no-such-icon""#)
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
++        }
++    }
++
++    // 깨짐: 카드가 다른 active를 검증 실패로 파일 전체 거절하거나 active를 살리면 실패.
++    func testV3_카드_불일치_active_파일은_진행여정만_버리고_카드와_기록은_그대로다() throws {
++        try withTemporaryFile { fileURL in
++            try saveThenRewrite(fileURL, replacing: #""cardID":"FM-01234567""#, with: #""cardID":"FM-76543210""#)
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
++            XCTAssertEqual(loaded.records.items.count, 0)
++        }
++    }
++
++    // 깨짐: awaiting인데 진도 5인 active를 읽어 살리거나 파일 전체를 거절하면 실패.
++    func testV3_대기_상태인데_진도가_5인_active는_버려진다() throws {
++        try withTemporaryFile { fileURL in
++            try saveThenRewrite(fileURL, replacing: #""elapsedSeconds":0"#, with: #""elapsedSeconds":5"#)
++
++            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
++
++            XCTAssertNil(loaded.journey.active)
++            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
++        }
++    }
++
++    // 깨짐: journey 객체에 active 키가 없는 파일을 정상으로 읽으면 실패 (키 누락은 여전히 손상).
++    func testV3_journey에_active_키가_없으면_corrupt다() throws {
++        try withTemporaryFile { fileURL in
++            let bytes = Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{},"records":{"items":[]}},"version":3}"#.utf8)
++            try seed(fileURL, bytes)
+ 
+             assertStorageIssue(.corrupt) { _ = try LocalSnapshotStore(fileURL: fileURL).load() }
+         }
+@@ -178,6 +220,13 @@ final class JourneySnapshotStorageTests: XCTestCase {
+         Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":\#(active)},"records":{"items":[]}},"version":3}"#.utf8)
+     }
+ 
++    private func saveThenRewrite(_ fileURL: URL, replacing target: String, with replacement: String) throws {
++        try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: F.awaiting()))
++        let text = try XCTUnwrap(String(data: Data(contentsOf: fileURL), encoding: .utf8))
++        XCTAssertTrue(text.contains(target))
++        try seed(fileURL, Data(text.replacingOccurrences(of: target, with: replacement).utf8))
++    }
++
+     private func seed(_ fileURL: URL, _ bytes: Data) throws {
+         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+         try bytes.write(to: fileURL)
+diff --git a/ios/FocusMateUITests/BoardingFlowUITests.swift b/ios/FocusMateUITests/BoardingFlowUITests.swift
+index ed2f212..772ace7 100644
+--- a/ios/FocusMateUITests/BoardingFlowUITests.swift
++++ b/ios/FocusMateUITests/BoardingFlowUITests.swift
+@@ -164,7 +164,8 @@ final class BoardingFlowUITests: XCTestCase {
+         h.app.navigationBars.buttons.firstMatch.tap()
+         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
+         let release = h.element("test.releaseBoardingHold")
+-        if release.waitForExistence(timeout: 1) { release.tap() }
++        XCTAssertTrue(release.waitForExistence(timeout: timeout))
++        release.tap()
+         XCTAssertFalse(h.element("screen.journey").waitForExistence(timeout: 1))
+         XCTAssertEqual(try activeTask(h), taskA)
+ 
+diff --git a/ios/FocusMateUITests/BoardingLargeTextUITests.swift b/ios/FocusMateUITests/BoardingLargeTextUITests.swift
+index f00d65f..1f01f0e 100644
+--- a/ios/FocusMateUITests/BoardingLargeTextUITests.swift
++++ b/ios/FocusMateUITests/BoardingLargeTextUITests.swift
+@@ -20,6 +20,38 @@ final class BoardingLargeTextUITests: XCTestCase {
+         XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)")
+     }
+ 
++    // 깨짐: 가장 큰 글자에서 진행 여정 안내가 있는 메인이 스크롤되지 않아 메뉴 버튼이 화면 밖에 갇힌다.
++    func testF3_가장_큰_글자에서_진행_여정_안내가_있어도_메인_메뉴_버튼_모두_닿고_프로필을_열_수_있다() throws {
++        let h = FocusMateUIHarness.launch(
++            seed: "activeJourney",
++            extraArguments: [
++                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
++            ]
++        )
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
++
++        for id in ["open.preparation", "open.records", "open.settings", "open.profile", "open.cardCustomization"] {
++            let button = h.app.buttons[id]
++            XCTAssertTrue(button.waitForExistence(timeout: timeout), id)
++            var attempts = 0
++            while !button.isHittable && attempts < 6 {
++                h.app.swipeUp()
++                attempts += 1
++            }
++            XCTAssertTrue(button.isHittable, "스크롤해도 닿지 않음: \(id)")
++        }
++
++        let profile = h.app.buttons["open.profile"]
++        var attempts = 0
++        while !profile.isHittable && attempts < 6 {
++            h.app.swipeUp()
++            attempts += 1
++        }
++        profile.tap()
++        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
++    }
++
+     // 깨짐: 가장 큰 글자에서 폐기·승차권·탑승·시작 버튼 중 하나가 화면 안에 닿지 않는다.
+     func testU11_AC23_가장_큰_글자에서도_승차_태그와_출발_안내_시작까지_끝낼_수_있다() throws {
+         let h = FocusMateUIHarness.launch(
+diff --git a/ios/FocusMateUITests/BoardingTagUITests.swift b/ios/FocusMateUITests/BoardingTagUITests.swift
+index 29e5bae..457b49e 100644
+--- a/ios/FocusMateUITests/BoardingTagUITests.swift
++++ b/ios/FocusMateUITests/BoardingTagUITests.swift
+@@ -95,6 +95,7 @@ final class BoardingTagUITests: XCTestCase {
+         for part in ["승차 태그", "승차 단계", "카드를 위로 밀어 단말기에 대주세요"] {
+             XCTAssertTrue(title.label.contains(part), title.label)
+         }
++        XCTAssertTrue(title.label.contains("서울숲역"), title.label)
+         XCTAssertEqual(h.element("boarding.card").label, "집중동행카드")
+ 
+         let texts = h.app.staticTexts.allElementsBoundByIndex.map(\.label)
+@@ -118,6 +119,7 @@ final class BoardingTagUITests: XCTestCase {
+ 
+         XCTAssertEqual(try hapticCount(h), 1)
+         XCTAssertEqual(try lcd(h), "집중동행카드")
++        // 보조: SwiftUI offset은 접근성 frame에 반영되지 않아 카드 위치는 진단값으로 확인(실제 위치는 W14 실기기·시각 확인)
+         XCTAssertLessThan(try XCTUnwrap(try boardingDiag(h)["offsetY"] as? Double), 0)
+         let active = try XCTUnwrap(try activeJourney(h))
+         XCTAssertEqual(active["phase"] as? String, "awaitingDeparture")
+@@ -158,6 +160,7 @@ final class BoardingTagUITests: XCTestCase {
+ 
+         XCTAssertEqual(try hapticCount(h), 0)
+         XCTAssertEqual(try lcd(h), "승차 준비")
++        // 보조: SwiftUI offset은 접근성 frame에 반영되지 않아 카드 위치는 진단값으로 확인(실제 위치는 W14 실기기·시각 확인)
+         XCTAssertEqual(try boardingDiag(h)["offsetY"] as? Double, 0)
+ 
+         card.tap()
+@@ -260,9 +263,14 @@ final class BoardingTagUITests: XCTestCase {
+ 
+         h.element("boarding.card").tap()
+         XCTAssertTrue(h.element("boarding.tapHint").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try lcd(h), "승차 준비")
++        // 컨트롤러·화면 연출 연결 계약 확인용(보조)
+         XCTAssertEqual(try boardingDiag(h)["tapBounces"] as? Int, 1)
+ 
+         h.element("boarding.card").tap()
++        XCTAssertTrue(h.element("boarding.tapHint").exists)
++        XCTAssertEqual(try lcd(h), "승차 준비")
++        // 컨트롤러·화면 연출 연결 계약 확인용(보조)
+         XCTAssertEqual(try boardingDiag(h)["tapBounces"] as? Int, 2)
+     }
+ }
+diff --git a/ios/FocusMateUITests/DepartureBriefingUITests.swift b/ios/FocusMateUITests/DepartureBriefingUITests.swift
+index f34d454..660f567 100644
+--- a/ios/FocusMateUITests/DepartureBriefingUITests.swift
++++ b/ios/FocusMateUITests/DepartureBriefingUITests.swift
+@@ -49,6 +49,7 @@ final class DepartureBriefingUITests: XCTestCase {
+         }
+         XCTAssertTrue(start.exists && start.isHittable)
+         XCTAssertEqual(h.element("journey.briefingSentence").value as? String, "버스 출발합니다")
++        // 보조: 실제 VoiceOver 포커스는 W14 실기기
+         XCTAssertEqual(try briefingDiag(h)["focus"] as? String, "start")
+ 
+         let texts = h.app.staticTexts.allElementsBoundByIndex.map(\.label)
+@@ -82,13 +83,16 @@ final class DepartureBriefingUITests: XCTestCase {
+         let h = launchBoarding(reduceMotion: true)
+         enterJourney(h)
+ 
+-        let diag = try briefingDiag(h)
+-        XCTAssertEqual(diag["showsAll"] as? Bool, true)
+-        XCTAssertEqual(diag["showsStart"] as? Bool, true)
++        let start = h.element("journey.start")
++        XCTAssertTrue(start.waitForExistence(timeout: timeout))
++        XCTAssertTrue(start.isHittable)
+         let sentence = try XCTUnwrap(h.element("journey.briefingSentence").value as? String)
+         for part in ["문을 닫습니다", "자리에 앉아주세요", "버스 출발합니다"] {
+             XCTAssertTrue(sentence.contains(part), sentence)
+         }
+-        XCTAssertTrue(h.element("journey.start").waitForExistence(timeout: timeout))
++        // 보조: 실제 VoiceOver 포커스는 W14 실기기
++        let diag = try briefingDiag(h)
++        XCTAssertEqual(diag["showsAll"] as? Bool, true)
++        XCTAssertEqual(diag["showsStart"] as? Bool, true)
+     }
+ }

@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     @Bindable var model: AppModel
     let issuance: CardIssuanceController
+    var services: JourneyServices = .live()
     @State private var customization: CardCustomizationController?
     @State private var showsCustomization = false
     @State private var cardImportTask: Task<Void, Never>?
@@ -18,6 +19,7 @@ struct RootView: View {
     var testBootstrap: UITestBootstrap?
     var testRecorder: UITestFeedbackRecorder?
     var testGate: UITestIssuanceGate?
+    var testHoldGate: UITestHoldGate?
     var testSetupError: String?
     #endif
 
@@ -34,7 +36,7 @@ struct RootView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization) }
+            .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization, services: services) }
         }
         .safeAreaInset(edge: .bottom) {
             if savedCardNotice {
@@ -94,6 +96,14 @@ struct RootView: View {
                 .accessibilityLabel("발급 해제")
                     .accessibilityIdentifier("test.releaseIssuance")
             }
+            if let testHoldGate {
+                Button { testHoldGate.release() } label: {
+                    Text("승차 유지 해제").font(.system(size: 1)).foregroundStyle(.clear)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .accessibilityLabel("승차 유지 해제")
+                .accessibilityIdentifier("test.releaseBoardingHold")
+            }
         }
         #endif
     }
@@ -148,22 +158,37 @@ struct RootView: View {
         case .initialStationEntry:
             InitialStationSearchView(model: model)
         case .main:
+            // 가장 큰 글자에서 진행 여정 안내가 더해져도 모든 메뉴에 닿도록 스크롤한다.
+            ScrollView { VStack(alignment: .leading, spacing: 24) { mainContent } }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var mainContent: some View {
             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
             if let station = model.snapshot?.currentStation {
                 Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
                 Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
                     .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
             }
+            if model.activeJourney != nil {
+                // W07 이어가기 전 임시 안내: 여행 시작하기를 누르면 이 여정은 기록 없이 정리된다.
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("진행 중인 여정이 있어요").font(.headline)
+                    Text("여행 시작하기를 누르면 이 여정은 기록 없이 정리돼요.").font(.subheadline).foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine).accessibilityIdentifier("main.activeJourney")
+            }
             PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
             Button("카드 꾸미기", action: startCardCustomization)
                 .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
             ForEach(Destination.mainMenu, id: \.self) { destination in
-                Button(destination.title) { model.open(destination.mainMenuTarget) }.buttonStyle(.bordered)
+                Button(destination.mainMenuTitle) {
+                    if destination == .preparation { model.startTripFromMain() } else { model.open(destination.mainMenuTarget) }
+                }.buttonStyle(.bordered)
                     .accessibilityIdentifier("open.\(destination.rawValue)")
             }
-        case nil:
-            EmptyView()
-        }
     }
 
     private func startCardCustomization() {
@@ -219,6 +244,7 @@ struct RootView: View {
                 Text("백업 진단").accessibilityValue(testBootstrap.backupBytes).accessibilityIdentifier("test.backups")
                 Text("글자 크기 진단").accessibilityValue(dynamicTypeSize == .accessibility5 ? "accessibility5" : "other").accessibilityIdentifier("test.dynamicTypeSize")
                 Text("카드 외형 진단").accessibilityValue(testBootstrap.cardStyleJSON(model: model, controller: customization)).accessibilityIdentifier("test.cardStyleJSON")
+                Text("준비 확정 진단").accessibilityValue(preparedPreparationJSON).accessibilityIdentifier("test.preparedPreparation")
                 Text("동작 줄이기 진단").accessibilityValue(reduceMotion ? "true" : "false").accessibilityIdentifier("test.reduceMotion")
             }
             if let testRecorder {
@@ -227,6 +253,20 @@ struct RootView: View {
             }
             if let testSetupError { Text(testSetupError).accessibilityIdentifier("test.setupError") }
         }.font(.system(size: 1)).foregroundStyle(.clear).allowsHitTesting(false)
+    }
+    /// 준비 화면을 벗어난 뒤(승차권 등)에도 확정값을 읽도록 전역에 둔다.
+    private var preparedPreparationJSON: String {
+        guard let details = model.confirmedPreparation else { return "null" }
+        let object: [String: Any] = [
+            "journey": ["minutes": details.journey.minutes, "busID": details.journey.busID,
+                        "busNumber": details.journey.busNumber, "destination": details.journey.destination,
+                        "stops": details.journey.stops],
+            "tag": ["id": details.tag.id, "name": details.tag.name, "icon": details.tag.icon.rawValue,
+                    "color": details.tag.color.rawValue],
+            "task": details.task, "sound": details.sound.rawValue,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return "null" }
+        return String(decoding: data, as: UTF8.self)
     }
     private var snapshotJSON: String {
         guard let snapshot = model.snapshot else { return "null" }

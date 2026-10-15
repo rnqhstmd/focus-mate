@@ -12,6 +12,7 @@ enum SnapshotValidationIssue: Error, Equatable {
     case multipleCards(Int), cardWithoutIssuance, invalidCardID
     case invalidRecords(RecordValidationIssue)
     case invalidCardStyle(CardStyleValidationIssue), invalidCardPhoto
+    case invalidActiveJourney(ActiveJourneyValidationIssue)
 }
 
 struct AppSnapshot: Codable, Equatable {
@@ -78,6 +79,12 @@ struct AppSnapshot: Codable, Equatable {
         }
         do { try records.validate() }
         catch let issue as RecordValidationIssue { throw SnapshotValidationIssue.invalidRecords(issue) }
+        if let active = journey.active {
+            // 진행 여정은 정류장 설정을 마친 메인 단계에서만 생긴다.
+            guard currentStation != nil else { throw SnapshotValidationIssue.inconsistentStage }
+            do { try active.validate(currentCardID: currentCard?.id) }
+            catch let issue as ActiveJourneyValidationIssue { throw SnapshotValidationIssue.invalidActiveJourney(issue) }
+        }
     }
 
     func launchRoute() throws -> LaunchRoute {

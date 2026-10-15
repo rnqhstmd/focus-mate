@@ -19,3 +19,5 @@ dist/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+scripts/data/out/
+*.xlsx

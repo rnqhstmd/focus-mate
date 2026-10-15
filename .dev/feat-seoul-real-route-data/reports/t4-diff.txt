@@ -1,0 +1,514 @@
+diff --git a/.claude/config.json b/.claude/config.json
+index 6b9b9bb..0172cda 100644
+--- a/.claude/config.json
++++ b/.claude/config.json
+@@ -91,6 +91,15 @@
+         "*.xcuserstate",
+         "xcuserdata/"
+       ]
++    },
++    "python-scripts": {
++      "detect": [
++        "scripts/tests/__init__.py"
++      ],
++      "build": "python3 -m compileall -q scripts/route_data scripts/build_route_data.py",
++      "test": "python3 -m unittest discover -s scripts/tests -t scripts",
++      "focusedTest": "python3 -m unittest discover -s scripts/tests -t scripts -p {files}",
++      "warningPattern": "Warning:"
+     }
+   },
+   "notifications": {
+diff --git a/.gitignore b/.gitignore
+index 3365809..aae70a7 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -19,3 +19,4 @@ dist/
+ DerivedData/
+ *.xcuserstate
+ xcuserdata/
++scripts/data/out/
+diff --git a/scripts/build_route_data.py b/scripts/build_route_data.py
+new file mode 100644
+index 0000000..f974de6
+--- /dev/null
++++ b/scripts/build_route_data.py
+@@ -0,0 +1,173 @@
++#!/usr/bin/env python3
++"""Converts the Seoul Open Data bus xlsx files into the app's bundled route data.
++
++Usage:
++  python3 scripts/build_route_data.py --stops "서울시버스노선별정류소정보(YYYYMMDD).xlsx" \
++      --routes "서울시버스노선기본정보(YYYYMMDD).xlsx" --out <seoul-route-data.json>
++"""
++import argparse
++from fractions import Fraction
++import hashlib
++import json
++import os
++from pathlib import Path
++import re
++import sys
++import tempfile
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++
++from route_data.routes import (REASON_COORDINATE, REASON_KIND, REASON_NO_INFO,  # noqa: E402
++                               JoinRateError, build_routes)
++from route_data.segments import allocate_seconds, loop_meters, uses_run_minutes  # noqa: E402
++from route_data.xlsx import MissingColumnsError, read_first_sheet, require_columns  # noqa: E402
++
++STOP_COLUMNS = ["ROUTE_ID", "노선명", "순번", "NODE_ID", "ARS_ID", "정류소명", "X좌표", "Y좌표"]
++INFO_COLUMNS = ["노선번호", "유형", "운행시간"]
++DEFAULT_MAX_BYTES = 10_000_000
++SOURCE = {
++    "copyright": "서울특별시",
++    "dataset": "서울시버스노선별정류소정보",
++    "datasetID": "OA-1095",
++    "license": "공공누리 제1유형",
++    "provider": "서울 열린데이터광장",
++    "routeInfoDataset": "서울시버스노선기본정보",
++    "routeInfoDatasetID": "OA-15066",
++}
++
++
++class InputError(Exception):
++    """Bad input files or arguments (exit code 2)."""
++
++
++class OutputTooLargeError(Exception):
++    """The rendered file exceeds the size limit (exit code 4)."""
++
++
++def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fraction(95, 100),
++          max_bytes=DEFAULT_MAX_BYTES):
++    stops_path, routes_path, out_path = Path(stops_path), Path(routes_path), Path(out_path)
++    warnings = []
++    stops_date = _file_date(stops_path)
++    routes_date = _file_date(routes_path)
++    if stops_date and routes_date and stops_date != routes_date:
++        warnings.append(f"경고: 두 파일의 기준일이 다릅니다 (정류소정보 {stops_date}, 노선기본정보 {routes_date})")
++    base_date = base_date or stops_date
++    if not base_date:
++        raise InputError("기준일을 파일 이름에서 찾을 수 없습니다. --base-date를 지정하세요")
++
++    stops_sheet = read_first_sheet(stops_path)
++    info_sheet = read_first_sheet(routes_path)
++    require_columns(stops_sheet, STOP_COLUMNS)
++    require_columns(info_sheet, INFO_COLUMNS)
++    result = build_routes(stops_sheet, info_sheet, min_join_rate=min_join_rate)
++
++    stops = {}
++    route_lines = []
++    implausible = []
++    fallback = 0
++    for route in result.routes:
++        for stop in route.stops:
++            stops.setdefault(stop.node_id, stop)
++        meters = loop_meters([(stop.lat_micro, stop.lon_micro) for stop in route.stops])
++        if not uses_run_minutes(meters, route.run_minutes):
++            fallback += 1
++            if route.run_minutes is not None and route.run_minutes > 0:
++                implausible.append(route.route_id)
++        seconds = allocate_seconds(meters, route.run_minutes, route.kind)
++        route_lines.append(_dumps([route.route_id, route.number, route.kind,
++                                   [stop.node_id for stop in route.stops], seconds, meters]))
++
++    source = dict(SOURCE, baseDate=base_date, routeInfoFile=routes_path.name, stopsFile=stops_path.name)
++    stop_lines = [_dumps([stop.node_id, stop.name, stop.ars or "", stop.lat_micro, stop.lon_micro])
++                  for _, stop in sorted(stops.items())]
++    text = "\n".join(['{"format":1,"source":' + json.dumps(source, ensure_ascii=False, sort_keys=True,
++                                                           separators=(",", ":")) + ',"stops":[',
++                      ",\n".join(stop_lines), '],"routes":[', ",\n".join(route_lines), "]}"]) + "\n"
++    data = text.encode("utf-8")
++    if len(data) > max_bytes:
++        raise OutputTooLargeError(f"산출 크기 {len(data)} bytes가 한도 {max_bytes} bytes를 넘습니다")
++    _replace_atomically(out_path, data)
++
++    excluded = result.excluded
++    summary = warnings + [
++        f"입력 행 수: {len(stops_sheet.rows)}",
++        f"입력 노선 수: {len({row['ROUTE_ID'].value for row in stops_sheet.rows if 'ROUTE_ID' in row})}",
++        f"포함 노선 수: {len(result.routes)}",
++        f"정류장 수: {len(stops)}",
++        *(f"제외 노선 — {reason}: {_ids(excluded.get(reason, []))}"
++          for reason in (REASON_NO_INFO, REASON_KIND, REASON_COORDINATE)),
++        *(f"제외 노선 — {reason}: {_ids(ids)}" for reason, ids in excluded.items()
++          if reason not in (REASON_NO_INFO, REASON_KIND, REASON_COORDINATE)),
++        f"가상 지점 제거: {result.virtual_removed}",
++        f"끝 중복 제거: {result.tail_duplicates_removed}",
++        f"공동 운행 중복 번호: {result.duplicate_info_numbers}",
++        f"ARS 이상: {result.ars_anomalies}",
++        f"운행시간 이상 노선: {_ids(implausible)}",
++        f"대체 속도 노선 수: {fallback}",
++        f"결합률: {float(result.join_rate) * 100:.1f}%",
++        f"산출 크기: {len(data)} bytes",
++        f"SHA-256 정류소정보: {_sha256(stops_path.read_bytes())}",
++        f"SHA-256 노선기본정보: {_sha256(routes_path.read_bytes())}",
++        f"SHA-256 산출: {_sha256(data)}",
++    ]
++    return "\n".join(summary)
++
++
++def _file_date(path):
++    match = re.search(r"\((\d{4})(\d{2})(\d{2})\)", path.name)
++    return "-".join(match.groups()) if match else None
++
++
++def _dumps(value):
++    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
++
++
++def _ids(ids):
++    return ",".join(ids) if ids else "없음"
++
++
++def _sha256(data):
++    return hashlib.sha256(data).hexdigest()
++
++
++def _replace_atomically(path, data):
++    path.parent.mkdir(parents=True, exist_ok=True)
++    handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
++    try:
++        with os.fdopen(handle, "wb") as stream:
++            stream.write(data)
++        os.replace(temporary, path)
++    except BaseException:
++        if os.path.exists(temporary):
++            os.unlink(temporary)
++        raise
++
++
++def main(argv=None):
++    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
++    parser.add_argument("--stops", required=True, help="서울시버스노선별정류소정보(YYYYMMDD).xlsx")
++    parser.add_argument("--routes", required=True, help="서울시버스노선기본정보(YYYYMMDD).xlsx")
++    parser.add_argument("--out", required=True, help="산출 JSON 경로")
++    parser.add_argument("--base-date", help="기준일 YYYY-MM-DD (기본: 정류소정보 파일 이름의 날짜)")
++    parser.add_argument("--min-join-rate", type=Fraction, default=Fraction(95, 100))
++    parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
++    args = parser.parse_args(argv)
++    try:
++        summary = build(args.stops, args.routes, args.out, base_date=args.base_date,
++                        min_join_rate=args.min_join_rate, max_bytes=args.max_bytes)
++    except (InputError, MissingColumnsError) as error:
++        print(error, file=sys.stderr)
++        return 2
++    except JoinRateError as error:
++        print(error, file=sys.stderr)
++        return 3
++    except OutputTooLargeError as error:
++        print(error, file=sys.stderr)
++        return 4
++    print(summary)
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/data/README.md b/scripts/data/README.md
+index 9a6685b..2ac3588 100644
+--- a/scripts/data/README.md
++++ b/scripts/data/README.md
+@@ -1,3 +1,58 @@
+ # 지도 데이터
+ 
+ - `seoul-municipalities-kostat-2013.json`: 서울 25개 자치구 경계(단순화). 출처 [southkorea/seoul-maps](https://github.com/southkorea/seoul-maps) (Apache-2.0), 원자료 KOSTAT 센서스용 행정구역경계 2013. 승차권 점묘 질감(`scripts/generate-ticket-art.cjs`) 생성에만 쓴다.
++
++# 버스 노선 데이터 (W16)
++
++앱에 넣는 서울 버스 정류장·노선·구간 시간 데이터는 `scripts/build_route_data.py`가 서울 열린데이터광장 원천 파일 두 개로 만든다. 원천 xlsx는 저장소에 두지 않는다.
++
++| 원천 | 데이터셋 | 내려받기 |
++|---|---|---|
++| `서울시버스노선별정류소정보(YYYYMMDD).xlsx` | [OA-1095](https://data.seoul.go.kr/dataList/OA-1095/F/1/datasetView.do) | 파일 목록 맨 위(최신) |
++| `서울시버스노선기본정보(YYYYMMDD).xlsx` | [OA-15066](https://data.seoul.go.kr/dataList/OA-15066/F/1/datasetView.do) | 같은 달 파일 |
++
++저작권자 서울특별시, 공공누리 제1유형(출처표시). 앱 안 '데이터 출처' 화면에 표기한다.
++
++## 갱신 절차(매월)
++
++1. 위 두 페이지에서 같은 날짜의 xlsx를 내려받는다(파일 이름을 바꾸지 않는다 — 괄호 안 날짜가 기준일이 된다).
++2. 실행한다.
++
++```
++python3 scripts/build_route_data.py \
++  --stops "서울시버스노선별정류소정보(YYYYMMDD).xlsx" \
++  --routes "서울시버스노선기본정보(YYYYMMDD).xlsx" \
++  --out scripts/data/out/seoul-route-data.json
++```
++
++3. 요약(포함·제외 노선, 운행시간 이상 노선, 산출 크기, SHA-256)을 확인하고 산출 파일을 앱 번들 위치로 옮긴다(앱 연결은 W16 후속 단계).
++
++종료 코드: 0 성공, 2 입력 오류(필수 열 누락·기준일 없음), 3 두 파일 결합률 95% 미만, 4 산출 10MB 초과. 실패하면 기존 산출 파일은 그대로 남는다.
++
++## 규칙
++
++- 노선: 두 파일에 모두 있는 노선(정류소정보 `노선명` = 기본정보 `노선번호`). 유형 한강·관광은 제외, 빈 유형은 심야.
++- 정류장 정리: 순번 정렬 → 좌표 이상 노선 제외 → 이름이 `(가상)`으로 끝나는 지점 제거 → 연속 같은 정류장 합치기 → 끝이 첫 정류장과 같으면 끝 행 제거.
++- 구간 시간: 노선 운행시간(분)을 정류장 사이 직선거리 비율로 나눈다. 구간 최소 30초, 합은 운행시간과 같다. 운행시간이 없거나 직선 속도 3km/h 미만이면 유형별 대체 속도(간선 13.4, 지선 11.6, 마을 8.8, 광역 19.6, 공항 34.8, 심야 17.3, 순환 9.4, 그 밖 11.6km/h).
++
++## 산출 형식
++
++UTF-8 JSON, 줄 단위(정류장 1줄, 노선 1줄). 좌표는 ×1e6 정수.
++
++```
++{"format":1,"source":{…},"stops":[
++["<NODE_ID>","<정류소명>","<ARS 또는 빈 문자열>",<위도>,<경도>],
++…
++],"routes":[
++["<ROUTE_ID>","<노선 번호>","<유형>",["<NODE_ID>",…],[구간 초…],[구간 m…]],
++…
++]}
++```
++
++노선의 구간 i번째는 정류장 i → i+1이고 마지막은 회차(마지막 → 첫 정류장)다.
++
++## 테스트
++
++```
++python3 -m unittest discover -s scripts/tests -t scripts
++```
+diff --git a/scripts/tests/test_build_route_data.py b/scripts/tests/test_build_route_data.py
+new file mode 100644
+index 0000000..0ca3b4d
+--- /dev/null
++++ b/scripts/tests/test_build_route_data.py
+@@ -0,0 +1,237 @@
++import hashlib
++import json
++import os
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++from tests.xlsx_fixture import Num, write_xlsx
++
++REPO = Path(__file__).resolve().parents[2]
++SCRIPT = REPO / "scripts" / "build_route_data.py"
++STOPS_NAME = "서울시버스노선별정류소정보(20260902).xlsx"
++INFO_NAME = "서울시버스노선기본정보(20260902).xlsx"
++STOP_HEADER = ["ROUTE_ID", "노선명", "순번", "NODE_ID", "ARS_ID", "정류소명", "X좌표", "Y좌표"]
++INFO_HEADER = ["노선번호", "유형", "운행시간"]
++
++
++def stop_row(rid, number, seq, node, ars, name, x, y):
++    return [Num(str(rid)), number, Num(str(seq)), Num(str(node)), ars, name, Num(x), Num(y)]
++
++
++# 노선 100(A,B,C) / 200(C,D,E) / 300(F,G): 8행, 정류장 C 공유 -> 고유 정류장 7개
++STOP_ROWS = [
++    stop_row(100, "100", 1, 1001, "01001", "가", "127.000", "37.500"),
++    stop_row(100, "100", 2, 1002, "01002", "나", "127.010", "37.500"),
++    stop_row(100, "100", 3, 1003, "01003", "다", "127.020", "37.500"),
++    stop_row(200, "2000", 1, 1003, "01003", "다", "127.020", "37.500"),
++    stop_row(200, "2000", 2, 1004, "01004", "라", "127.030", "37.500"),
++    stop_row(200, "2000", 3, 1005, "01005", "마", "127.040", "37.500"),
++    stop_row(300, "마포01", 1, 1006, "01006", "바", "127.050", "37.510"),
++    stop_row(300, "마포01", 2, 1007, "01007", "사", "127.060", "37.510"),
++]
++INFO_ROWS = [
++    ["100", "간선", Num("60")],
++    ["2000", "지선", Num("50")],
++    ["마포01", "마을", Num("40")],
++]
++
++
++def run_cli(*args):
++    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
++
++
++class Base(unittest.TestCase):
++    def setUp(self):
++        self._tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self._tmp.cleanup)
++        self.dir = Path(self._tmp.name)
++
++    def make(self, stops_name=STOPS_NAME, info_name=INFO_NAME, stop_header=None, stop_rows=None,
++             info_header=None, info_rows=None):
++        sp = self.dir / stops_name
++        ip = self.dir / info_name
++        write_xlsx(sp, [stop_header or STOP_HEADER] + (STOP_ROWS if stop_rows is None else stop_rows))
++        write_xlsx(ip, [info_header or INFO_HEADER] + (INFO_ROWS if info_rows is None else info_rows))
++        return sp, ip
++
++    def cli(self, sp, ip, out, *extra):
++        return run_cli("--stops", str(sp), "--routes", str(ip), "--out", str(out), *extra)
++
++    @staticmethod
++    def load(out):
++        return json.loads(Path(out).read_text(encoding="utf-8"))
++
++
++class BuildRouteDataTest(Base):
++    def test_정상_입력은_노선3개와_중복제거된_정류장을_산출한다(self):
++        sp, ip = self.make()
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 0, r.stderr)
++        data = self.load(out)
++        self.assertEqual(len(data["routes"]), 3)
++        self.assertEqual(len(data["stops"]), 7)
++        by_id = {x[0]: x for x in data["routes"]}
++        for rid, number, kind in (("100", "100", "간선"), ("200", "2000", "지선"), ("300", "마포01", "마을")):
++            self.assertEqual(by_id[rid][1], number)
++            self.assertIn(kind, by_id[rid][2])
++
++    def test_같은_입력을_두번_실행하면_바이트가_같다(self):
++        sp, ip = self.make()
++        a, b = self.dir / "a.json", self.dir / "b.json"
++        self.assertEqual(self.cli(sp, ip, a).returncode, 0)
++        self.assertEqual(self.cli(sp, ip, b).returncode, 0)
++        self.assertEqual(a.read_bytes(), b.read_bytes())
++
++    def test_정류소정보에_필수열이_없으면_종료2와_누락열_이름을_알리고_기존_산출을_보존한다(self):
++        header = [h for h in STOP_HEADER if h != "X좌표"]
++        rows = [r[:6] + r[7:] for r in STOP_ROWS]
++        sp, ip = self.make(stop_header=header, stop_rows=rows)
++        out = self.dir / "o.json"
++        out.write_bytes(b"OLD")
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 2)
++        self.assertIn("X좌표", r.stderr)
++        self.assertEqual(out.read_bytes(), b"OLD")
++
++    def test_기본정보에_운행시간_열이_없으면_종료2와_누락열_이름을_알리고_기존_산출을_보존한다(self):
++        sp, ip = self.make(info_header=["노선번호", "유형"], info_rows=[r[:2] for r in INFO_ROWS])
++        out = self.dir / "o.json"
++        out.write_bytes(b"OLD")
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 2)
++        self.assertIn("운행시간", r.stderr)
++        self.assertEqual(out.read_bytes(), b"OLD")
++
++    def test_파일이름의_날짜가_기준일과_출처_파일이름이_된다(self):
++        sp, ip = self.make()
++        out = self.dir / "o.json"
++        self.assertEqual(self.cli(sp, ip, out).returncode, 0)
++        src = self.load(out)["source"]
++        self.assertEqual(src["baseDate"], "2026-09-02")
++        self.assertEqual(src["stopsFile"], STOPS_NAME)
++        self.assertEqual(src["routeInfoFile"], INFO_NAME)
++
++    def test_두_파일의_날짜가_다르면_경고하고_정류소정보_날짜를_기준일로_쓴다(self):
++        sp, ip = self.make(info_name="서울시버스노선기본정보(20260901).xlsx")
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 0, r.stderr)
++        self.assertIn("경고", r.stdout)
++        self.assertIn("2026-09-01", r.stdout)
++        self.assertEqual(self.load(out)["source"]["baseDate"], "2026-09-02")
++
++    def test_파일이름에_날짜가_없고_기준일_옵션도_없으면_종료2(self):
++        sp, ip = self.make(stops_name="stops.xlsx", info_name="info.xlsx")
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 2)
++        self.assertIn("기준일", r.stderr)
++        self.assertFalse(out.exists())
++
++    def test_기준일_옵션은_파일이름_날짜보다_우선한다(self):
++        sp, ip = self.make()
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out, "--base-date", "2026-10-01")
++        self.assertEqual(r.returncode, 0, r.stderr)
++        self.assertEqual(self.load(out)["source"]["baseDate"], "2026-10-01")
++
++    def test_산출_크기가_한도를_넘으면_종료4이고_기존_산출을_보존한다(self):
++        sp, ip = self.make()
++        out = self.dir / "o.json"
++        out.write_bytes(b"OLD")
++        r = self.cli(sp, ip, out, "--max-bytes", "100")
++        self.assertEqual(r.returncode, 4)
++        self.assertEqual(out.read_bytes(), b"OLD")
++
++    def test_결합률이_기준에_못_미치면_종료3이고_산출을_만들지_않는다(self):
++        sp, ip = self.make(info_rows=INFO_ROWS[:1], stop_rows=STOP_ROWS[:6][:3] + STOP_ROWS[3:6])
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 3)
++        self.assertFalse(out.exists())
++
++    def test_결합률_0이면_기본정보에_없는_노선을_제외하고_성공한다(self):
++        sp, ip = self.make(info_rows=INFO_ROWS[:1], stop_rows=STOP_ROWS[:6])
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out, "--min-join-rate", "0")
++        self.assertEqual(r.returncode, 0, r.stderr)
++        self.assertIn("제외 노선 — 기본정보에 없는 노선: 200", r.stdout)
++        self.assertEqual([x[0] for x in self.load(out)["routes"]], ["100"])
++
++    def test_산출_파일은_정해진_줄_형식을_따른다(self):
++        sp, ip = self.make()
++        out = self.dir / "o.json"
++        self.assertEqual(self.cli(sp, ip, out).returncode, 0)
++        text = out.read_bytes().decode("utf-8")
++        self.assertTrue(text.endswith("\n"))
++        lines = text.split("\n")[:-1]
++        self.assertTrue(lines[0].startswith('{"format":1,"source":{'))
++        self.assertTrue(lines[0].endswith('"stops":['))
++        self.assertEqual(lines[-1], "]}")
++        sep = lines.index('],"routes":[')
++        node_ids = []
++        for ln in lines[1:sep]:
++            node_ids.append(json.loads(ln.rstrip(","))[0])
++        self.assertEqual(node_ids, sorted(node_ids))
++        self.assertEqual(len(node_ids), 7)
++        for ln in lines[sep + 1:-1]:
++            route = json.loads(ln.rstrip(","))
++            nodes, secs, meters = route[3], route[4], route[5]
++            self.assertEqual(len(secs), len(nodes))
++            self.assertEqual(len(meters), len(nodes))
++            self.assertTrue(all(s >= 30 for s in secs))
++
++    def test_성공_요약은_정해진_줄을_모두_담고_산출_해시가_실제와_같다(self):
++        sp, ip = self.make()
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 0, r.stderr)
++        prefixes = ["입력 행 수:", "입력 노선 수:", "포함 노선 수:", "정류장 수:",
++                    "제외 노선 — 기본정보에 없는 노선:", "제외 노선 — 유형 제외:", "제외 노선 — 좌표 이상:",
++                    "가상 지점 제거:", "끝 중복 제거:", "운행시간 이상 노선:", "대체 속도 노선 수:",
++                    "결합률:", "산출 크기:", "SHA-256 정류소정보:", "SHA-256 노선기본정보:", "SHA-256 산출:"]
++        lines = r.stdout.splitlines()
++        for p in prefixes:
++            self.assertTrue(any(l.startswith(p) for l in lines), p)
++        vals = {l.split(":", 1)[0] + ":": l.split(":", 1)[1].strip() for l in lines if ":" in l}
++        self.assertEqual(vals["입력 행 수:"], "8")
++        self.assertEqual(vals["포함 노선 수:"], "3")
++        self.assertEqual(vals["정류장 수:"], "7")
++        self.assertEqual(vals["결합률:"], "100.0%")
++        self.assertEqual(vals["SHA-256 산출:"], hashlib.sha256(out.read_bytes()).hexdigest())
++        self.assertEqual(vals["SHA-256 정류소정보:"], hashlib.sha256(sp.read_bytes()).hexdigest())
++        self.assertEqual(vals["산출 크기:"], "%d bytes" % out.stat().st_size)
++
++    def test_운행시간이_비정상이면_대체_속도로_구간_시간을_계산하고_요약에_알린다(self):
++        stop_rows = [
++            stop_row(700, "700", 1, 7001, "07001", "가", "127.000", "37.500"),
++            stop_row(700, "700", 2, 7002, "07002", "나", "127.000", "37.509"),
++        ]
++        sp, ip = self.make(stop_rows=stop_rows, info_rows=[["700", "간선", Num("1190")]])
++        out = self.dir / "o.json"
++        r = self.cli(sp, ip, out)
++        self.assertEqual(r.returncode, 0, r.stderr)
++        line = [l for l in r.stdout.splitlines() if l.startswith("운행시간 이상 노선:")][0]
++        self.assertIn("700", line)
++        self.assertEqual(self.load(out)["routes"][0][4], [269, 269])
++
++
++class LargeXlsxGuardTest(unittest.TestCase):
++    def test_저장소에_1MB_이상_xlsx가_추적되거나_남아있지_않다(self):
++        r = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=REPO,
++                           capture_output=True, text=True)
++        self.assertEqual(r.returncode, 0, r.stderr)
++        big = []
++        for rel in r.stdout.splitlines():
++            p = REPO / rel
++            if p.suffix.lower() == ".xlsx" and p.is_file() and p.stat().st_size >= 1_000_000:
++                big.append(rel)
++        self.assertEqual(big, [])
++
++
++if __name__ == "__main__":
++    unittest.main()

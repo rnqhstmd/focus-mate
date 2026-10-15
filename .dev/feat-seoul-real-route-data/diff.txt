@@ -1,0 +1,27 @@
+ .claude/config.json                               |   9 +
+ .gitignore                                        |   1 +
+ ios/FocusMate/RouteCandidates.swift               |  44 ++++
+ ios/FocusMate/RouteCatalog.swift                  | 134 ++++++++++++
+ ios/FocusMate/RouteCatalogLoader.swift            |  50 +++++
+ ios/FocusMate/RouteLeg.swift                      |  60 ++++++
+ ios/FocusMate/StationSearch.swift                 |  70 ++++++
+ ios/FocusMateTests/RouteCandidatesTests.swift     | 152 +++++++++++++
+ ios/FocusMateTests/RouteCatalogTestFixtures.swift |  58 +++++
+ ios/FocusMateTests/RouteCatalogTests.swift        | 146 +++++++++++++
+ ios/FocusMateTests/RouteLegTests.swift            | 147 +++++++++++++
+ ios/FocusMateTests/StationSearchTests.swift       | 106 +++++++++
+ scripts/build_route_data.py                       | 173 +++++++++++++++
+ scripts/data/README.md                            |  55 +++++
+ scripts/route_data/__init__.py                    |   0
+ scripts/route_data/routes.py                      | 201 +++++++++++++++++
+ scripts/route_data/segments.py                    |  75 +++++++
+ scripts/route_data/xlsx.py                        | 114 ++++++++++
+ scripts/tests/__init__.py                         |   0
+ scripts/tests/test_build_route_data.py            | 237 ++++++++++++++++++++
+ scripts/tests/test_routes.py                      | 250 ++++++++++++++++++++++
+ scripts/tests/test_segments.py                    | 172 +++++++++++++++
+ scripts/tests/test_xlsx.py                        | 126 +++++++++++
+ scripts/tests/xlsx_fixture.py                     | 105 +++++++++
+ 24 files changed, 2485 insertions(+)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라.

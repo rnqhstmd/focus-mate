@@ -91,6 +91,15 @@
         "*.xcuserstate",
         "xcuserdata/"
       ]
+    },
+    "python-scripts": {
+      "detect": [
+        "scripts/tests/__init__.py"
+      ],
+      "build": "python3 -m compileall -q scripts/route_data scripts/build_route_data.py",
+      "test": "python3 -m unittest discover -s scripts/tests -t scripts",
+      "focusedTest": "python3 -m unittest discover -s scripts/tests -t scripts -p {files}",
+      "warningPattern": "Warning:"
     }
   },
   "notifications": {

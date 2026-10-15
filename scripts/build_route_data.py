@@ -18,8 +18,8 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from route_data.routes import (REASON_COORDINATE, REASON_KIND, REASON_NO_INFO,  # noqa: E402
-                               JoinRateError, build_routes)
-from route_data.segments import allocate_seconds, loop_meters, uses_run_minutes  # noqa: E402
+                               JoinRateError, build_routes, normalize_integer)
+from route_data.segments import allocate_seconds, is_minimum_only, loop_meters, uses_run_minutes  # noqa: E402
 from route_data.xlsx import MissingColumnsError, read_first_sheet, require_columns  # noqa: E402
 
 STOP_COLUMNS = ["ROUTE_ID", "노선명", "순번", "NODE_ID", "ARS_ID", "정류소명", "X좌표", "Y좌표"]
@@ -66,10 +66,13 @@ def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fr
     route_lines = []
     implausible = []
     fallback = 0
+    minimum_only = 0
     for route in result.routes:
         for stop in route.stops:
             stops.setdefault(stop.node_id, stop)
         meters = loop_meters([(stop.lat_micro, stop.lon_micro) for stop in route.stops])
+        if is_minimum_only(meters, route.run_minutes):
+            minimum_only += 1
         if not uses_run_minutes(meters, route.run_minutes):
             fallback += 1
             if route.run_minutes is not None and route.run_minutes > 0:
@@ -94,6 +97,7 @@ def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fr
         f"입력 행 수: {len(stops_sheet.rows)}",
         f"입력 노선 수: {len({row['ROUTE_ID'].value for row in stops_sheet.rows if 'ROUTE_ID' in row})}",
         f"포함 노선 수: {len(result.routes)}",
+        f"입력 정류장 수: {len(_input_nodes(stops_sheet))}",
         f"정류장 수: {len(stops)}",
         *(f"제외 노선 — {reason}: {_ids(excluded.get(reason, []))}"
           for reason in (REASON_NO_INFO, REASON_KIND, REASON_COORDINATE)),
@@ -102,9 +106,12 @@ def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fr
         f"가상 지점 제거: {result.virtual_removed}",
         f"끝 중복 제거: {result.tail_duplicates_removed}",
         f"공동 운행 중복 번호: {result.duplicate_info_numbers}",
-        f"ARS 이상: {result.ars_anomalies}",
+        f"ARS 0 채움: {result.ars_zero_filled}",
+        f"ARS 5자리 아님: {result.ars_anomalies}",
+        f"ARS 번호 없음: {sum(1 for stop in stops.values() if stop.ars is None)}",
         f"운행시간 이상 노선: {_ids(implausible)}",
         f"대체 속도 노선 수: {fallback}",
+        f"최소 보정 초과 노선 수: {minimum_only}",
         f"결합률: {float(result.join_rate) * 100:.1f}%",
         f"산출 크기: {len(data)} bytes",
         f"SHA-256 정류소정보: {_sha256(stops_path.read_bytes())}",
@@ -112,6 +119,19 @@ def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fr
         f"SHA-256 산출: {_sha256(data)}",
     ]
     return "\n".join(summary)
+
+
+def _input_nodes(sheet):
+    nodes = set()
+    for row in sheet.rows:
+        cell = row.get("NODE_ID")
+        if cell is None:
+            continue
+        try:
+            nodes.add(normalize_integer(cell.value))
+        except ValueError:
+            nodes.add(cell.value.strip())
+    return nodes
 
 
 def _file_date(path):

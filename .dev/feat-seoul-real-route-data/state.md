@@ -1,4 +1,4 @@
-phase: implement
+phase: complete
 status: in_progress
 pipeline: gx-tdd
 verify-status: pending
@@ -20,9 +20,9 @@ auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 5
 simulator: FM-W16 9306E393-1808-45F1-8C65-CD6E57D7DF98
-current-step: "변경사항 수집"
+current-step: "complete Step -1 verify"
 user-scope: "W09 진행 중 — 사용자 결정(설계 승인 시): 설계 구현 순서 1~11(스크립트·데이터 + 새 파일 앱 계산 모듈)만 지금, 12~27은 W09 머지 후"
-phases: { setup: completed, requirements: completed, design: completed, implement: in_progress }
+phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: in_progress }
 execution-log:
   - { phase: implement, result: "worktree next-step-w16, 착수 커밋 2d4aeca push" }
   - { phase: requirements, agent: product-owner, result: "PRD 확정 55 AC, Q1 ±1분·Q2 회차·Q3 다음 정류장 방면·Q4 비우기·Q5 10MB/0.3s" }
@@ -44,3 +44,6 @@ steps:
     - "RGR T7 (AC-13~16,18~21 구간)": { red: completed, test-file: ios/FocusMateTests/RouteLegTests.swift, test-file-hash: 8a8d6ecbf73bebbf6e19948ed97eb69043aa971d, test-count: 44, report: reports/t7-impl.md, impl: completed, review: skipped }
     - "RGR T8 (AC-13~22,25,26)": { red: completed, test-file: ios/FocusMateTests/RouteCandidatesTests.swift, test-file-hash: 018b07f3f64dbdd1e92eea1a5c3bc7d457720660, test-count: 60, report: reports/t8-impl.md, impl: completed, review: skipped }
   - { phase: implement, result: "RGR 8태스크 완료 (설계 1~11단계). focused Python 88 + Swift 60 pass. 후보 0건 비율 실측 9.0%(무작위)" }
+  - { phase: review, step: mechanical-gate, result: "ios build OK(경고 0), python 88 OK, node OK — iOS 전체 테스트는 verify에서 1회" }
+  - { phase: review, agent: reviewer, result: "R1 SPEC FAIL(AC-77) Important 3 동작결함 → RED R1 수정; R2 SPEC PASS 47/47, Important 2 동작불변 정리, Minor 4 유예" }
+  - { phase: review, agent: security-auditor, result: "CRITICAL 0, HIGH 0, MEDIUM 11 (2 정리, 9 유예)" }

@@ -246,5 +246,14 @@ class BuildRoutesTest(unittest.TestCase):
         self.assertEqual(result.join_rate, Fraction(1, 2))
 
 
+    def test_R1_숫자_셀_ARS_0채움은_서로_다른_NODE_ID로_센다(self):
+        rows = [srow(1, "A", 1, 1, "a", ars=Cell("1234", False)),
+                srow(1, "A", 2, 2, "b", ars=Cell("00123", True)),
+                srow(2, "B", 1, 1, "a", ars=Cell("1234", False)),
+                srow(2, "B", 2, 3, "c", ars=Cell("00124", True))]
+        result = self.build(rows, [irow("A", "간선"), irow("B", "간선")])
+        self.assertEqual(result.ars_zero_filled, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

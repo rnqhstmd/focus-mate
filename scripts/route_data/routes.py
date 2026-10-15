@@ -43,6 +43,7 @@ class RouteBuildResult:
     duplicate_info_numbers: int
     ars_anomalies: int
     join_rate: Fraction
+    ars_zero_filled: int
 
 
 class JoinRateError(Exception):
@@ -76,6 +77,11 @@ def normalize_ars(cell):
     return text
 
 
+def is_ars_anomaly(ars):
+    """True when a stop number exists but is not five digits (e.g. "7832")."""
+    return ars is not None and not (len(ars) == 5 and ars.isdigit())
+
+
 def build_routes(stops, info, *, min_join_rate=Fraction(95, 100)):
     infos, duplicates = _route_infos(info)
     groups = defaultdict(list)
@@ -85,7 +91,7 @@ def build_routes(stops, info, *, min_join_rate=Fraction(95, 100)):
     excluded = defaultdict(list)
     routes = []
     unmatched = []
-    counters = {"virtual": 0, "tail": 0}
+    counters = {"virtual": 0, "tail": 0, "zero_filled": set()}
     for raw_id, rows in groups.items():
         number = _text(rows[0], "노선명")
         route_info = infos.get(number)
@@ -94,13 +100,17 @@ def build_routes(stops, info, *, min_join_rate=Fraction(95, 100)):
         route = _clean_route(raw_id, rows, route_info, excluded, counters)
         if route is not None:
             routes.append(route)
+            counters["zero_filled"] |= {stop.node_id for stop in route.stops} & _zero_filled_nodes(rows)
 
     join_rate = Fraction(len(groups) - len(unmatched), len(groups)) if groups else Fraction(0)
     if join_rate < min_join_rate:
         raise JoinRateError(join_rate, sorted(unmatched, key=_id_order))
     routes.sort(key=lambda route: int(route.route_id))
-    anomalies = sum(1 for route in routes for stop in route.stops
-                    if stop.ars is not None and not (len(stop.ars) == 5 and stop.ars.isdigit()))
+    first_stops = {}
+    for route in routes:
+        for stop in route.stops:
+            first_stops.setdefault(stop.node_id, stop)
+    anomalies = sum(1 for stop in first_stops.values() if is_ars_anomaly(stop.ars))
     return RouteBuildResult(
         routes=routes,
         excluded={reason: sorted(ids, key=_id_order) for reason, ids in excluded.items()},
@@ -109,6 +119,7 @@ def build_routes(stops, info, *, min_join_rate=Fraction(95, 100)):
         duplicate_info_numbers=duplicates,
         ars_anomalies=anomalies,
         join_rate=join_rate,
+        ars_zero_filled=len(counters["zero_filled"]),
     )
 
 
@@ -164,6 +175,23 @@ def _stop_point(row):
         return None
     return StopPoint(node_id=node_id, name=_text(row, "정류소명"), ars=normalize_ars(row.get("ARS_ID")),
                      lat_micro=_micro(latitude), lon_micro=_micro(longitude))
+
+
+def _zero_filled_nodes(rows):
+    """NODE_IDs whose ARS came from a numeric cell shorter than five digits (and was zero-padded)."""
+    nodes = set()
+    for row in rows:
+        cell = row.get("ARS_ID")
+        if cell is None or cell.is_text or not cell.value.strip():
+            continue
+        try:
+            digits = normalize_integer(cell.value)
+            node_id = normalize_integer(_text(row, "NODE_ID"))
+        except ValueError:
+            continue
+        if len(digits) < 5 and normalize_ars(cell) is not None:
+            nodes.add(node_id)
+    return nodes
 
 
 def _route_infos(info):

@@ -248,3 +248,73 @@ class LargeXlsxGuardTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 ```
+
+## 재현 RED R1 — 요약 집계
+추가: test_build_route_data.py 4케이스(입력 정류장 수/최소 보정 초과/제외 노선 정류장/ARS 집계), test_routes.py 1케이스(ars_zero_filled). 기존 44개 통과, 신규 5개만 실패(KeyError: 요약 줄 없음, AttributeError: ars_zero_filled).
+```python
+    def summary(stdout):
+        return {l.split(":", 1)[0]: l.split(":", 1)[1].strip() for l in stdout.splitlines() if ":" in l}
+
+    def test_R1_기본_입력의_입력_정류장_수는_7이고_최소_보정_초과는_0이다(self):
+        sp, ip = self.make()
+        r = self.cli(sp, ip, self.dir / "o.json")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        v = self.summary(r.stdout)
+        self.assertEqual(v["입력 정류장 수"], "7")
+        self.assertEqual(v["최소 보정 초과 노선 수"], "0")
+
+    def test_R1_제외된_노선의_정류장도_입력_정류장_수에_센다(self):
+        extra = [stop_row(900, "900", 1, 2001, "02001", "아", "127.100", "37.500"),
+                 stop_row(900, "900", 2, 2002, "02002", "자", "127.110", "37.500")]
+        sp, ip = self.make(stop_rows=STOP_ROWS + extra)
+        r = self.cli(sp, ip, self.dir / "o.json", "--min-join-rate", "0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        v = self.summary(r.stdout)
+        self.assertEqual(v["입력 정류장 수"], "9")
+        self.assertEqual(v["정류장 수"], "7")
+
+    def test_R1_운행시간이_30초_하한보다_짧으면_모든_구간이_30초가_되고_최소_보정_초과로_센다(self):
+        stop_rows = [
+            stop_row(800, "800", 1, 8001, "08001", "가", "127.000", "37.500"),
+            stop_row(800, "800", 2, 8002, "08002", "나", "127.000", "37.509"),
+            stop_row(800, "800", 3, 8003, "08003", "다", "127.000", "37.518"),
+        ]
+        sp, ip = self.make(stop_rows=stop_rows, info_rows=[["800", "간선", Num("1")]])
+        out = self.dir / "o.json"
+        r = self.cli(sp, ip, out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.load(out)["routes"][0][4], [30, 30, 30])
+        self.assertEqual(self.summary(r.stdout)["최소 보정 초과 노선 수"], "1")
+
+    def test_R1_ARS_보정과_이상은_정류장_기준으로_센다(self):
+        stop_rows = [
+            stop_row(100, "100", 1, 1001, Num("1234"), "가", "127.000", "37.500"),
+            stop_row(100, "100", 2, 1002, "7832", "나", "127.010", "37.500"),
+            stop_row(100, "100", 3, 1003, "~", "다", "127.020", "37.500"),
+            stop_row(200, "2000", 1, 1002, "7832", "나", "127.010", "37.500"),
+            stop_row(200, "2000", 2, 1004, "01004", "라", "127.030", "37.500"),
+        ]
+        sp, ip = self.make(stop_rows=stop_rows, info_rows=INFO_ROWS[:2])
+        out = self.dir / "o.json"
+        r = self.cli(sp, ip, out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        v = self.summary(r.stdout)
+        self.assertEqual(v["ARS 0 채움"], "1")
+        self.assertEqual(v["ARS 5자리 아님"], "1")
+        self.assertEqual(v["ARS 번호 없음"], "1")
+        stops = {x[0]: x for x in self.load(out)["stops"]}
+        self.assertEqual(stops["1001"][2], "01234")
+
+
+class LargeXlsxGuardTest(unittest.TestCase):
+    def test_R1_숫자_셀_ARS_0채움은_서로_다른_NODE_ID로_센다(self):
+        rows = [srow(1, "A", 1, 1, "a", ars=Cell("1234", False)),
+                srow(1, "A", 2, 2, "b", ars=Cell("00123", True)),
+                srow(2, "B", 1, 1, "a", ars=Cell("1234", False)),
+                srow(2, "B", 2, 3, "c", ars=Cell("00124", True))]
+        result = self.build(rows, [irow("A", "간선"), irow("B", "간선")])
+        self.assertEqual(result.ars_zero_filled, 1)
+
+
+if __name__ == "__main__":
+```

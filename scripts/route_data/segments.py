@@ -39,6 +39,12 @@ def uses_run_minutes(meters, run_minutes):
     return speed >= Fraction(MIN_PLAUSIBLE_SPEED_KMH)
 
 
+def is_minimum_only(meters, run_minutes):
+    """True when the run time is used but is too short for 30 s per segment, so every segment is 30 s."""
+    return uses_run_minutes(meters, run_minutes) and \
+        _round_half_up(Fraction(run_minutes) * 60) < MIN_SEGMENT_SECONDS * len(meters)
+
+
 def allocate_seconds(meters, run_minutes, kind):
     if not uses_run_minutes(meters, run_minutes):
         speed = Fraction(FALLBACK_SPEED_KMH.get(kind, OTHER_SPEED_KMH))

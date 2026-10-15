@@ -1,0 +1,428 @@
+diff --git a/ios/FocusMate/ArrivalBriefingController.swift b/ios/FocusMate/ArrivalBriefingController.swift
+new file mode 100644
+index 0000000..eebd308
+--- /dev/null
++++ b/ios/FocusMate/ArrivalBriefingController.swift
+@@ -0,0 +1,106 @@
++import Foundation
++import Observation
++
++/// 도착 안내의 '확인' 경계. AppModel이 채택하며 저장본이 도착 상태일 때만 하차 태그로 보낸다.
++@MainActor
++protocol ArrivalConfirming: AnyObject {
++    func confirmArrival(timerArrived: Bool) -> LifecycleActionResult
++}
++
++/// 도착 저장의 주인(타이머). 확인을 누를 때 저장이 실패해 있으면 한 번 더 시도한다.
++@MainActor
++protocol ArrivalProgress: AnyObject {
++    var isArrived: Bool { get }
++    func ensureArrivalSaved() -> Bool
++}
++
++/// 도착 안내 문구. 정류장 이름이 들어가므로 여정마다 만든다.
++struct ArrivalBriefingContent: Equatable {
++    let routeText: String
++    let sentences: [String]
++
++    init?(journey: JourneySnapshot) {
++        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
++        routeText = "\(bus.number) · \(destination) 도착"
++        sentences = ["곧 \(destination)에 도착합니다", "버스가 멈추면 일어나주세요", "카드를 찍고 내려주세요"]
++    }
++}
++
++/// 도착 안내. 출발 안내와 같은 규칙으로 세 문장을 차례로 보여 준 뒤 '확인'을 띄운다.
++/// 확인은 저장하지 않는다 — 도착 저장은 타이머가, 하차 태그 진입은 모델이 판단한다.
++@MainActor @Observable
++final class ArrivalBriefingController {
++    enum FocusTarget: Equatable { case confirmButton }
++
++    let content: ArrivalBriefingContent
++    private(set) var visibleIndex = 0
++    private(set) var showsAll = false
++    private(set) var showsConfirm = false
++    private(set) var showsSaveFailure = false
++    private(set) var focusTarget: FocusTarget?
++
++    @ObservationIgnored private let progress: ArrivalProgress
++    @ObservationIgnored private let confirmer: ArrivalConfirming
++    @ObservationIgnored private let interval: Duration
++    @ObservationIgnored private let sleep: (Duration) async -> Void
++    @ObservationIgnored private var token = 0
++
++    init(content: ArrivalBriefingContent, progress: ArrivalProgress, confirmer: ArrivalConfirming,
++         interval: Duration = DepartureBriefingController.interval,
++         sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
++        self.content = content
++        self.progress = progress
++        self.confirmer = confirmer
++        self.interval = interval
++        self.sleep = sleep
++    }
++
++    /// 처음부터 보여 준다. 동작 줄이기면 세 문장과 '확인'을 한꺼번에 보여 준다.
++    func begin(reduceMotion: Bool) async {
++        token += 1
++        let current = token
++        visibleIndex = 0
++        showsConfirm = false
++        focusTarget = nil
++        if reduceMotion {
++            showsAll = true
++            visibleIndex = content.sentences.count - 1
++            revealConfirm()
++            return
++        }
++        showsAll = false
++        for index in 1..<content.sentences.count {
++            await sleep(interval)
++            guard token == current else { return }
++            visibleIndex = index
++        }
++        revealConfirm()
++    }
++
++    /// 앱이 숨겨지면 진행 중인 안내를 버린다. 돌아오면 `begin`으로 처음부터 다시 보여 준다.
++    func reset() {
++        token += 1
++        visibleIndex = 0
++        showsAll = false
++        showsConfirm = false
++        focusTarget = nil
++    }
++
++    @discardableResult
++    func confirm() -> LifecycleActionResult {
++        guard showsConfirm else { return .rejected }
++        _ = progress.ensureArrivalSaved()
++        let result = confirmer.confirmArrival(timerArrived: progress.isArrived)
++        showsSaveFailure = result == .saveFailed
++        return result
++    }
++
++    private func revealConfirm() {
++        showsConfirm = true
++        focusTarget = .confirmButton
++    }
++}
++
++extension JourneyTimerController: ArrivalProgress {
++    var isArrived: Bool { status == .arrived }
++}
+diff --git a/ios/FocusMate/JourneyTimerController.swift b/ios/FocusMate/JourneyTimerController.swift
+index 386f34f..4337197 100644
+--- a/ios/FocusMate/JourneyTimerController.swift
++++ b/ios/FocusMate/JourneyTimerController.swift
+@@ -189,6 +189,13 @@ final class JourneyTimerController {
+         showsSaveWarning = !arrivalPersisted
+     }
+ 
++    /// 도착 안내의 '확인'이 부른다. 도착 상태에서만 저장을 다시 시도하고, 저장본이 도착 상태인지 돌려준다.
++    func ensureArrivalSaved() -> Bool {
++        guard status == .arrived else { return false }
++        retryArrivalIfNeeded()
++        return arrivalPersisted
++    }
++
+     private func notifyObserver() { observer?.timerDidChange(status: status, remainingSeconds: remainingSeconds) }
+ 
+     private func save(_ elapsed: Int, paused: Bool) -> Bool {
+diff --git a/ios/FocusMateTests/ArrivalBriefingControllerTests.swift b/ios/FocusMateTests/ArrivalBriefingControllerTests.swift
+new file mode 100644
+index 0000000..6027898
+--- /dev/null
++++ b/ios/FocusMateTests/ArrivalBriefingControllerTests.swift
+@@ -0,0 +1,208 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++@MainActor
++private final class FakeArrivalProgress: ArrivalProgress {
++    var isArrived = true
++    private(set) var ensureCalls = 0
++    func ensureArrivalSaved() -> Bool {
++        ensureCalls += 1
++        return true
++    }
++}
++
++@MainActor
++private final class FakeArrivalConfirmer: ArrivalConfirming {
++    private var results: [LifecycleActionResult]
++    private(set) var timerArrivedArgs: [Bool] = []
++    private weak var progress: FakeArrivalProgress?
++    private(set) var ensureCallsAtConfirm: [Int] = []
++
++    init(results: [LifecycleActionResult] = [.done], progress: FakeArrivalProgress? = nil) {
++        self.results = results
++        self.progress = progress
++    }
++
++    func confirmArrival(timerArrived: Bool) -> LifecycleActionResult {
++        timerArrivedArgs.append(timerArrived)
++        ensureCallsAtConfirm.append(progress?.ensureCalls ?? -1)
++        return results.isEmpty ? .done : results.removeFirst()
++    }
++}
++
++@MainActor
++final class ArrivalBriefingControllerTests: XCTestCase {
++    private struct Rig {
++        let controller: ArrivalBriefingController
++        let progress: FakeArrivalProgress
++        let confirmer: FakeArrivalConfirmer
++        let sleeper: QueuedSleep
++    }
++
++    private func content() -> ArrivalBriefingContent {
++        let journey = BoardingFixtures.journey(
++            minutes: 25, busID: "2014", destinationStopID: "seoulForestGate", phase: .departed, elapsedSeconds: 1500)
++        return ArrivalBriefingContent(journey: journey)!
++    }
++
++    private func rig(results: [LifecycleActionResult] = [.done]) -> Rig {
++        let progress = FakeArrivalProgress()
++        let confirmer = FakeArrivalConfirmer(results: results, progress: progress)
++        let sleeper = QueuedSleep()
++        let controller = ArrivalBriefingController(
++            content: content(), progress: progress, confirmer: confirmer,
++            interval: .milliseconds(1700), sleep: { await sleeper.sleep($0) })
++        return Rig(controller: controller, progress: progress, confirmer: confirmer, sleeper: sleeper)
++    }
++
++    private func playToEnd(_ r: Rig) async {
++        let task = Task { await r.controller.begin(reduceMotion: false) }
++        await r.sleeper.untilSuspended(count: 1)
++        r.sleeper.resumeOldest()
++        await r.sleeper.untilSuspended(count: 2)
++        r.sleeper.resumeOldest()
++        await task.value
++    }
++
++    // 깨짐: 문구·경로 텍스트 조립이 바뀌면 실패.
++    func test도착_안내_내용은_경로_문구와_세_문장을_만든다() {
++        let c = content()
++        XCTAssertEqual(c.routeText, "2014 · 서울숲 입구 도착")
++        XCTAssertEqual(c.sentences, ["곧 서울숲 입구에 도착합니다", "버스가 멈추면 일어나주세요", "카드를 찍고 내려주세요"])
++    }
++
++    // 깨짐: 카탈로그 밖 버스를 nil 대신 내용으로 만들면 실패.
++    func test카탈로그_밖_버스면_내용이_만들어지지_않는다() {
++        let journey = BoardingFixtures.journey(busID: "no-such-bus", destinationStopID: "seoulForestGate", phase: .departed)
++        XCTAssertNil(ArrivalBriefingContent(journey: journey))
++    }
++
++    // 깨짐: 카탈로그 밖 도착지를 nil 대신 내용으로 만들면 실패.
++    func test카탈로그_밖_도착지면_내용이_만들어지지_않는다() {
++        let journey = BoardingFixtures.journey(busID: "2014", destinationStopID: "no-such-stop", phase: .departed)
++        XCTAssertNil(ArrivalBriefingContent(journey: journey))
++    }
++
++    // 깨짐: 간격이 1700ms가 아니거나 순서가 틀리거나 중간에 확인 버튼이 먼저 켜지면 실패.
++    func test문장이_순서대로_나온_뒤_마지막에만_확인_버튼과_포커스가_생긴다() async {
++        let r = rig()
++        let task = Task { await r.controller.begin(reduceMotion: false) }
++        await r.sleeper.untilSuspended(count: 1)
++        XCTAssertEqual(r.controller.visibleIndex, 0)
++        XCTAssertFalse(r.controller.showsConfirm)
++        XCTAssertNil(r.controller.focusTarget)
++
++        r.sleeper.resumeOldest()
++        await r.sleeper.untilSuspended(count: 2)
++        XCTAssertEqual(r.controller.visibleIndex, 1)
++        XCTAssertFalse(r.controller.showsConfirm)
++
++        r.sleeper.resumeOldest()
++        await task.value
++        XCTAssertEqual(r.controller.visibleIndex, 2)
++        XCTAssertTrue(r.controller.showsConfirm)
++        XCTAssertEqual(r.controller.focusTarget, .confirmButton)
++        XCTAssertEqual(r.sleeper.requested, [.milliseconds(1700), .milliseconds(1700)])
++    }
++
++    // 깨짐: 동작 줄이기에서 sleep을 요청하거나 전체/확인을 즉시 켜지 않으면 실패.
++    func test동작_줄이기는_대기_없이_전체_문장과_확인_버튼을_보여준다() async {
++        let r = rig()
++        await r.controller.begin(reduceMotion: true)
++        XCTAssertTrue(r.controller.showsAll)
++        XCTAssertTrue(r.controller.showsConfirm)
++        XCTAssertEqual(r.controller.visibleIndex, 2)
++        XCTAssertEqual(r.sleeper.requested.count, 0)
++    }
++
++    // 깨짐: reset이 index/확인 버튼을 되돌리지 않으면 실패.
++    func testreset_뒤_다시_시작하면_처음부터_진행한다() async {
++        let r = rig()
++        await playToEnd(r)
++        r.controller.reset()
++        XCTAssertEqual(r.controller.visibleIndex, 0)
++        XCTAssertFalse(r.controller.showsConfirm)
++
++        let again = Task { await r.controller.begin(reduceMotion: false) }
++        await r.sleeper.untilSuspended(count: 3)
++        XCTAssertEqual(r.controller.visibleIndex, 0)
++        XCTAssertFalse(r.controller.showsConfirm)
++        r.sleeper.resumeOldest()
++        await r.sleeper.untilSuspended(count: 4)
++        r.sleeper.resumeOldest()
++        await again.value
++    }
++
++    // 깨짐: sleep 뒤 토큰을 확인하지 않아 reset 이전 대기가 index를 올리면 실패.
++    func test진행_중_reset되면_이전_begin은_더_진행하지_않는다() async {
++        let r = rig()
++        let old = Task { await r.controller.begin(reduceMotion: false) }
++        await r.sleeper.untilSuspended(count: 1)
++        r.controller.reset()
++
++        r.sleeper.resume(at: 0)
++        await old.value
++
++        XCTAssertEqual(r.controller.visibleIndex, 0)
++        XCTAssertFalse(r.controller.showsConfirm)
++        XCTAssertEqual(r.sleeper.requested.count, 1)
++    }
++
++    // 깨짐: showsConfirm 가드가 없어 확인 전 confirm이 저장·확정을 부르면 실패.
++    func test확인_버튼이_나오기_전_confirm은_거절되고_확정을_부르지_않는다() async {
++        let r = rig()
++        let task = Task { await r.controller.begin(reduceMotion: false) }
++        await r.sleeper.untilSuspended(count: 1)
++
++        let result = r.controller.confirm()
++
++        XCTAssertEqual(result, .rejected)
++        XCTAssertEqual(r.confirmer.timerArrivedArgs.count, 0)
++        XCTAssertEqual(r.progress.ensureCalls, 0)
++
++        r.sleeper.resumeOldest()
++        await r.sleeper.untilSuspended(count: 2)
++        r.sleeper.resumeOldest()
++        await task.value
++    }
++
++    // 깨짐: ensureArrivalSaved를 안 부르거나 confirmer 뒤에 부르거나 isArrived를 넘기지 않으면 실패.
++    func test확인하면_도착_저장을_먼저_보장한_뒤_확정하고_done을_돌려준다() async {
++        let r = rig()
++        r.progress.isArrived = false
++        await playToEnd(r)
++
++        let result = r.controller.confirm()
++
++        XCTAssertEqual(result, .done)
++        XCTAssertEqual(r.progress.ensureCalls, 1)
++        XCTAssertEqual(r.confirmer.ensureCallsAtConfirm, [1])
++        XCTAssertEqual(r.confirmer.timerArrivedArgs, [false])
++    }
++
++    // 깨짐: 저장 실패 때 showsSaveFailure를 켜지 않으면 실패.
++    func test확정_저장_실패는_실패_표시를_켠다() async {
++        let r = rig(results: [.saveFailed])
++        await playToEnd(r)
++
++        let result = r.controller.confirm()
++
++        XCTAssertEqual(result, .saveFailed)
++        XCTAssertTrue(r.controller.showsSaveFailure)
++        XCTAssertTrue(r.controller.showsConfirm)
++    }
++
++    // 깨짐: 재시도에서 ensureArrivalSaved를 다시 부르지 않거나 성공 뒤 실패 표시가 남으면 실패.
++    func test저장_실패_뒤_다시_확인하면_저장을_다시_보장하고_실패_표시가_사라진다() async {
++        let r = rig(results: [.saveFailed, .done])
++        await playToEnd(r)
++        _ = r.controller.confirm()
++
++        let retry = r.controller.confirm()
++
++        XCTAssertEqual(retry, .done)
++        XCTAssertEqual(r.progress.ensureCalls, 2)
++        XCTAssertFalse(r.controller.showsSaveFailure)
++    }
++}
+diff --git a/ios/FocusMateTests/JourneyTimerArrivalProgressTests.swift b/ios/FocusMateTests/JourneyTimerArrivalProgressTests.swift
+new file mode 100644
+index 0000000..0b0fda3
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyTimerArrivalProgressTests.swift
+@@ -0,0 +1,78 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// JourneyTimerController 의 ArrivalProgress 채택 검증.
++@MainActor
++final class JourneyTimerArrivalProgressTests: XCTestCase {
++    private struct Rig {
++        let controller: JourneyTimerController
++        let clock: ManualJourneyClock
++        let saver: FakeProgressSaver
++    }
++
++    private func makeRig(elapsed: Int, paused: Bool = false, autoStart: Bool = true, results: [Bool] = []) -> Rig {
++        let clock = ManualJourneyClock()
++        let saver = FakeProgressSaver(results: results)
++        let journey = BoardingFixtures.journey(minutes: 25, phase: .departed, elapsedSeconds: elapsed, paused: paused)
++        let controller = JourneyTimerController(
++            journey: journey, autoStart: autoStart, saver: saver, clock: clock,
++            ticker: clock, announcer: RecordingAnnouncer())
++        return Rig(controller: controller, clock: clock, saver: saver)
++    }
++
++    // 깨짐: isArrived가 status == .arrived 와 연결되지 않으면 실패.
++    func test총_시간까지_경과한_타이머는_도착_상태다() {
++        let r = makeRig(elapsed: 1500, autoStart: false)
++        r.controller.appear()
++        let progress: ArrivalProgress = r.controller
++        XCTAssertTrue(progress.isArrived)
++    }
++
++    // 깨짐: 항상 true를 돌려주면 실패.
++    func test진행_중인_타이머는_도착_상태가_아니다() {
++        let r = makeRig(elapsed: 100)
++        r.controller.appear()
++        let progress: ArrivalProgress = r.controller
++        XCTAssertFalse(progress.isArrived)
++    }
++
++    // 깨짐: 미도착인데 저장을 시도하면 실패.
++    func test도착_전에는_ensureArrivalSaved가_저장을_시도하지_않는다() {
++        let r = makeRig(elapsed: 100)
++        r.controller.appear()
++        let before = r.saver.writes.count
++
++        _ = r.controller.ensureArrivalSaved()
++
++        XCTAssertEqual(r.saver.writes.count, before)
++    }
++
++    // 깨짐: 재시도 저장이 (총 시간, paused true)가 아니거나 성공 값을 돌려주지 않으면 실패.
++    func test도착_저장이_실패했으면_ensureArrivalSaved가_한_번_더_저장하고_성공을_돌려준다() {
++        let r = makeRig(elapsed: 1499, results: [false])
++        r.controller.appear()
++        r.clock.advance(by: .seconds(1))
++        XCTAssertEqual(r.controller.status, .arrived)
++        XCTAssertEqual(r.saver.writes.map(\.elapsed), [1500])
++
++        let saved = r.controller.ensureArrivalSaved()
++
++        XCTAssertTrue(saved)
++        XCTAssertEqual(r.saver.writes.map(\.elapsed), [1500, 1500])
++        XCTAssertEqual(r.saver.writes.map(\.paused), [true, true])
++    }
++
++    // 깨짐: 이미 저장 성공인데 또 저장하면 실패.
++    func test이미_저장_성공한_도착은_ensureArrivalSaved가_추가_저장_없이_true다() {
++        let r = makeRig(elapsed: 1499, results: [true])
++        r.controller.appear()
++        r.clock.advance(by: .seconds(1))
++        XCTAssertEqual(r.saver.writes.count, 1)
++
++        let saved = r.controller.ensureArrivalSaved()
++
++        XCTAssertTrue(saved)
++        XCTAssertEqual(r.saver.writes.count, 1)
++    }
++}

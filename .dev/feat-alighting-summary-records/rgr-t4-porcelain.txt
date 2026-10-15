@@ -1,0 +1,14 @@
+ M ios/FocusMate/JourneyTimerController.swift
+ M ios/FocusMate/RecordSection.swift
+?? .dev/feat-alighting-summary-records/
+?? ios/FocusMate/ArrivalBriefingController.swift
+?? ios/FocusMate/JourneyAlighting.swift
+?? ios/FocusMate/RecordMemoDraft.swift
+?? ios/FocusMate/RecordsCalendar.swift
+?? ios/FocusMateTests/AlightingSnapshotTests.swift
+?? ios/FocusMateTests/AlightingTagControllerTests.swift
+?? ios/FocusMateTests/ArrivalBriefingControllerTests.swift
+?? ios/FocusMateTests/JourneyTimerArrivalProgressTests.swift
+?? ios/FocusMateTests/RecordMemoDraftTests.swift
+?? ios/FocusMateTests/RecordsBrowserTests.swift
+?? ios/FocusMateTests/RecordsCalendarTests.swift

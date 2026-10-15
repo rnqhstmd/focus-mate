@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// 메인 진행 여정 카드. 정보 묶음은 한 요소로 읽히고, 이어가기 버튼은 따로 읽힌다(FR-1, FR-12).
+/// 메인 진행 여정 카드. 정보 묶음은 한 요소로 읽히고, 이어가기·하차하기 버튼은 따로 읽힌다(FR-1, FR-12).
 /// 컨테이너에는 식별자를 두지 않는다 — 스크롤 뷰 안 중첩 컨테이너의 식별자는 흡수될 수 있다.
 struct ActiveJourneyCardView: View {
     let content: ActiveJourneyCardContent
     let onResume: () -> Void
+    let onAlight: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -27,6 +28,13 @@ struct ActiveJourneyCardView: View {
                 .buttonStyle(.borderedProminent)
                 .accessibilityLabel(JourneyLifecycleText.resumeButtonLabel)
                 .accessibilityIdentifier("main.resumeJourney")
+            }
+            if content.showsAlight {
+                Button(action: onAlight) {
+                    Text(JourneyLifecycleText.alightButton).frame(minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("open.alighting")
             }
         }
     }

@@ -3,7 +3,7 @@ import Observation
 
 enum LaunchState: Equatable { case loading, ready(LaunchRoute), failed(StorageIssue) }
 enum Destination: String, Hashable, CaseIterable {
-    case preparation, records, settings, profile, time, board, boarding, journey
+    case preparation, records, settings, profile, time, board, boarding, journey, alighting, alightingSummary
     var title: String {
         switch self {
         case .time: "시간 선택"
@@ -14,6 +14,8 @@ enum Destination: String, Hashable, CaseIterable {
         case .records: "기록"
         case .settings: "설정"
         case .profile: "마이페이지"
+        case .alighting: "하차 태그"
+        case .alightingSummary: "요약"
         }
     }
 }
@@ -81,6 +83,8 @@ final class AppModel {
     var abandonNotice: String?
     /// 이번 실행에서 이어가기 저장에 성공한 여정 id. 타이머가 한 번 소비한다.
     @ObservationIgnored var resumeEntryJourneyID: String?
+    /// 방금 하차한 여정의 요약. 메모리 전용이라 재실행하면 사라진다(AC-13). 설정은 Alighting 확장에서만 한다.
+    var alightingSummary: AlightingSummary?
     private(set) var recoveryFailure: StorageRecoveryIssue?
     private(set) var isRecovering = false
     private(set) var hasAttemptedCleanup = false
@@ -90,11 +94,15 @@ final class AppModel {
     private let cardFactory: CardSnapshotFactory
     let journeyFactory: ActiveJourneyFactory
     let soundPreview: SoundPreviewController
+    /// 하차 시각·로컬 날짜, 기록 화면의 '오늘'.
+    let recordClock: RecordClock
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var hasAttemptedSupplement = false
     init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
-         soundPreview: SoundPreviewController? = nil, journeyFactory: ActiveJourneyFactory = .init()) {
+         soundPreview: SoundPreviewController? = nil, journeyFactory: ActiveJourneyFactory = .init(),
+         recordClock: RecordClock = .live) {
         self.store = store
+        self.recordClock = recordClock
         self.cardFactory = cardFactory
         self.journeyFactory = journeyFactory
         self.soundPreview = soundPreview ?? SoundPreviewController(sound: .bus,
@@ -245,21 +253,17 @@ final class AppModel {
         return false
     }
 
+    /// 기록 메모 저장. 화면이 실패를 직접 안내하므로 일반 `saveFailure`를 남기지 않는다(W07 규칙).
     @discardableResult
-    func saveRecordMemo(_ memo: String, forJourneyID id: String) -> Bool {
-        guard let original = snapshotForRecordChange() else { return false }
-        do {
-            let records = try original.records.updatingMemo(memo, forJourneyID: id)
-            // Swift String의 정규화 동등성 대신 저장 원문의 코드 단위를 비교한다.
-            let unchanged = zip(original.records.items, records.items).allSatisfy {
-                $0.memo.utf16.elementsEqual($1.memo.utf16)
-            }
-            guard !unchanged else { saveFailure = nil; return true }
-            return save(original.updating(records: records))
-        } catch let issue as RecordValidationIssue {
-            saveFailure = .invalidState(.invalidRecords(issue))
-        } catch { saveFailure = .writeFailed }
-        return false
+    func updateRecordMemo(_ memo: String, forJourneyID id: String) -> LifecycleActionResult {
+        guard let original = snapshotForRecordChange() else { return .rejected }
+        guard let records = try? original.records.updatingMemo(memo, forJourneyID: id) else { return .saveFailed }
+        // Swift String의 정규화 동등성 대신 저장 원문의 코드 단위를 비교한다.
+        let unchanged = zip(original.records.items, records.items).allSatisfy {
+            $0.memo.utf16.elementsEqual($1.memo.utf16)
+        }
+        guard !unchanged else { return .done }
+        return saveHandlingFailure(original.updating(records: records)) ? .done : .saveFailed
     }
 
     private func snapshotForRecordChange() -> AppSnapshot? {
@@ -277,12 +281,16 @@ final class AppModel {
         // 승차권·승차 태그는 확정된 준비가 있을 때만 열린다(어떤 경로로도 미완성 준비로 들어가지 않는다).
         if destination == .board || destination == .boarding, confirmedPreparation == nil || hasDepartedJourney { return }
         if destination == .journey, activeJourney == nil { return }
+        // 하차 화면은 모델 메서드로만 열고, 도착 여정이 남아 있으면 새 여정 경로를 막는다(BR-6).
+        if destination == .alighting || destination == .alightingSummary { return }
+        if activeJourney?.isArrived == true, [.time, .preparation, .board, .boarding].contains(destination) { return }
         path.append(destination)
     }
     func goBack() {
         guard launchState == .ready(.main), !path.isEmpty else { return }
         // 출발한 여행 화면에서 메인으로 가는 길은 포기뿐이다(W07, FR-10).
         if path.last == .journey, hasDepartedJourney { return }
+        if path.last == .alighting || path.last == .alightingSummary { return }
         path.removeLast()
     }
 }

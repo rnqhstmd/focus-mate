@@ -146,7 +146,7 @@ struct UITestBootstrap {
     }
 
     private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
-        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys)
+        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys).union(recordSeeds)
 
     func prepare() throws {
         guard let seed else { return }
@@ -161,7 +161,7 @@ struct UITestBootstrap {
                 .updating(journey: JourneySection(active: Self.seededJourney)))
         case let name where Self.timerSeeds[name] != nil:
             try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
-        case let name where Self.lifecycleSeeds[name] != nil:
+        case let name where Self.lifecycleSeeds[name] != nil || Self.recordSeeds.contains(name):
             guard let snapshot = Self.lifecycleSnapshot(name) else { throw SetupIssue.invalidArguments }
             try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
         case let name where Self.v3Seeds.contains(name):
@@ -296,7 +296,11 @@ struct UITestBootstrap {
     }
 
     /// W07 시드: 재실행된 상태(출발 후 일시정지)의 2014번 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
-    private struct LifecycleSeed { let originStopID: String; let direction: Int; let elapsed: Int? }
+    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destinationStopID`가 있으면 계산 도착지 대신 그 값을 저장한다.
+    private struct LifecycleSeed {
+        let originStopID: String; let direction: Int; let elapsed: Int?
+        var task = "생명주기 시드"; var withRecord = true; var destinationStopID: String?
+    }
     private static let lifecycleSeeds: [String: LifecycleSeed] = [
         "lifePaused90": .init(originStopID: "seongsu", direction: 1, elapsed: 90),
         "lifePaused600": .init(originStopID: "seongsu", direction: 1, elapsed: 600),
@@ -308,26 +312,67 @@ struct UITestBootstrap {
         "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", direction: 1, elapsed: 900),
         "lifeArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500),
         "lifeAwaiting": .init(originStopID: "seongsu", direction: 1, elapsed: nil),
+        "alightPaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499, task: "논문", withRecord: false),
+        "alightArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문", withRecord: false),
+        "alightMismatchArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문",
+                                       withRecord: false, destinationStopID: "ttukseom"),
     ]
     private static let lifecycleRecord = RecordSnapshot(
         id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014", tag: "독서",
         tagColor: "#12ABef", task: "책 한 챕터 읽기", minutes: 25, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
 
+    /// W09 기록 화면 시드. 실행한 날의 정오(로컬)를 기준으로 만들어 날짜 경계에 흔들리지 않는다. 진행 여정은 없다.
+    private static let recordSeeds: Set<String> = ["recordsMemo", "recordsTwoYears"]
+
+    private static func recordSnapshot(_ name: String) -> AppSnapshot? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = Date()
+        guard let noon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now),
+              let year = calendar.dateComponents([.year], from: now).year else { return nil }
+        func record(_ id: String, at date: Date, memo: String = "") -> RecordSnapshot? {
+            let formatter = ISO8601DateFormatter()
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            let key = RecordDay.from(date, timeZone: .current).key
+            return RecordSnapshot(id: id, completedAt: formatter.string(from: date), date: key, bus: "2014", tag: "독서",
+                                  tagColor: PreparationTagColor.sand.recordHex, task: "책 한 챕터 읽기", minutes: 25,
+                                  sound: "버스", from: "성수역", to: "서울숲 입구", memo: memo)
+        }
+        let items: [RecordSnapshot?]
+        switch name {
+        case "recordsMemo":
+            items = (0..<12).map { record("records-memo-\($0)", at: noon.addingTimeInterval(Double(-60 * $0)),
+                                          memo: $0 == 1 ? "집중 잘됨" : "") }
+        case "recordsTwoYears":
+            func lastYear(_ month: Int, _ day: Int) -> Date? {
+                calendar.date(from: DateComponents(year: year - 1, month: month, day: day, hour: 12))
+            }
+            items = [record("records-year-0", at: noon),
+                     lastYear(6, 20).flatMap { record("records-year-1", at: $0) },
+                     lastYear(3, 10).flatMap { record("records-year-2", at: $0) }]
+        default: return nil
+        }
+        let records = items.compactMap { $0 }
+        guard records.count == items.count else { return nil }
+        return readySnapshot.issuingCard(fixedCard).updating(records: RecordSection(items: records))
+    }
+
     static func lifecycleSnapshot(_ name: String) -> AppSnapshot? {
+        if recordSeeds.contains(name) { return recordSnapshot(name) }
         guard let seed = lifecycleSeeds[name], let bus = BusLine.all.first(where: { $0.id == "2014" }),
               let origin = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction, stops: 0),
               let destination = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction,
                                                      stops: 25 / bus.minutesPerStop) else { return nil }
         let journey = JourneySnapshot(
             id: "seed-life", cardID: fixedCard.id, originStopID: seed.originStopID, direction: seed.direction, minutes: 25,
-            busID: bus.id, destinationStopID: destination.id,
-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "생명주기 시드",
+            busID: bus.id, destinationStopID: seed.destinationStopID ?? destination.id,
+            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: seed.task,
             sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000),
             phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
             progress: JourneySnapshot.Progress(elapsedSeconds: seed.elapsed ?? 0), paused: seed.elapsed != nil)
         return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: origin, currentStation: origin)
             .issuingCard(fixedCard)
-            .updating(records: RecordSection(items: [lifecycleRecord]))
+            .updating(records: RecordSection(items: seed.withRecord ? [lifecycleRecord] : []))
             .updating(journey: JourneySection(active: journey))
     }
 

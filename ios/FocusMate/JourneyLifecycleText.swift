@@ -10,6 +10,8 @@ enum JourneyLifecycleText {
     /// 낭독에서는 화살표를 읽지 않는다.
     static let resumeButtonLabel = "이전 여정 이어가기"
     static let newJourneyButton = "새 여정 시작"
+    /// 도착 여정 카드의 유일한 동작(W09).
+    static let alightButton = "하차하기"
 
     static let newJourneyTitle = "새 여정을 시작할까요?"
     static let newJourneyMessage = "이전 여정은 그만두고 새 여행을 준비해요. 완료 기록은 남기지 않아요."

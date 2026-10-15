@@ -11,11 +11,15 @@ struct JourneyView: View {
     @State private var timer: JourneyTimerController?
     /// 지도 상태는 이 화면 수명 동안만 있다. 다시 들어오면 기본값으로 시작한다(FR-9).
     @State private var map: JourneyMapController?
+    /// 도착 안내. 타이머가 생긴 뒤 여정 내용으로 한 번 만든다(정류장 이름 고정).
+    @State private var arrival: ArrivalBriefingController?
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     var body: some View {
         Group {
-            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing, timer: timer, map: map) }
+            if let briefing {
+                JourneyScreen(model: model, services: services, briefing: briefing, timer: timer, map: map, arrival: arrival)
+            }
             else { Color.clear }
         }
         .onAppear {
@@ -39,6 +43,9 @@ struct JourneyView: View {
                                        clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
                                        observer: liveActivity)
         if resumed { services.announcer.announce(JourneyLifecycleText.resumeAnnouncement) }
+        if let timer, let content = ArrivalBriefingContent(journey: journey) {
+            arrival = ArrivalBriefingController(content: content, progress: timer, confirmer: model, sleep: services.sleep)
+        }
         // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
         if let timer, let course = CourseJourney(journey: journey) {
             map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,
@@ -54,23 +61,28 @@ private struct JourneyScreen: View {
     let briefing: DepartureBriefingController
     let timer: JourneyTimerController?
     let map: JourneyMapController?
+    let arrival: ArrivalBriefingController?
     @AccessibilityFocusState private var startFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     private var reduceMotion: Bool { services.reduceMotion(system: systemReduceMotion) }
     private var awaitingDeparture: Bool { model.activeJourney?.phase == .awaitingDeparture && !briefing.isConfirmed }
+    private var arrived: Bool { timer?.status == .arrived }
 
     var body: some View {
         // Group은 수식어를 자식마다 나눠 붙여 안쪽 식별자를 덮으므로, 컨테이너 하나로 감싼다.
         ZStack {
             if awaitingDeparture { departureBriefing }
             else if let timer {
+                // 도착하면 타이머·지도 내용은 비우고 도착 안내를 덮는다(BR-7). 타이머 생명주기는 유지한다.
+                let concealed = arrived && arrival != nil
                 #if DEBUG
-                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, path: model.path)
+                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, concealed: concealed, path: model.path)
                 #else
-                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion)
+                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, concealed: concealed)
                 #endif
+                if concealed, let arrival { ArrivalBriefingView(controller: arrival) }
             } else { Color.clear }
         }
         // 하단 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다. 일시정지가 아니면 버튼 없이 아래 여백만 남는다.
@@ -84,6 +96,7 @@ private struct JourneyScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(NavigationPopBlocker())
         .task { if awaitingDeparture { await briefing.begin(reduceMotion: reduceMotion) } }
+        .task(id: arrived) { if arrived, let arrival { await arrival.begin(reduceMotion: reduceMotion) } }
         // 생명주기는 여기 한 곳에서 단계별로 나눈다. 비활성(제어 센터 등)은 무시하고 시간은 계속 흐른다.
         .onChange(of: scenePhase) { _, phase in
             if awaitingDeparture {
@@ -92,10 +105,15 @@ private struct JourneyScreen: View {
                     Task { await briefing.begin(reduceMotion: reduceMotion) }
                 }
             } else if let timer {
-                if phase == .background { timer.enterBackground() }
-                else if phase == .active {
+                if phase == .background {
+                    timer.enterBackground()
+                    if arrived { arrival?.reset() }
+                } else if phase == .active {
                     services.beforeForeground()
                     timer.returnToForeground()
+                    if arrived, let arrival, !arrival.showsConfirm {
+                        Task { await arrival.begin(reduceMotion: reduceMotion) }
+                    }
                 }
             }
         }

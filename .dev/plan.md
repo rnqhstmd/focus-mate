@@ -11,7 +11,8 @@
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | feat/mapkit-virtual-course | 완료 |
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | feat/abandon-resume-lifecycle | 완료 |
 | W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 완료 |
-| W09 | [P4] 하차 태그·요약·기록·분석 | 통합 | journey FR-12, records FR-6 | W05, W08 | - | 대기 |
+| W09 | [P4] 하차 태그·요약·기록(W09a) | 통합 | journey FR-12, records FR-6(요약·기록·메모) | W05, W08 | feat/alighting-summary-records | 완료 (#23) |
+| W09b | [P4] 분석(주/월·태그·인사이트) | records | records FR-6(분석) | W09 | - | 대기 |
 | W10 | [P5] 카드 꾸미기 | card | card FR-4, NFR-2 | W01 | codex/feat-card-customization | 완료 |
 | W11 | [P5] 마이페이지 | card | card FR-5 | W01, W08 | feat/my-page | 완료 |
 | W12 | [P5] 접근성·동작 설정 | preferences | preferences FR-3 | - | - | 폐기 |
@@ -35,6 +36,7 @@
 | 7 | W14 | 6 |
 | 8 | W16 | 6 (W06) · 2 (W02) — W09와 동시 진행 금지(아래) |
 
+- W09b는 W09(W09a) 뒤에 진행한다. W14는 W09b를 기다리지 않는다(출시 게이트는 W09a로 해소).
 - 가장 긴 경로: W00 → W02 → W03 → W04 → W05 → W06/W07/W09 → W14 (7단계).
 - 같은 묶음이라도 W03·W04는 아래 Phase 0 확인이 끝나야 착수한다.
 - 묶음 2의 W08·W13은 W00이 만든 저장 섹션만 고치고 저장 파일 구조를 다시 바꾸지 않는다.
@@ -78,6 +80,7 @@ W16 범위(2026-10-15 사용자 결정):
   - W07 완료 인계(2026-10-15): 이어가기 카드·새 여정 확인·일시정지 중 포기 구현, 저장 형식 변경 없음. W09: 도착 여정의 메인 처리(도착지를 현재 정류장으로 하는 '새 여정 시작')는 임시다. 하차 저장은 `endingActiveJourney(at:)`와 `reachedStation`(도착이면 저장된 도착지)을 재사용하고 `ActiveJourneyCardContent.Kind.arrived`를 하차 진입으로 바꾼다. W06: 머지 후 AC-3·V7 AC29·AC-33을 재실행하고, 하단 `safeAreaInset` 포기 바와 지도 도구 배치를 조정하며, 포기 호출은 `abandonJourney(timerPaused:)` 계약을 지킨다. W15: 변경 없음. 출시 게이트: 도착 화면(`journey.arrived`)에는 나가는 길이 없어 앱을 다시 켜야 메인으로 간다 — W09 하차 전 외부 배포(TestFlight 포함) 금지. Release 빌드의 DEBUG 코드 제외 확인과 확인 창 첫 VoiceOver 포커스는 W14.
   - W09: 승차 태그(`BoardingTagController`·`BoardingRules`·`BoardingTagView`)를 하차에 재사용할 수 있다. 하차 LCD는 카드 이름(FLOWS 2차).
   - W14: 실제 VoiceOver 포커스('시작' 버튼)·카드 활성화(VoiceOver/Full Keyboard Access)·승차 햅틱 체감, 제스처 시스템 취소 후 재태그, Release 산출물에 `fm-ui` 문자열 부재를 실기기에서 확인. Phase 0 '최신 승차 단말기' 브라우저 확인은 사용자 결정으로 보류.
+  - W09 완료 인계(2026-10-15): W07 출시 게이트(도착 화면에 나가는 길 없음)는 하차·요약으로 해소했다. 저장 형식 v4 변경 없음. W09b: `RecordsCalendar`/`RecordsBrowser`·기록 화면을 재사용해 분석을 얹는다. W14: 잔디 VoiceOver 조정·하차 태그 첫 초점·요약 메모 입력을 실기기에서 확인한다. W15: 변경 없음(도착 시 기존 종료 경로).
 - W06(MapKit 가상 코스, feat/mapkit-virtual-course, [#18](https://github.com/rnqhstmd/focus-mate/pull/18)): 여행 화면 배경 지도, 정류장 id별 좌표의 가상 코스, 진도 기반 버스 이동, 따라가기/자유 탐색, 지도 테마 시트, 하단 남은 시간·정류장·거리. 저장 형식 변경 없음.
   - W07: 여행 화면 나가기를 만들면 `JourneyView.onDisappear`의 `map.leave()`가 시트를 닫는다(AC-23 UI 검증은 W07에서 추가). 일시정지 버튼은 왼쪽 위 원형으로 옮겼다.
   - W09: 저장 도착지가 계산 도착지와 다르면 지도를 생략한다(`CourseJourney.init?`) — 도착 안내도 같은 규칙. 도착 상태에서 지도 도구 활성 여부와 정류장 목록 펼침을 함께 정한다.

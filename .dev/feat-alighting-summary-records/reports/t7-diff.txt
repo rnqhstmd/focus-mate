@@ -1,0 +1,676 @@
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index 70d9c81..8b9572a 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -18,6 +18,12 @@ struct DestinationScreen: View {
+             BoardingTagView(model: model, services: services)
+         } else if destination == .journey {
+             JourneyView(model: model, services: services)
++        } else if destination == .alighting {
++            AlightingTagView(model: model, services: services)
++        } else if destination == .alightingSummary {
++            AlightingSummaryView(model: model, services: services)
++        } else if destination == .records {
++            RecordsView(model: model, services: services)
+         } else {
+             placeholderOrTime
+         }
+@@ -33,7 +39,6 @@ struct DestinationScreen: View {
+                 VStack(alignment: .leading, spacing: 16) {
+                     Text(destination.title).font(.largeTitle.bold())
+                         .accessibilityIdentifier("screen.\(destination.rawValue)")
+-                    if destination == .records { Text("아직 여행 기록이 없어요.").foregroundStyle(.secondary) }
+                     Spacer()
+                 }
+             }
+diff --git a/ios/FocusMate/RecordMemoEditor.swift b/ios/FocusMate/RecordMemoEditor.swift
+new file mode 100644
+index 0000000..211f46d
+--- /dev/null
++++ b/ios/FocusMate/RecordMemoEditor.swift
+@@ -0,0 +1,59 @@
++import SwiftUI
++
++/// 기록 메모 편집 시트(FR-10). 200자 제한은 요약 화면과 같은 `RecordMemoDraft`를 쓴다.
++@MainActor
++struct RecordMemoEditor: View {
++    @Bindable var model: AppModel
++    let recordID: String
++    let onClose: () -> Void
++    @State private var draft: RecordMemoDraft
++    /// 입력 칸 원문. 잘린 값으로 바뀔 때만 되돌려 써야 칸이 갱신된다.
++    @State private var input: String
++    @State private var showsFailure = false
++
++    init(model: AppModel, recordID: String, memo: String, onClose: @escaping () -> Void) {
++        self.model = model
++        self.recordID = recordID
++        self.onClose = onClose
++        let initial = RecordMemoDraft(text: memo)
++        _draft = State(initialValue: initial)
++        _input = State(initialValue: initial.text)
++    }
++
++    var body: some View {
++        NavigationStack {
++            VStack(alignment: .leading, spacing: 12) {
++                TextField("이번 여행을 한 줄로 남겨보세요", text: $input)
++                    .textFieldStyle(.roundedBorder)
++                    .accessibilityLabel("메모")
++                    .accessibilityIdentifier("recordMemo.field")
++                    .onChange(of: input) { _, value in
++                        draft.update(value)
++                        if draft.text != value { input = draft.text }
++                    }
++                Text(draft.counterText).font(.footnote).foregroundStyle(.secondary)
++                    .accessibilityLabel(draft.counterText).accessibilityIdentifier("recordMemo.counter")
++                if showsFailure {
++                    Text(JourneyTimerDisplay.transitionFailureText).foregroundStyle(.orange)
++                        .accessibilityIdentifier("recordMemo.saveFailure")
++                }
++                Spacer()
++            }
++            .padding(24)
++            .navigationTitle("메모").navigationBarTitleDisplayMode(.inline)
++            .toolbar {
++                ToolbarItem(placement: .cancellationAction) {
++                    Button("취소", action: onClose).accessibilityIdentifier("recordMemo.cancel")
++                }
++                ToolbarItem(placement: .confirmationAction) {
++                    Button("저장", action: save).accessibilityIdentifier("recordMemo.save")
++                }
++            }
++        }
++    }
++
++    private func save() {
++        if model.updateRecordMemo(draft.text, forJourneyID: recordID) == .done { onClose() }
++        else { showsFailure = true }
++    }
++}
+diff --git a/ios/FocusMate/RecordsView.swift b/ios/FocusMate/RecordsView.swift
+new file mode 100644
+index 0000000..ef130bc
+--- /dev/null
++++ b/ios/FocusMate/RecordsView.swift
+@@ -0,0 +1,179 @@
++import SwiftUI
++
++/// 기록 화면(FR-9): 연 단위 일합계 잔디, 선택 날짜의 기록 목록, 연도 이동, 메모 편집. 실제 완료 기록만 쓴다(FR-11).
++@MainActor
++struct RecordsView: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    @State private var browser: RecordsBrowser
++    @State private var editing: EditingMemo?
++
++    private struct EditingMemo: Identifiable { let id: String; let memo: String }
++
++    init(model: AppModel, services: JourneyServices) {
++        self.model = model
++        self.services = services
++        _browser = State(initialValue: RecordsBrowser(today: RecordDay.from(model.recordClock.now(),
++                                                                            timeZone: model.recordClock.timeZone())))
++    }
++
++    private var records: [RecordSnapshot] { model.snapshot?.records.items ?? [] }
++    private var timeZone: TimeZone { model.recordClock.timeZone() }
++
++    var body: some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 20) {
++                Text("기록").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
++                yearBar
++                Text(RecordsCalendar.summary(year: browser.year, records: records, today: browser.today).text)
++                    .foregroundStyle(.secondary).accessibilityIdentifier("records.summary")
++                heatmap
++                dayList
++            }
++            .padding(24)
++        }
++        .navigationTitle("기록").navigationBarTitleDisplayMode(.inline)
++        .sheet(item: $editing) { item in
++            RecordMemoEditor(model: model, recordID: item.id, memo: item.memo) { editing = nil }
++        }
++        #if DEBUG
++        .overlay(alignment: .bottomLeading) { diagnostics }
++        #endif
++    }
++
++    private var yearBar: some View {
++        HStack(spacing: 12) {
++            Button { browser.moveYear(by: -1, records: records) } label: {
++                Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
++            }
++            .disabled(!browser.canGoPreviousYear)
++            .accessibilityLabel("이전 연도").accessibilityIdentifier("records.year.previous")
++            Menu {
++                ForEach(RecordsCalendar.yearOptions(records: records, today: browser.today, selectedYear: browser.year),
++                        id: \.self) { year in
++                    Button("\(String(year))년") { browser.selectYear(year, records: records) }
++                }
++            } label: {
++                Text("\(String(browser.year))년").font(.title2.bold()).frame(minHeight: 44)
++            }
++            .accessibilityIdentifier("records.year.picker")
++            Button { browser.moveYear(by: 1, records: records) } label: {
++                Image(systemName: "chevron.right").frame(minWidth: 44, minHeight: 44)
++            }
++            .disabled(!browser.canGoNextYear)
++            .accessibilityLabel("다음 연도").accessibilityIdentifier("records.year.next")
++        }
++    }
++
++    private var heatmap: some View {
++        let cells = RecordsCalendar.cells(year: browser.year, records: records, today: browser.today)
++        let blanks = RecordsCalendar.leadingBlanks(year: browser.year)
++        let selected = cells.first { $0.day == browser.selectedDay }
++        return ScrollView(.horizontal, showsIndicators: false) {
++            LazyHGrid(rows: Array(repeating: GridItem(.fixed(14), spacing: 3), count: 7), spacing: 3) {
++                ForEach(0..<blanks, id: \.self) { _ in Color.clear.frame(width: 14, height: 14) }
++                ForEach(cells) { cell in
++                    RoundedRectangle(cornerRadius: 3)
++                        .fill(Self.color(level: cell.level).opacity(cell.isFuture ? 0.3 : 1))
++                        .overlay(RoundedRectangle(cornerRadius: 3)
++                            .stroke(cell.day == browser.selectedDay ? Color.primary : .clear, lineWidth: 1.5))
++                        .frame(width: 14, height: 14)
++                        .onTapGesture { browser.select(cell.day) }
++                }
++            }
++            .padding(.vertical, 4)
++        }
++        // 칸 365개를 하나씩 넘기지 않도록 격자 전체를 조정 가능한 요소 하나로 읽는다.
++        .accessibilityElement(children: .ignore)
++        .accessibilityLabel("\(String(browser.year))년 날짜별 여행 시간")
++        .accessibilityValue(selected?.accessibilityLabel ?? "")
++        .accessibilityAdjustableAction { direction in
++            switch direction {
++            case .increment: browser.stepDay(by: 1)
++            case .decrement: browser.stepDay(by: -1)
++            @unknown default: break
++            }
++        }
++        .accessibilityIdentifier("records.heatmap")
++    }
++
++    @ViewBuilder private var dayList: some View {
++        let visible = browser.visibleRecords(in: records)
++        VStack(alignment: .leading, spacing: 12) {
++            Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일").font(.headline)
++            if let empty = browser.emptyState(records: records) {
++                Text(empty == .noRecords ? "첫 여행을 마치면 잔디에 색이 채워져요. 하루하루 나만의 시간을 모아보세요."
++                                         : "이날은 완료한 여행이 없어요.")
++                    .foregroundStyle(.secondary).accessibilityIdentifier("records.empty")
++            }
++            ForEach(visible, id: \.id) { record in item(record) }
++            if browser.hasMore(in: records) {
++                Button("더 보기") { browser.showMore() }.buttonStyle(.bordered)
++                    .accessibilityIdentifier("records.more")
++            }
++        }
++    }
++
++    private func item(_ record: RecordSnapshot) -> some View {
++        let content = RecordListItemContent(record: record, timeZone: timeZone)
++        return VStack(alignment: .leading, spacing: 6) {
++            VStack(alignment: .leading, spacing: 4) {
++                Text(content.task).font(.headline)
++                Text("\(content.timeText) · \(content.minutesText) · \(content.tag)").foregroundStyle(.secondary)
++                Text(content.routeText).foregroundStyle(.secondary)
++                if !content.memo.isEmpty { Text(content.memo) }
++            }
++            .accessibilityElement(children: .combine)
++            .accessibilityIdentifier("records.item.\(record.id)")
++            Button(content.memoButtonTitle) { editing = EditingMemo(id: record.id, memo: record.memo) }
++                .buttonStyle(.bordered)
++                .accessibilityIdentifier("records.memo.\(record.id)")
++        }
++        .frame(maxWidth: .infinity, alignment: .leading)
++        .padding(12)
++        .background(RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.08)))
++    }
++
++    private static func color(level: Int) -> Color {
++        switch level {
++        case 0: Color.secondary.opacity(0.15)
++        case 1: Color.green.opacity(0.3)
++        case 2: Color.green.opacity(0.5)
++        case 3: Color.green.opacity(0.75)
++        default: Color.green
++        }
++    }
++
++    #if DEBUG
++    private var diagnostics: some View {
++        let object: [String: Any] = ["year": browser.year, "selected": browser.selectedDay.key,
++                                     "visibleCount": browser.visibleRecords(in: records).count,
++                                     "hasMore": browser.hasMore(in: records),
++                                     "canNext": browser.canGoNextYear, "canPrevious": browser.canGoPreviousYear]
++        let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
++            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
++        return VStack(spacing: 0) {
++            Text("기록 진단").font(.system(size: 1)).foregroundStyle(.clear)
++                .accessibilityValue(json).accessibilityIdentifier("test.records")
++            // XCUITest는 조정 가능 요소를 슬라이더가 아니면 움직이지 못한다. VoiceOver 조정과 같은 동작을 대신 부른다.
++            debugButton("다음 날", id: "test.records.nextDay") { browser.stepDay(by: 1) }
++            debugButton("전날", id: "test.records.previousDay") { browser.stepDay(by: -1) }
++            if let failure = services.failNextSave {
++                Button { failure.arm() } label: {
++                    Text("다음 저장 실패").font(.system(size: 1)).foregroundStyle(.clear)
++                        .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
++                }
++                .accessibilityLabel("다음 저장 실패").accessibilityIdentifier("test.records.failNextSave")
++            }
++        }
++    }
++
++    private func debugButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
++        Button(action: action) {
++            Text(label).font(.system(size: 1)).foregroundStyle(.clear)
++                .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
++        }
++        .accessibilityLabel(label).accessibilityIdentifier(id)
++    }
++    #endif
++}
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index 83ea44d..1886865 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -146,7 +146,7 @@ struct UITestBootstrap {
+     }
+ 
+     private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
+-        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys)
++        .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys).union(recordSeeds)
+ 
+     func prepare() throws {
+         guard let seed else { return }
+@@ -161,7 +161,7 @@ struct UITestBootstrap {
+                 .updating(journey: JourneySection(active: Self.seededJourney)))
+         case let name where Self.timerSeeds[name] != nil:
+             try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
+-        case let name where Self.lifecycleSeeds[name] != nil:
++        case let name where Self.lifecycleSeeds[name] != nil || Self.recordSeeds.contains(name):
+             guard let snapshot = Self.lifecycleSnapshot(name) else { throw SetupIssue.invalidArguments }
+             try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
+         case let name where Self.v3Seeds.contains(name):
+@@ -296,7 +296,11 @@ struct UITestBootstrap {
+     }
+ 
+     /// W07 시드: 재실행된 상태(출발 후 일시정지)의 2014번 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
+-    private struct LifecycleSeed { let originStopID: String; let direction: Int; let elapsed: Int? }
++    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destinationStopID`가 있으면 계산 도착지 대신 그 값을 저장한다.
++    private struct LifecycleSeed {
++        let originStopID: String; let direction: Int; let elapsed: Int?
++        var task = "생명주기 시드"; var withRecord = true; var destinationStopID: String?
++    }
+     private static let lifecycleSeeds: [String: LifecycleSeed] = [
+         "lifePaused90": .init(originStopID: "seongsu", direction: 1, elapsed: 90),
+         "lifePaused600": .init(originStopID: "seongsu", direction: 1, elapsed: 600),
+@@ -308,26 +312,67 @@ struct UITestBootstrap {
+         "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", direction: 1, elapsed: 900),
+         "lifeArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500),
+         "lifeAwaiting": .init(originStopID: "seongsu", direction: 1, elapsed: nil),
++        "alightPaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499, task: "논문", withRecord: false),
++        "alightArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문", withRecord: false),
++        "alightMismatchArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문",
++                                       withRecord: false, destinationStopID: "ttukseom"),
+     ]
+     private static let lifecycleRecord = RecordSnapshot(
+         id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014", tag: "독서",
+         tagColor: "#12ABef", task: "책 한 챕터 읽기", minutes: 25, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
+ 
++    /// W09 기록 화면 시드. 실행한 날의 정오(로컬)를 기준으로 만들어 날짜 경계에 흔들리지 않는다. 진행 여정은 없다.
++    private static let recordSeeds: Set<String> = ["recordsMemo", "recordsTwoYears"]
++
++    private static func recordSnapshot(_ name: String) -> AppSnapshot? {
++        var calendar = Calendar(identifier: .gregorian)
++        calendar.timeZone = .current
++        let now = Date()
++        guard let noon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now),
++              let year = calendar.dateComponents([.year], from: now).year else { return nil }
++        func record(_ id: String, at date: Date, memo: String = "") -> RecordSnapshot? {
++            let formatter = ISO8601DateFormatter()
++            formatter.timeZone = TimeZone(secondsFromGMT: 0)
++            let key = RecordDay.from(date, timeZone: .current).key
++            return RecordSnapshot(id: id, completedAt: formatter.string(from: date), date: key, bus: "2014", tag: "독서",
++                                  tagColor: PreparationTagColor.sand.recordHex, task: "책 한 챕터 읽기", minutes: 25,
++                                  sound: "버스", from: "성수역", to: "서울숲 입구", memo: memo)
++        }
++        let items: [RecordSnapshot?]
++        switch name {
++        case "recordsMemo":
++            items = (0..<12).map { record("records-memo-\($0)", at: noon.addingTimeInterval(Double(-60 * $0)),
++                                          memo: $0 == 1 ? "집중 잘됨" : "") }
++        case "recordsTwoYears":
++            func lastYear(_ month: Int, _ day: Int) -> Date? {
++                calendar.date(from: DateComponents(year: year - 1, month: month, day: day, hour: 12))
++            }
++            items = [record("records-year-0", at: noon),
++                     lastYear(6, 20).flatMap { record("records-year-1", at: $0) },
++                     lastYear(3, 10).flatMap { record("records-year-2", at: $0) }]
++        default: return nil
++        }
++        let records = items.compactMap { $0 }
++        guard records.count == items.count else { return nil }
++        return readySnapshot.issuingCard(fixedCard).updating(records: RecordSection(items: records))
++    }
++
+     static func lifecycleSnapshot(_ name: String) -> AppSnapshot? {
++        if recordSeeds.contains(name) { return recordSnapshot(name) }
+         guard let seed = lifecycleSeeds[name], let bus = BusLine.all.first(where: { $0.id == "2014" }),
+               let origin = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction, stops: 0),
+               let destination = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction,
+                                                      stops: 25 / bus.minutesPerStop) else { return nil }
+         let journey = JourneySnapshot(
+             id: "seed-life", cardID: fixedCard.id, originStopID: seed.originStopID, direction: seed.direction, minutes: 25,
+-            busID: bus.id, destinationStopID: destination.id,
+-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "생명주기 시드",
++            busID: bus.id, destinationStopID: seed.destinationStopID ?? destination.id,
++            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: seed.task,
+             sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000),
+             phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
+             progress: JourneySnapshot.Progress(elapsedSeconds: seed.elapsed ?? 0), paused: seed.elapsed != nil)
+         return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: origin, currentStation: origin)
+             .issuingCard(fixedCard)
+-            .updating(records: RecordSection(items: [lifecycleRecord]))
++            .updating(records: RecordSection(items: seed.withRecord ? [lifecycleRecord] : []))
+             .updating(journey: JourneySection(active: journey))
+     }
+ 
+diff --git a/ios/FocusMateTests/LifecycleSeedTests.swift b/ios/FocusMateTests/LifecycleSeedTests.swift
+index c669371..21d39e9 100644
+--- a/ios/FocusMateTests/LifecycleSeedTests.swift
++++ b/ios/FocusMateTests/LifecycleSeedTests.swift
+@@ -111,5 +111,123 @@ final class LifecycleSeedTests: XCTestCase {
+             XCTAssertEqual(journey.minutes, 25, row.name)
+         }
+     }
++
++    // MARK: W09 alight* 시드
++
++    private static let alightNames = ["alightPaused1499", "alightArrived", "alightMismatchArrived"]
++
++    // 깨짐: 시드 이름이 빠지거나 바뀌면 nil이 되어 실패한다(UITestBootstrap에 새 시드가 없으면 전부 실패).
++    func test_alight_시드가_존재하고_저장_형식_검증을_통과한다() throws {
++        for name in Self.alightNames {
++            let snapshot = try seed(name)
++            XCTAssertNoThrow(try SnapshotCodec.decode(try SnapshotCodec.encode(snapshot)), name)
++        }
++    }
++
++    // 깨짐: 할 일이 "논문"이 아니거나 기록이 0건이 아니면(요약·기록 수 단언의 전제) 실패한다.
++    func test_alight_시드는_할_일_논문이고_기록은_0건이다() throws {
++        for name in Self.alightNames {
++            XCTAssertEqual(try active(name).task, "논문", name)
++            XCTAssertEqual(try seed(name).records.items.count, 0, name)
++        }
++    }
++
++    // 깨짐: 기본 값(2014번 25분 성수역 정방향 독서 출발 후 일시정지, 현재 정류장 성수역)이 다르면 실패한다.
++    func test_alight_시드의_기본_값은_설계와_같다() throws {
++        for name in Self.alightNames {
++            let snapshot = try seed(name)
++            let journey = try active(name)
++            XCTAssertEqual(journey.busID, "2014", name)
++            XCTAssertEqual(journey.minutes, 25, name)
++            XCTAssertEqual(journey.originStopID, "seongsu", name)
++            XCTAssertEqual(journey.direction, 1, name)
++            XCTAssertEqual(journey.phase, .departed, name)
++            XCTAssertTrue(journey.paused, name)
++            XCTAssertEqual(snapshot.currentStation?.id, "seongsu", name)
++        }
++    }
++
++    // 깨짐: 1499는 도착 직전(1499), 나머지는 도착(1500)이 아니면 실패한다.
++    func test_alight_시드의_경과_초와_도착_여부() throws {
++        XCTAssertEqual(try active("alightPaused1499").progress.elapsedSeconds, 1499)
++        XCTAssertEqual(try active("alightArrived").progress.elapsedSeconds, 1500)
++        XCTAssertEqual(try active("alightMismatchArrived").progress.elapsedSeconds, 1500)
++    }
++
++    // 깨짐: 저장 도착지가 서울숲 입구(정상)/뚝섬역(불일치)이 아니면 실패한다.
++    func test_alight_시드의_저장_도착지() throws {
++        XCTAssertEqual(try active("alightPaused1499").destinationStopID, "seoulForestGate")
++        XCTAssertEqual(try active("alightArrived").destinationStopID, "seoulForestGate")
++        XCTAssertEqual(try active("alightMismatchArrived").destinationStopID, "ttukseom")
++    }
++
++    // 깨짐: 정상 도착지 시드가 코스 여정으로 변환되지 않거나, 불일치 시드가 변환되면(지도가 그려지면) 실패한다.
++    func test_alight_코스_여정_변환은_정상만_성공한다() throws {
++        XCTAssertNotNil(CourseJourney(journey: try active("alightArrived")))
++        XCTAssertNil(CourseJourney(journey: try active("alightMismatchArrived")))
++    }
++
++    // MARK: 기록 화면 records* 시드
++
++    private static func dateString(year: Int, month: Int, day: Int) -> String {
++        String(format: "%04d-%02d-%02d", year, month, day)
++    }
++
++    private static func todayString() -> String {
++        let c = Calendar.current.dateComponents(in: TimeZone.current, from: Date())
++        return dateString(year: c.year!, month: c.month!, day: c.day!)
++    }
++
++    private static func thisYear() -> Int {
++        Calendar.current.dateComponents(in: TimeZone.current, from: Date()).year!
++    }
++
++    // 깨짐: recordsMemo 시드가 없거나 12건이 아니면(더 보기 10건 단위 검증 전제) 실패한다.
++    func test_recordsMemo_시드는_존재하고_기록_12건이며_진행_여정이_없다() throws {
++        let snapshot = try seed("recordsMemo")
++        XCTAssertEqual(snapshot.records.items.count, 12)
++        XCTAssertNil(snapshot.journey.active)
++        XCTAssertNoThrow(try SnapshotCodec.decode(try SnapshotCodec.encode(snapshot)))
++    }
++
++    // 깨짐: 메모 분포가 "집중 잘됨" 1건 + 빈 메모 11건이 아니면 실패한다.
++    func test_recordsMemo_시드의_메모는_집중_잘됨_1건_나머지_빈_문자열이다() throws {
++        let memos = try seed("recordsMemo").records.items.map(\.memo)
++        XCTAssertEqual(memos.filter { $0 == "집중 잘됨" }.count, 1)
++        XCTAssertEqual(memos.filter { $0.isEmpty }.count, 11)
++    }
++
++    // 깨짐: 기록 날짜가 실행 날짜(오늘)가 아니면 오늘 선택 상태 검증이 어긋나 실패한다.
++    func test_recordsMemo_시드의_기록은_모두_오늘_날짜다() throws {
++        let today = Self.todayString()
++        for item in try seed("recordsMemo").records.items {
++            XCTAssertEqual(item.date, today)
++        }
++    }
++
++    // 깨짐: completedAt이 서로 같으면 최신순 정렬이 비결정적이 되어 실패한다.
++    func test_recordsMemo_시드의_completedAt은_모두_다르다() throws {
++        let stamps = try seed("recordsMemo").records.items.map(\.completedAt)
++        XCTAssertEqual(Set(stamps).count, 12)
++    }
++
++    // 깨짐: recordsTwoYears가 없거나 3건이 아니면 실패한다.
++    func test_recordsTwoYears_시드는_존재하고_기록_3건이며_진행_여정이_없다() throws {
++        let snapshot = try seed("recordsTwoYears")
++        XCTAssertEqual(snapshot.records.items.count, 3)
++        XCTAssertNil(snapshot.journey.active)
++    }
++
++    // 깨짐: 연도 분포가 올해 1건(오늘) + 작년 2건(3/10, 6/20)이 아니면 실패한다.
++    func test_recordsTwoYears_시드의_날짜는_올해_오늘과_작년_3월10일_6월20일이다() throws {
++        let year = Self.thisYear()
++        let dates = Set(try seed("recordsTwoYears").records.items.map(\.date))
++        let expected: Set<String> = [
++            Self.todayString(),
++            Self.dateString(year: year - 1, month: 3, day: 10),
++            Self.dateString(year: year - 1, month: 6, day: 20),
++        ]
++        XCTAssertEqual(dates, expected)
++    }
+ }
+ #endif
+diff --git a/ios/FocusMateUITests/RecordsUITests.swift b/ios/FocusMateUITests/RecordsUITests.swift
+new file mode 100644
+index 0000000..15c4df9
+--- /dev/null
++++ b/ios/FocusMateUITests/RecordsUITests.swift
+@@ -0,0 +1,161 @@
++import Foundation
++import XCTest
++
++/// 기록 화면(마이페이지 아래 기록) UI 테스트. recordID 규칙은 시드 규칙 "records-memo-0"~"records-memo-11"을 가정한다
++/// (0이 가장 최신, 1번이 "집중 잘됨").
++@MainActor
++final class RecordsUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // 깨짐: 기록 0건 안내 문구·요약이 달라지거나 "예시" 기록이 노출되거나 마이페이지 완료 여정 수가 0이 아니면 실패
++    func testAC24_AC31_기록_0건이면_빈_안내와_0회_요약만_보이고_예시가_없다() throws {
++        let h = FocusMateUIHarness.launch(seed: "ready")
++        openRecords(h)
++        let empty = h.element("records.empty")
++        XCTAssertTrue(empty.waitForExistence(timeout: timeout), "records.empty 없음")
++        XCTAssertEqual(empty.label, "첫 여행을 마치면 잔디에 색이 채워져요. 하루하루 나만의 시간을 모아보세요.")
++        XCTAssertEqual(h.element("records.summary").label, "0회 여행 · 0일")
++        let withExample = h.app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "예시"))
++        XCTAssertEqual(withExample.count, 0)
++
++        h.app.navigationBars.firstMatch.buttons.firstMatch.tap()
++        let profile = h.element("open.profile")
++        XCTAssertTrue(profile.waitForExistence(timeout: timeout), "open.profile 없음")
++        profile.tap()
++        let stat = h.element("profile.stat.journeys")
++        XCTAssertTrue(stat.waitForExistence(timeout: timeout), "profile.stat.journeys 없음")
++        let shown = stat.label + " " + ((stat.value as? String) ?? "")
++        XCTAssertTrue(shown.contains("0"), "완료 여정 수 0 아님: \(shown)")
++        XCTAssertFalse(shown.contains("1"), "완료 여정 수 0 아님: \(shown)")
++    }
++
++    // 깨짐: 10건 단위 더 보기 / 메모 라벨 / 저장 반영 / 200자 제한 / 실패 유지 / 재실행 유지 중 하나라도 어긋나면 실패
++    func testAC20_AC26_AC29_AC30_메모_남기기_수정_제한_실패_유지() throws {
++        let h = FocusMateUIHarness.launch(seed: "recordsMemo")
++        openRecords(h)
++
++        let first = try records(h)
++        XCTAssertEqual(first["visibleCount"] as? Int, 10)
++        XCTAssertEqual(first["hasMore"] as? Bool, true)
++        h.tap("records.more")
++        XCTAssertTrue(h.waitUntil { (try? self.records(h)["visibleCount"] as? Int) == 12 })
++        XCTAssertFalse(h.element("records.more").exists)
++
++        let emptyMemo = h.element("records.memo.records-memo-0")
++        XCTAssertTrue(emptyMemo.waitForExistence(timeout: timeout), "records.memo.records-memo-0 없음")
++        XCTAssertEqual(emptyMemo.label, "메모 남기기")
++        let filledMemo = h.element("records.memo.records-memo-1")
++        XCTAssertTrue(filledMemo.waitForExistence(timeout: timeout))
++        XCTAssertEqual(filledMemo.label, "메모 수정")
++
++        // 수정 저장
++        filledMemo.tap()
++        let field = h.app.textFields["recordMemo.field"]
++        XCTAssertTrue(field.waitForExistence(timeout: timeout), "recordMemo.field 없음")
++        XCTAssertEqual(field.value as? String, "집중 잘됨")
++        replaceText(field, with: "다시 읽기 좋은 책")
++        h.tap("recordMemo.save")
++        XCTAssertTrue(h.waitUntil { !h.element("recordMemo.field").exists }, "시트가 닫히지 않음")
++        let saved = try h.persistedText()
++        XCTAssertTrue(saved.contains("다시 읽기 좋은 책"))
++        XCTAssertFalse(saved.contains("집중 잘됨"))
++        XCTAssertEqual(saved.components(separatedBy: "\"memo\":\"\"").count - 1, 11, "다른 기록 메모가 바뀜")
++
++        // 201자 입력은 200자로 제한
++        emptyMemo.tap()
++        let limited = h.app.textFields["recordMemo.field"]
++        XCTAssertTrue(limited.waitForExistence(timeout: timeout))
++        limited.tap()
++        limited.typeText(String(repeating: "가", count: 201))
++        XCTAssertEqual((limited.value as? String)?.count, 200)
++        XCTAssertEqual(h.element("recordMemo.counter").label, "200 / 200")
++        h.tap("recordMemo.cancel")
++        XCTAssertTrue(h.waitUntil { !h.element("recordMemo.field").exists })
++
++        // 저장 실패 주입: 시트 유지, 입력 그대로, 안내 문구
++        h.tap("test.records.failNextSave")
++        filledMemo.tap()
++        let failing = h.app.textFields["recordMemo.field"]
++        XCTAssertTrue(failing.waitForExistence(timeout: timeout))
++        replaceText(failing, with: "실패할 메모")
++        h.tap("recordMemo.save")
++        let failure = h.element("recordMemo.saveFailure")
++        XCTAssertTrue(failure.waitForExistence(timeout: timeout), "saveFailure 없음")
++        XCTAssertEqual(failure.label, "저장하지 못했어요. 다시 눌러주세요.")
++        XCTAssertEqual(h.app.textFields["recordMemo.field"].value as? String, "실패할 메모")
++        h.tap("recordMemo.cancel")
++
++        // 재실행 후에도 수정한 메모 유지
++        h.relaunch()
++        openRecords(h)
++        let again = h.element("records.memo.records-memo-1")
++        XCTAssertTrue(again.waitForExistence(timeout: timeout))
++        XCTAssertEqual(again.label, "메모 수정")
++        XCTAssertTrue(try h.persistedText().contains("다시 읽기 좋은 책"))
++    }
++
++    // 깨짐: 올해에서 다음이 활성이거나, 연도 이동·요약·선택 날짜가 어긋나거나, 잔디 increment가 오늘을 넘어가면 실패
++    func testAC27_연도_이동과_오늘_이후_차단() throws {
++        let h = FocusMateUIHarness.launch(seed: "recordsTwoYears")
++        openRecords(h)
++        let next = h.element("records.year.next")
++        XCTAssertTrue(next.waitForExistence(timeout: timeout))
++        XCTAssertFalse(next.isEnabled)
++
++        let (thisYear, today) = Self.todayParts()
++        h.tap("records.year.previous")
++        XCTAssertTrue(h.waitUntil { (try? self.records(h)["year"] as? Int) == thisYear - 1 })
++        XCTAssertEqual(try records(h)["selected"] as? String, "\(thisYear - 1)-06-20")
++        XCTAssertTrue(h.element("records.summary").label.hasPrefix("2회 여행 · 2일"))
++
++        h.tap("records.year.next")
++        XCTAssertTrue(h.waitUntil { (try? self.records(h)["year"] as? Int) == thisYear })
++        XCTAssertEqual(try records(h)["selected"] as? String, today)
++
++        let heatmap = h.element("records.heatmap")
++        XCTAssertTrue(heatmap.waitForExistence(timeout: timeout))
++        h.tap("test.records.nextDay")
++        XCTAssertEqual(try records(h)["selected"] as? String, today, "오늘 이후로 이동함")
++        h.tap("test.records.previousDay")
++        let yesterday = Self.yesterday()
++        XCTAssertTrue(h.waitUntil { (try? self.records(h)["selected"] as? String) == yesterday }, "전날로 이동하지 않음")
++    }
++
++    // MARK: - 도우미
++
++    private func openRecords(_ h: FocusMateUIHarness) {
++        let entry = h.element("open.records")
++        XCTAssertTrue(entry.waitForExistence(timeout: timeout), "open.records 없음")
++        entry.tap()
++        XCTAssertTrue(h.element("screen.records").waitForExistence(timeout: timeout), "screen.records 없음")
++    }
++
++    private func records(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        let raw = try h.diagnostic("test.records")
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++
++    private func replaceText(_ field: XCUIElement, with text: String) {
++        field.tap()
++        let current = (field.value as? String) ?? ""
++        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
++        field.typeText(text)
++    }
++
++    private static func todayParts() -> (year: Int, today: String) {
++        let c = Calendar.current.dateComponents(in: TimeZone.current, from: Date())
++        return (c.year!, String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!))
++    }
++
++    private static func yesterday() -> String {
++        let d = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
++        let c = Calendar.current.dateComponents(in: TimeZone.current, from: d)
++        return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
++    }
++}

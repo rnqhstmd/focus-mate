@@ -1,0 +1,33 @@
+ M ios/FocusMate/ActiveJourneyCardContent.swift
+ M ios/FocusMate/AppModel+JourneyLifecycle.swift
+ M ios/FocusMate/AppModel.swift
+ M ios/FocusMate/BoardingTagController.swift
+ M ios/FocusMate/JourneyTimerController.swift
+ M ios/FocusMate/RecordSection.swift
+ M ios/FocusMateTests/ActiveJourneyCardContentTests.swift
+ M ios/FocusMateTests/CardCustomizationAppModelTests.swift
+ M ios/FocusMateTests/JourneyLifecycleModelTests.swift
+ M ios/FocusMateTests/LifecycleSeedTests.swift
+ M ios/FocusMateTests/RecordStorageTests.swift
+ M ios/FocusMateUITests/JourneyAbandonUITests.swift
+ M ios/FocusMateUITests/JourneyMapUITests.swift
+ M ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+ M ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift
+ M ios/FocusMateUITests/JourneyTimerUITests.swift
+ M ios/FocusMateUITests/MainActiveJourneyCardUITests.swift
+ M ios/FocusMateUITests/NewJourneyUITests.swift
+?? .dev/feat-alighting-summary-records/
+?? ios/FocusMate/AppModel+Alighting.swift
+?? ios/FocusMate/ArrivalBriefingController.swift
+?? ios/FocusMate/JourneyAlighting.swift
+?? ios/FocusMate/RecordMemoDraft.swift
+?? ios/FocusMate/RecordsCalendar.swift
+?? ios/FocusMateTests/AlightingModelTests.swift
+?? ios/FocusMateTests/AlightingSnapshotTests.swift
+?? ios/FocusMateTests/AlightingTagControllerTests.swift
+?? ios/FocusMateTests/ArrivalBriefingControllerTests.swift
+?? ios/FocusMateTests/JourneyTimerArrivalProgressTests.swift
+?? ios/FocusMateTests/RecordMemoDraftTests.swift
+?? ios/FocusMateTests/RecordsBrowserTests.swift
+?? ios/FocusMateTests/RecordsCalendarTests.swift
+?? ios/FocusMateUITests/AlightingFlowUITests.swift

@@ -189,6 +189,13 @@ final class JourneyTimerController {
         showsSaveWarning = !arrivalPersisted
     }
 
+    /// 도착 안내의 '확인'이 부른다. 도착 상태에서만 저장을 다시 시도하고, 저장본이 도착 상태인지 돌려준다.
+    func ensureArrivalSaved() -> Bool {
+        guard status == .arrived else { return false }
+        retryArrivalIfNeeded()
+        return arrivalPersisted
+    }
+
     private func notifyObserver() { observer?.timerDidChange(status: status, remainingSeconds: remainingSeconds) }
 
     private func save(_ elapsed: Int, paused: Bool) -> Bool {

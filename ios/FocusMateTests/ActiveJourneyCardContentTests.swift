@@ -64,4 +64,17 @@ final class ActiveJourneyCardContentTests: XCTestCase {
         }
         XCTAssertFalse(card.accessibilityLabel.contains("→"))
     }
+
+    // 깨짐: 도착 카드에 하차 버튼이 없거나 이어가기가 함께 노출되면 실패한다.
+    func testAC24_도착_여정은_하차_버튼이_있고_이어가기가_없다() throws {
+        let card = try XCTUnwrap(ActiveJourneyCardContent(journey: departed(elapsed: 1500)))
+        XCTAssertTrue(card.showsAlight)
+        XCTAssertFalse(card.showsResume)
+    }
+
+    // 깨짐: 진행 중 여정에 하차 버튼이 노출되면 실패한다.
+    func testAC24_진행_여정은_하차_버튼이_없다() throws {
+        let card = try XCTUnwrap(ActiveJourneyCardContent(journey: departed(elapsed: 90)))
+        XCTAssertFalse(card.showsAlight)
+    }
 }

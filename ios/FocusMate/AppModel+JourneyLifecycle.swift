@@ -31,9 +31,11 @@ extension AppModel: JourneyAbandoning {
     }
 
     /// 메인 '새 여정 시작' 확정. 도달 정류장을 현재 정류장으로 두고 여정을 지운 뒤 시간 선택으로 간다.
+    /// 도착한 여정은 하차로만 끝낸다(W09 FR-8).
     @discardableResult
     func confirmNewJourney() -> LifecycleActionResult {
-        guard launchState == .ready(.main), path.isEmpty, let snapshot, let station = snapshot.journey.active?.reachedStation
+        guard launchState == .ready(.main), path.isEmpty, let snapshot, let active = snapshot.journey.active,
+              !active.isArrived, let station = active.reachedStation
         else { return .rejected }
         guard saveHandlingFailure(snapshot.endingActiveJourney(at: station)) else { return .saveFailed }
         // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.

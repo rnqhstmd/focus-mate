@@ -1,0 +1,70 @@
+diff --git a/ios/FocusMateUITests/JourneyMapUITests.swift b/ios/FocusMateUITests/JourneyMapUITests.swift
+index a607be8..f752ca2 100644
+--- a/ios/FocusMateUITests/JourneyMapUITests.swift
++++ b/ios/FocusMateUITests/JourneyMapUITests.swift
+@@ -168,15 +168,16 @@ final class JourneyMapUITests: XCTestCase {
+         XCTAssertTrue(h.waitUntil { h.element("journey.map.follow").isEnabled && h.element("journey.map.theme").isEnabled })
+     }
+ 
+-    // 깨짐: 시트가 열린 채 도착해도 시트가 남거나 도착 후 도구가 잠긴다.
+-    func testAC24_시트가_열린_채_도착하면_시트가_닫히고_도구는_활성이다() {
++    // 깨짐: 시트가 열린 채 도착해도 시트가 남거나, 도착 안내 아래의 지도 도구가 눌릴 수 있다.
++    func testAC24_시트가_열린_채_도착하면_시트가_닫히고_도구는_도착_안내에_가려져_누를_수_없다() {
+         let h = running("timerNearArrival")
+         openSheet(h)
+         h.advance(60)
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         XCTAssertTrue(h.waitUntil { !h.element("journey.map.themeSheet").exists })
+-        XCTAssertTrue(h.element("journey.map.follow").isEnabled)
+-        XCTAssertTrue(h.element("journey.map.theme").isEnabled)
++        for id in ["journey.map.follow", "journey.map.theme"] {
++            XCTAssertFalse(h.element(id).exists, id)
++        }
+     }
+ 
+     // 깨짐: 일시정지 상태에서 테마 버튼이 활성이거나 탭하면 시트가 열린다.
+@@ -247,15 +248,16 @@ final class JourneyMapUITests: XCTestCase {
+ 
+     // MARK: AC-39
+ 
+-    // 깨짐: 남은 정류장·거리 표시가 5개/2.6km, 0개/0.0km가 아니다.
+-    func testAC39_남은_정류장과_거리가_진행과_도착에서_올바르게_표시된다() {
++    // 깨짐: 진행 중 남은 정류장·거리 표시가 5개/2.6km가 아니거나, 도착하면 도착 안내가 아닌 타이머 지표가 그대로 노출된다.
++    func testAC39_남은_정류장과_거리는_진행에서_표시되고_도착에서는_도착_안내가_대신한다() {
+         let paused = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
+         XCTAssertTrue(paused.waitForValue("journey.timer.stops", "5개"))
+         XCTAssertTrue(paused.waitForValue("journey.timer.distance", "2.6km"))
+         paused.app.terminate()
+ 
+         let arrived = FocusMateUIHarness.launchJourney(seed: "timerArrived")
+-        XCTAssertTrue(arrived.waitForValue("journey.timer.stops", "0개"))
+-        XCTAssertTrue(arrived.waitForValue("journey.timer.distance", "0.0km"))
++        XCTAssertTrue(arrived.element("alighting.briefing").waitForExistence(timeout: timeout))
++        XCTAssertFalse(arrived.element("journey.timer.stops").exists, "journey.timer.stops")
++        XCTAssertFalse(arrived.element("journey.timer.distance").exists, "journey.timer.distance")
+     }
+ }
+diff --git a/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift b/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+index 031a181..98fac5b 100644
+--- a/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
++++ b/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+@@ -22,13 +22,13 @@ final class JourneyTimerAccessibilityUITests: XCTestCase {
+         XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
+     }
+ 
+-    // 깨짐: 0초 도달 때 낭독 값이 "남은 시간 0분"이 아니다.
+-    func testV7_AC27_도착하면_낭독_값은_남은_시간_0분이다() throws {
++    // 깨짐: 도착하면 도착 안내가 뜨지 않거나, 도착 안내 아래의 "남은 시간 0분" 타이머가 낭독 대상으로 남는다.
++    func testV7_AC27_도착하면_도착_안내가_낭독되고_남은_시간_0분_타이머는_낭독되지_않는다() throws {
+         let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
+-        let remaining = h.element("journey.timer.remaining")
+-        XCTAssertTrue(remaining.waitForExistence(timeout: timeout))
+ 
+-        XCTAssertEqual(remaining.value as? String, "남은 시간 0분")
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.route").exists)
++        XCTAssertFalse(h.element("journey.timer.remaining").exists, "journey.timer.remaining")
+     }
+ 
+     // 깨짐: 버튼 라벨이 상태와 어긋나거나, 전환 알림이 1회가 아니거나, 시간이 흐르는 동안 알림이 생긴다.

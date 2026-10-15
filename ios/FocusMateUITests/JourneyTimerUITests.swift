@@ -135,7 +135,7 @@ final class JourneyTimerUITests: XCTestCase {
         h.tap("journey.timer.resume")
         h.advance(60)
 
-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
         XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "0 min")
         XCTAssertFalse(h.element("journey.timer.pause").exists)
         XCTAssertFalse(h.element("journey.timer.resume").exists)
@@ -147,7 +147,7 @@ final class JourneyTimerUITests: XCTestCase {
 
         h.relaunch(extraArguments: FocusMateUIHarness.manualClockArguments + ["--fm-ui-route", "journey"])
 
-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.element("journey.timer.pause").exists)
         XCTAssertFalse(h.element("journey.timer.resume").exists)
         XCTAssertEqual(try h.memoryElapsed(), 1500)
@@ -189,7 +189,7 @@ final class JourneyTimerUITests: XCTestCase {
     // 깨짐: 도착 화면에 뒤로가기 버튼이 보이거나 스와이프로 메인에 돌아간다.
     func testV8_AC9_도착_화면은_뒤로가기와_스와이프로_나갈_수_없다() throws {
         let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
         try assertStaysOnJourneyAfterSwipes(h)
     }
 }

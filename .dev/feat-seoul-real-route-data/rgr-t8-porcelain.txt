@@ -1,0 +1,23 @@
+ M .dev/feat-seoul-real-route-data/state.md
+?? .dev/feat-seoul-real-route-data/reports/t5-diff.txt
+?? .dev/feat-seoul-real-route-data/reports/t5-impl.md
+?? .dev/feat-seoul-real-route-data/reports/t5-red.md
+?? .dev/feat-seoul-real-route-data/reports/t5-review.md
+?? .dev/feat-seoul-real-route-data/reports/t6-impl.md
+?? .dev/feat-seoul-real-route-data/reports/t6-red.md
+?? .dev/feat-seoul-real-route-data/reports/t7-impl.md
+?? .dev/feat-seoul-real-route-data/reports/t7-red.md
+?? .dev/feat-seoul-real-route-data/reports/t8-red.md
+?? .dev/feat-seoul-real-route-data/rgr-t5-porcelain.txt
+?? .dev/feat-seoul-real-route-data/rgr-t6-porcelain.txt
+?? .dev/feat-seoul-real-route-data/rgr-t7-porcelain.txt
+?? .dev/feat-seoul-real-route-data/rgr-t8-porcelain.txt
+?? ios/FocusMate/RouteCatalog.swift
+?? ios/FocusMate/RouteCatalogLoader.swift
+?? ios/FocusMate/RouteLeg.swift
+?? ios/FocusMate/StationSearch.swift
+?? ios/FocusMateTests/RouteCandidatesTests.swift
+?? ios/FocusMateTests/RouteCatalogTestFixtures.swift
+?? ios/FocusMateTests/RouteCatalogTests.swift
+?? ios/FocusMateTests/RouteLegTests.swift
+?? ios/FocusMateTests/StationSearchTests.swift

@@ -1,6 +1,6 @@
 # 기록 구현 추적
 
-수정일: 2026-10-13. 도메인 구성은 사용자 확인으로 확정했고 담당자·사용자 규모는 ❓입니다. ID와 AC 번호는 이 도메인 안에서만 유일합니다. `[웹]`과 `[iOS]`는 별도 구현 범위입니다. `[iOS·P4]`의 P 번호는 [개발 단계](../../docs/DEVELOPMENT-PHASES.md)의 담당 Phase입니다.
+수정일: 2026-10-15. 도메인 구성은 사용자 확인으로 확정했고 담당자·사용자 규모는 ❓입니다. ID와 AC 번호는 이 도메인 안에서만 유일합니다. `[웹]`과 `[iOS]`는 별도 구현 범위입니다. `[iOS·P4]`의 P 번호는 [개발 단계](../../docs/DEVELOPMENT-PHASES.md)의 담당 Phase입니다.
 
 ## 범례
 
@@ -28,7 +28,7 @@
 - FR-4 / AC-4: renderAnalytics. 2026-10-13 시장 조사 반영: renderAnalyticsInsights(시간대·노선·길이·메모)·longestStreak·태그 누적 막대.
 - FR-5 / AC-5: W08 RecordSnapshot·RecordSection 및 AppModel 완료/메모 저장 API. 저장 v2 유지, 실제 하차 outcome 연동은 W09 후속.
 - NFR-1 / AC-6: RecordSectionTests·RecordStorageTests 신규 35건. 전체 iOS 98 unit + 11 UI, 웹31+edgeQA 및 빌드 통과. 실제 파일 복원·원본 보존·쓰기 실패와 날짜 경계를 검증했다.
-- FR-6 / AC-7: 네이티브 구현 전. Phase 1의 기록 화면은 뒤로가기만 있는 빈 목적지다.
+- FR-6 / AC-7: W09a로 요약(200자 선택 메모)·기록(연 단위 잔디 5단계, 선택 날짜 최신순 10개 더 보기, 연도 이동, 메모 남기기/수정)이 일부 반영됐다. 주/월·태그 분석과 인사이트는 W09b라 상태는 ⬜ 유지한다. 실기기 VoiceOver(잔디 조정)는 W14.
 
 [현재 동작](../../docs/CURRENT-STATE.md) · [화면 계약](../../docs/FLOWS.md) · [개발 단계](../../docs/DEVELOPMENT-PHASES.md). W08의 FR-5·NFR-1은 PRD 인수 검증 ACCEPT와 직접 iOS 테스트 결과로 갱신했습니다. 화면 및 실제 기기 검증 완료를 의미하지 않습니다.
 

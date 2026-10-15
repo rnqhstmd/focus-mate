@@ -111,5 +111,123 @@ final class LifecycleSeedTests: XCTestCase {
             XCTAssertEqual(journey.minutes, 25, row.name)
         }
     }
+
+    // MARK: W09 alight* 시드
+
+    private static let alightNames = ["alightPaused1499", "alightArrived", "alightMismatchArrived"]
+
+    // 깨짐: 시드 이름이 빠지거나 바뀌면 nil이 되어 실패한다(UITestBootstrap에 새 시드가 없으면 전부 실패).
+    func test_alight_시드가_존재하고_저장_형식_검증을_통과한다() throws {
+        for name in Self.alightNames {
+            let snapshot = try seed(name)
+            XCTAssertNoThrow(try SnapshotCodec.decode(try SnapshotCodec.encode(snapshot)), name)
+        }
+    }
+
+    // 깨짐: 할 일이 "논문"이 아니거나 기록이 0건이 아니면(요약·기록 수 단언의 전제) 실패한다.
+    func test_alight_시드는_할_일_논문이고_기록은_0건이다() throws {
+        for name in Self.alightNames {
+            XCTAssertEqual(try active(name).task, "논문", name)
+            XCTAssertEqual(try seed(name).records.items.count, 0, name)
+        }
+    }
+
+    // 깨짐: 기본 값(2014번 25분 성수역 정방향 독서 출발 후 일시정지, 현재 정류장 성수역)이 다르면 실패한다.
+    func test_alight_시드의_기본_값은_설계와_같다() throws {
+        for name in Self.alightNames {
+            let snapshot = try seed(name)
+            let journey = try active(name)
+            XCTAssertEqual(journey.busID, "2014", name)
+            XCTAssertEqual(journey.minutes, 25, name)
+            XCTAssertEqual(journey.originStopID, "seongsu", name)
+            XCTAssertEqual(journey.direction, 1, name)
+            XCTAssertEqual(journey.phase, .departed, name)
+            XCTAssertTrue(journey.paused, name)
+            XCTAssertEqual(snapshot.currentStation?.id, "seongsu", name)
+        }
+    }
+
+    // 깨짐: 1499는 도착 직전(1499), 나머지는 도착(1500)이 아니면 실패한다.
+    func test_alight_시드의_경과_초와_도착_여부() throws {
+        XCTAssertEqual(try active("alightPaused1499").progress.elapsedSeconds, 1499)
+        XCTAssertEqual(try active("alightArrived").progress.elapsedSeconds, 1500)
+        XCTAssertEqual(try active("alightMismatchArrived").progress.elapsedSeconds, 1500)
+    }
+
+    // 깨짐: 저장 도착지가 서울숲 입구(정상)/뚝섬역(불일치)이 아니면 실패한다.
+    func test_alight_시드의_저장_도착지() throws {
+        XCTAssertEqual(try active("alightPaused1499").destinationStopID, "seoulForestGate")
+        XCTAssertEqual(try active("alightArrived").destinationStopID, "seoulForestGate")
+        XCTAssertEqual(try active("alightMismatchArrived").destinationStopID, "ttukseom")
+    }
+
+    // 깨짐: 정상 도착지 시드가 코스 여정으로 변환되지 않거나, 불일치 시드가 변환되면(지도가 그려지면) 실패한다.
+    func test_alight_코스_여정_변환은_정상만_성공한다() throws {
+        XCTAssertNotNil(CourseJourney(journey: try active("alightArrived")))
+        XCTAssertNil(CourseJourney(journey: try active("alightMismatchArrived")))
+    }
+
+    // MARK: 기록 화면 records* 시드
+
+    private static func dateString(year: Int, month: Int, day: Int) -> String {
+        String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    private static func todayString() -> String {
+        let c = Calendar.current.dateComponents(in: TimeZone.current, from: Date())
+        return dateString(year: c.year!, month: c.month!, day: c.day!)
+    }
+
+    private static func thisYear() -> Int {
+        Calendar.current.dateComponents(in: TimeZone.current, from: Date()).year!
+    }
+
+    // 깨짐: recordsMemo 시드가 없거나 12건이 아니면(더 보기 10건 단위 검증 전제) 실패한다.
+    func test_recordsMemo_시드는_존재하고_기록_12건이며_진행_여정이_없다() throws {
+        let snapshot = try seed("recordsMemo")
+        XCTAssertEqual(snapshot.records.items.count, 12)
+        XCTAssertNil(snapshot.journey.active)
+        XCTAssertNoThrow(try SnapshotCodec.decode(try SnapshotCodec.encode(snapshot)))
+    }
+
+    // 깨짐: 메모 분포가 "집중 잘됨" 1건 + 빈 메모 11건이 아니면 실패한다.
+    func test_recordsMemo_시드의_메모는_집중_잘됨_1건_나머지_빈_문자열이다() throws {
+        let memos = try seed("recordsMemo").records.items.map(\.memo)
+        XCTAssertEqual(memos.filter { $0 == "집중 잘됨" }.count, 1)
+        XCTAssertEqual(memos.filter { $0.isEmpty }.count, 11)
+    }
+
+    // 깨짐: 기록 날짜가 실행 날짜(오늘)가 아니면 오늘 선택 상태 검증이 어긋나 실패한다.
+    func test_recordsMemo_시드의_기록은_모두_오늘_날짜다() throws {
+        let today = Self.todayString()
+        for item in try seed("recordsMemo").records.items {
+            XCTAssertEqual(item.date, today)
+        }
+    }
+
+    // 깨짐: completedAt이 서로 같으면 최신순 정렬이 비결정적이 되어 실패한다.
+    func test_recordsMemo_시드의_completedAt은_모두_다르다() throws {
+        let stamps = try seed("recordsMemo").records.items.map(\.completedAt)
+        XCTAssertEqual(Set(stamps).count, 12)
+    }
+
+    // 깨짐: recordsTwoYears가 없거나 3건이 아니면 실패한다.
+    func test_recordsTwoYears_시드는_존재하고_기록_3건이며_진행_여정이_없다() throws {
+        let snapshot = try seed("recordsTwoYears")
+        XCTAssertEqual(snapshot.records.items.count, 3)
+        XCTAssertNil(snapshot.journey.active)
+    }
+
+    // 깨짐: 연도 분포가 올해 1건(오늘) + 작년 2건(3/10, 6/20)이 아니면 실패한다.
+    func test_recordsTwoYears_시드의_날짜는_올해_오늘과_작년_3월10일_6월20일이다() throws {
+        let year = Self.thisYear()
+        let dates = Set(try seed("recordsTwoYears").records.items.map(\.date))
+        let expected: Set<String> = [
+            Self.todayString(),
+            Self.dateString(year: year - 1, month: 3, day: 10),
+            Self.dateString(year: year - 1, month: 6, day: 20),
+        ]
+        XCTAssertEqual(dates, expected)
+    }
 }
 #endif

@@ -96,7 +96,7 @@ final class JourneyAbandonUITests: XCTestCase {
 
         h.advance(1, times: 2)
 
-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.element("journey.abandon").exists)
     }
 
@@ -392,7 +392,7 @@ final class JourneyAbandonUITests: XCTestCase {
         resumeFromMain(h)
         XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
         h.advance(1, times: 2)
-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
         try assertStaysOnJourneyAfterSwipes(h)
     }
 

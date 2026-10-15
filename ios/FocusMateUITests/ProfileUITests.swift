@@ -278,7 +278,7 @@ final class ProfileUITests: XCTestCase {
         XCTAssertEqual(try h.diagnostic("test.dynamicTypeSize"), "accessibility5")
         let entry = h.element("open.profile")
         XCTAssertTrue(entry.waitForExistence(timeout: timeout))
-        XCTAssertTrue(entry.isHittable, "메인에서 마이페이지 진입 불가(메인 스크롤 없음)")
+        try reachVisible(entry, h)
         entry.tap()
         XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
 
@@ -298,11 +298,11 @@ final class ProfileUITests: XCTestCase {
     }
 
     // 깨짐 명명: 큰 글자에서 설정 버튼 탭이 설정 화면을 열지 못하면 실패
-    func testAC20_최대_글자_크기에서_설정을_눌러_설정에_가고_뒤로_돌아온다() {
+    func testAC20_최대_글자_크기에서_설정을_눌러_설정에_가고_뒤로_돌아온다() throws {
         let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: xxxl)
         let entry = h.element("open.profile")
         XCTAssertTrue(entry.waitForExistence(timeout: timeout))
-        XCTAssertTrue(entry.isHittable, "메인에서 마이페이지 진입 불가(메인 스크롤 없음)")
+        try reachVisible(entry, h)
         entry.tap()
         XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         let settings = h.element("profile.settings")

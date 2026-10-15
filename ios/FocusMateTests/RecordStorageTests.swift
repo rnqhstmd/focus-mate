@@ -18,7 +18,7 @@ final class RecordStorageTests: XCTestCase {
             firstModel.loadIfNeeded()
 
             XCTAssertTrue(firstModel.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
-            XCTAssertTrue(firstModel.saveRecordMemo("오늘 계획을 마쳤다", forJourneyID: "journey-001"))
+            XCTAssertEqual(firstModel.updateRecordMemo("오늘 계획을 마쳤다", forJourneyID: "journey-001"), .done)
 
             let restoredModel = AppModel(store: LocalSnapshotStore(fileURL: fileURL))
             restoredModel.loadIfNeeded()
@@ -78,7 +78,7 @@ final class RecordStorageTests: XCTestCase {
 
             XCTAssertFalse(model.recordCompletion(Self.input(), outcome: .alighted, timeZone: Self.seoul))
             XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(5)))
-            XCTAssertFalse(model.saveRecordMemo("메모", forJourneyID: "journey-001"))
+            XCTAssertEqual(model.updateRecordMemo("메모", forJourneyID: "journey-001"), .rejected)
             XCTAssertEqual(model.saveFailure, .writeBlocked(.unsupportedVersion(5)))
             XCTAssertEqual(try Data(contentsOf: fileURL), bytes)
         }
@@ -173,7 +173,7 @@ final class RecordStorageTests: XCTestCase {
         model.loadIfNeeded()
 
         XCTAssertTrue(model.recordCompletion(Self.input(minutes: 99), outcome: .alighted, timeZone: Self.seoul))
-        XCTAssertTrue(model.saveRecordMemo("첫 메모", forJourneyID: "journey-001"))
+        XCTAssertEqual(model.updateRecordMemo("첫 메모", forJourneyID: "journey-001"), .done)
         XCTAssertEqual(writeCalls, 0)
         XCTAssertNil(model.saveFailure)
         let record = model.snapshot?.records.items.first
@@ -201,7 +201,7 @@ final class RecordStorageTests: XCTestCase {
         let model = AppModel(store: loadedStore)
         model.loadIfNeeded()
 
-        XCTAssertTrue(model.saveRecordMemo(decomposed, forJourneyID: "journey-001"))
+        XCTAssertEqual(model.updateRecordMemo(decomposed, forJourneyID: "journey-001"), .done)
 
         XCTAssertEqual(writeCalls, 1)
         XCTAssertTrue(model.snapshot?.records.items.first?.memo.utf16.elementsEqual(decomposed.utf16) == true)
@@ -269,9 +269,9 @@ final class RecordStorageTests: XCTestCase {
             model.loadIfNeeded()
             model.open(.records)
 
-            XCTAssertFalse(model.saveRecordMemo("수정", forJourneyID: "journey-001"))
+            XCTAssertEqual(model.updateRecordMemo("수정", forJourneyID: "journey-001"), .saveFailed)
 
-            XCTAssertEqual(model.saveFailure, .writeFailed)
+            XCTAssertNil(model.saveFailure)
             XCTAssertEqual(model.launchState, .ready(.main))
             XCTAssertEqual(model.path, [.records])
             let snapshot = try XCTUnwrap(model.snapshot)

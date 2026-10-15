@@ -68,15 +68,7 @@ struct RecordSection: Codable, Equatable {
         guard let index = items.firstIndex(where: { $0.id.utf16.elementsEqual(id.utf16) }) else {
             throw RecordValidationIssue.recordNotFound(id)
         }
-        let trimmed = memo.trimmingCharacters(in: .whitespacesAndNewlines)
-        var limited = ""
-        var length = 0
-        for scalar in trimmed.unicodeScalars {
-            let width = scalar.value <= 0xffff ? 1 : 2
-            guard length + width <= 200 else { break }
-            limited.unicodeScalars.append(scalar)
-            length += width
-        }
+        let limited = RecordMemoLimit.prefix(memo.trimmingCharacters(in: .whitespacesAndNewlines))
         let original = items[index]
         var changed = items
         changed[index] = RecordSnapshot(id: original.id, completedAt: original.completedAt, date: original.date,

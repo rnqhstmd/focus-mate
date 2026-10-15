@@ -278,18 +278,18 @@ final class JourneyLifecycleModelTests: XCTestCase {
         XCTAssertEqual(model.path, [.time])
     }
 
-    // 깨짐: 도착 여정이 출발 정류장을 유지하거나 식으로 계산하면 실패.
+    // 깨짐: 도착 여정의 새 여정 확정이 .done이거나 쓰기를 하거나 여정을 지우면 실패 (하차 전 확정 금지).
     @MainActor
-    func testAC24_도착_여정의_새여정_확정은_도착지가_현재정류장이다() throws {
+    func testAC21_도착_여정의_새여정_확정은_rejected이고_쓰기가_없고_여정이_그대로다() throws {
         let probe = LifecycleProbe()
-        let model = try makeModel(active: active(elapsed: 1500), probe: probe)
+        let arrived = active(elapsed: 1500)
+        let model = try makeModel(active: arrived, probe: probe)
 
-        XCTAssertEqual(model.confirmNewJourney(), .done)
+        XCTAssertEqual(model.confirmNewJourney(), .rejected)
 
-        let saved = try lastSaved(probe)
-        XCTAssertEqual(saved.currentStation, StationSnapshot(id: "seoulForestGate", name: "서울숲 입구", direction: 1))
-        XCTAssertNil(saved.journey.active)
-        XCTAssertEqual(saved.records.items.count, 1)
+        XCTAssertEqual(probe.attempts, 0)
+        XCTAssertEqual(model.activeJourney, arrived)
+        XCTAssertEqual(model.path, [])
     }
 
     // 깨짐: 여정이 없을 때 확정이 .done이거나 쓰기를 하면 실패.

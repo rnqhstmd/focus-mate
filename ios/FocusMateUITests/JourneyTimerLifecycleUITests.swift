@@ -104,7 +104,7 @@ final class JourneyTimerLifecycleUITests: XCTestCase {
 
         h.goBackground()
 
-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
         XCTAssertEqual(try h.persistedElapsed(), 1500)
         XCTAssertFalse(h.element("journey.timer.pause").exists)
         XCTAssertFalse(h.element("journey.timer.resume").exists)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// 메인 진행 여정 카드에 보일 값. 도착한 여정은 이어가기 없이 정보만 보인다(W09 전 임시, FR-9).
+/// 메인 진행 여정 카드에 보일 값. 도착한 여정은 이어가기 대신 하차하기만 보인다.
 struct ActiveJourneyCardContent: Equatable {
     enum Kind: Equatable { case resumable, arrived }
 
@@ -12,6 +12,8 @@ struct ActiveJourneyCardContent: Equatable {
     let remainingText: String?
 
     var showsResume: Bool { kind == .resumable }
+    /// 도착한 여정의 유일한 동작은 하차다(W09 FR-8).
+    var showsAlight: Bool { kind == .arrived }
     /// 카드는 한 요소로 읽힌다. 이어가기 버튼은 따로 읽힌다.
     var accessibilityLabel: String {
         [title, task, busText, remainingText, routeText].compactMap { $0 }.joined(separator: ", ")

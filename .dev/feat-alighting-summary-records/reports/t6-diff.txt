@@ -1,0 +1,1589 @@
+diff --git a/ios/FocusMate/AlightingSummaryView.swift b/ios/FocusMate/AlightingSummaryView.swift
+new file mode 100644
+index 0000000..a524082
+--- /dev/null
++++ b/ios/FocusMate/AlightingSummaryView.swift
+@@ -0,0 +1,82 @@
++import SwiftUI
++
++/// 하차 후 요약. 한 일·시간·도착 정류장과 200자 선택 메모(FR-6). 뒤로가기 없이 '메인으로'로만 끝낸다.
++@MainActor
++struct AlightingSummaryView: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    @State private var draft = RecordMemoDraft()
++    /// 입력 칸의 원문. 같은 값을 다시 넣으면 SwiftUI가 칸을 갱신하지 않아, 잘린 값으로 바뀔 때만 되돌려 쓴다.
++    @State private var memoInput = ""
++    @State private var showsFailure = false
++
++    var body: some View {
++        Group {
++            if let summary = model.alightingSummary { content(summary) }
++            else { Color.clear }
++        }
++        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
++        .navigationBarBackButtonHidden(true)
++        .background(NavigationPopBlocker())
++    }
++
++    private func content(_ summary: AlightingSummary) -> some View {
++        ScrollView {
++            VStack(alignment: .leading, spacing: 20) {
++                Text("오늘의 여행").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
++                    .accessibilityIdentifier("screen.alightingSummary")
++                row("한 일", summary.task, id: "summary.task")
++                row("여행 시간", summary.minutesText, id: "summary.minutes")
++                row("도착 정류장", summary.destinationName, id: "summary.destination")
++                VStack(alignment: .leading, spacing: 8) {
++                    Text("메모 (선택)").font(.headline)
++                    TextField("이번 여행을 한 줄로 남겨보세요", text: $memoInput, axis: .vertical)
++                        .lineLimit(3...6)
++                        .textFieldStyle(.roundedBorder)
++                        .accessibilityLabel("메모")
++                        .accessibilityIdentifier("summary.memo")
++                        .onChange(of: memoInput) { _, input in
++                            draft.update(input)
++                            if draft.text != input { memoInput = draft.text }
++                        }
++                    Text(draft.counterText).font(.footnote).foregroundStyle(.secondary)
++                        .accessibilityLabel(draft.counterText)
++                        .accessibilityIdentifier("summary.memoCounter")
++                }
++                if showsFailure {
++                    Text(JourneyTimerDisplay.transitionFailureText).foregroundStyle(.orange)
++                        .accessibilityIdentifier("summary.saveFailure")
++                }
++                Button { finish() } label: {
++                    Text("메인으로").frame(maxWidth: .infinity, minHeight: 44)
++                }
++                .buttonStyle(.borderedProminent)
++                .accessibilityIdentifier("summary.home")
++            }
++            .padding(24)
++        }
++        .scrollDismissesKeyboard(.interactively)
++        #if DEBUG
++        .overlay(alignment: .topTrailing) {
++            if let failure = services.failNextSave {
++                Button { failure.arm() } label: {
++                    Text("다음 저장 실패").font(.system(size: 1)).foregroundStyle(.clear)
++                        .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
++                }
++                .accessibilityLabel("다음 저장 실패").accessibilityIdentifier("test.summary.failNextSave")
++            }
++        }
++        #endif
++    }
++
++    private func row(_ title: String, _ value: String, id: String) -> some View {
++        VStack(alignment: .leading, spacing: 4) {
++            Text(title).font(.subheadline).foregroundStyle(.secondary).accessibilityHidden(true)
++            Text(value).font(.title3.bold()).accessibilityLabel(value).accessibilityIdentifier(id)
++        }
++    }
++
++    private func finish() {
++        showsFailure = model.finishAlightingSummary(memo: draft.text) == .saveFailed
++    }
++}
+diff --git a/ios/FocusMate/AlightingTagView.swift b/ios/FocusMate/AlightingTagView.swift
+new file mode 100644
+index 0000000..83bc5d6
+--- /dev/null
++++ b/ios/FocusMate/AlightingTagView.swift
+@@ -0,0 +1,38 @@
++import SwiftUI
++
++/// 하차 태그 목적지. 컨트롤러는 화면이 처음 나타날 때 한 번만 만든다.
++/// 하차 저장 뒤 어떤 경로로 중단돼도 모델 상태로 다시 맞춰 요약으로 보낸다(화면에 갇히지 않게).
++@MainActor
++struct AlightingTagView: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    @State private var controller: BoardingTagController?
++
++    var body: some View {
++        Group {
++            if let controller {
++                CardTagScreen(model: model, services: services, controller: controller, kind: .alighting,
++                              title: "하차 태그, 하차 단계. 카드를 위로 밀어 단말기에 대주세요",
++                              onSettle: { reconcile(controller) })
++            } else { Color.clear }
++        }
++        .onAppear {
++            guard controller == nil else { return }
++            controller = BoardingTagController(
++                alighter: model, haptics: services.haptics, announcer: services.announcer,
++                sleep: services.sleep, holdSleep: services.boardingHoldSleep,
++                onFinished: { [weak model] in finish(model) })
++        }
++    }
++
++    private func reconcile(_ controller: BoardingTagController) {
++        guard AlightingTagRecovery.shouldFinish(phase: controller.phase, alightingSaved: model.alightingSummary != nil) else { return }
++        finish(model)
++    }
++
++    private func finish(_ model: AppModel?) {
++        var transaction = Transaction()
++        transaction.disablesAnimations = true
++        withTransaction(transaction) { model?.finishAlightingTransition() }
++    }
++}
+diff --git a/ios/FocusMate/ArrivalBriefingView.swift b/ios/FocusMate/ArrivalBriefingView.swift
+new file mode 100644
+index 0000000..2eb5c70
+--- /dev/null
++++ b/ios/FocusMate/ArrivalBriefingView.swift
+@@ -0,0 +1,79 @@
++import SwiftUI
++
++/// 여행 화면 위 도착 안내(FR-1). 아래 타이머·지도는 가려 접근·조작할 수 없다(BR-6, BR-7).
++@MainActor
++struct ArrivalBriefingView: View {
++    let controller: ArrivalBriefingController
++    @AccessibilityFocusState private var confirmFocused: Bool
++
++    var body: some View {
++        GeometryReader { proxy in
++            ScrollView {
++                VStack(spacing: 32) {
++                    Image(systemName: "bus").font(.system(size: 44, weight: .semibold)).accessibilityHidden(true)
++                    Text(controller.content.routeText).font(.headline).foregroundStyle(.white.opacity(0.8))
++                        .accessibilityIdentifier("alighting.route")
++                    sentences
++                    if controller.showsConfirm {
++                        Button { controller.confirm() } label: {
++                            Text("확인").font(.headline).foregroundStyle(.black)
++                                .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
++                                .background(Color(white: 0.95), in: Capsule())
++                        }
++                        .buttonStyle(.plain)
++                        .accessibilityIdentifier("alighting.confirm")
++                        .accessibilityFocused($confirmFocused)
++                    }
++                    if controller.showsSaveFailure {
++                        Text(JourneyTimerDisplay.transitionFailureText).font(.subheadline).foregroundStyle(.orange)
++                            .accessibilityIdentifier("alighting.saveFailure")
++                    }
++                }
++                .multilineTextAlignment(.center)
++                .padding(24)
++                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
++            }
++        }
++        .foregroundStyle(.white)
++        .background(LinearGradient(colors: [Color(white: 0.12), .black], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
++        .overlay(alignment: .topLeading) {
++            Color.clear.frame(width: 1, height: 1).accessibilityElement()
++                .accessibilityLabel("도착 안내").accessibilityIdentifier("alighting.briefing")
++        }
++        .onChange(of: controller.focusTarget) { _, target in confirmFocused = target == .confirmButton }
++        #if DEBUG
++        .overlay(alignment: .bottomLeading) { diagnostics }
++        #endif
++    }
++
++    @ViewBuilder private var sentences: some View {
++        if controller.showsAll {
++            VStack(spacing: 12) {
++                ForEach(controller.content.sentences, id: \.self) { Text($0).font(.title2.bold()) }
++            }
++            .accessibilityElement(children: .combine)
++            .accessibilityLabel(controller.content.sentences.joined(separator: " "))
++            .accessibilityIdentifier("alighting.sentence")
++        } else {
++            let sentence = controller.content.sentences[controller.visibleIndex]
++            Text(sentence).font(.title2.bold())
++                .id(controller.visibleIndex)
++                .transition(.opacity)
++                .animation(.easeInOut(duration: 0.4), value: controller.visibleIndex)
++                .accessibilityLabel(sentence)
++                .accessibilityIdentifier("alighting.sentence")
++        }
++    }
++
++    #if DEBUG
++    private var diagnostics: some View {
++        let object: [String: Any] = ["index": controller.visibleIndex, "showsAll": controller.showsAll,
++                                     "showsConfirm": controller.showsConfirm,
++                                     "focus": controller.focusTarget == .confirmButton ? "confirm" : "none"]
++        let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
++            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
++        return Text("도착 안내 진단").font(.system(size: 1)).foregroundStyle(.clear)
++            .accessibilityValue(json).accessibilityIdentifier("test.arrivalBriefing").allowsHitTesting(false)
++    }
++    #endif
++}
+diff --git a/ios/FocusMate/BoardingTagView.swift b/ios/FocusMate/BoardingTagView.swift
+index bdac3ea..7be2739 100644
+--- a/ios/FocusMate/BoardingTagView.swift
++++ b/ios/FocusMate/BoardingTagView.swift
+@@ -10,7 +10,9 @@ struct BoardingTagView: View {
+ 
+     var body: some View {
+         Group {
+-            if let controller { BoardingTagScreen(model: model, services: services, controller: controller) }
++            if let controller {
++                CardTagScreen(model: model, services: services, controller: controller, kind: .boarding, title: titleLabel)
++            }
+             else { Color.clear }
+         }
+         .onAppear {
+@@ -25,218 +27,9 @@ struct BoardingTagView: View {
+                 })
+         }
+     }
+-}
+-
+-@MainActor
+-private struct BoardingTagScreen: View {
+-    @Bindable var model: AppModel
+-    let services: JourneyServices
+-    let controller: BoardingTagController
+-    @State private var entered = false
+-    @State private var blink = false
+-    /// 터치 튐 연출을 실제로 실행한 횟수(동작 줄이기에서는 연출 없이 횟수만 센다).
+-    @State private var tapBounces = 0
+-    @State private var bounceOffset: CGFloat = 0
+-    @Environment(\.scenePhase) private var scenePhase
+-    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+-
+-    private static let space = "boarding"
+-    private let geometry = BoardingGeometry()
+-
+-    private var reduceMotion: Bool { services.reduceMotion(system: systemReduceMotion) }
+-
+-    var body: some View {
+-        VStack(spacing: 0) {
+-            Text(titleLabel).font(.system(size: 1)).foregroundStyle(.clear).frame(width: 1, height: 1)
+-                .accessibilityLabel(titleLabel).accessibilityAddTraits(.isHeader).accessibilityIdentifier("boarding.title")
+-            Spacer(minLength: 24)
+-            terminal
+-                .opacity(entered || reduceMotion ? 1 : 0)
+-            Spacer(minLength: 40)
+-            Image(systemName: "chevron.up.2").font(.title2).foregroundStyle(.white.opacity(0.85))
+-                .accessibilityHidden(true)
+-                .padding(.bottom, 12)
+-            card
+-                .offset(y: entered || reduceMotion ? 0 : 80)
+-                .opacity(entered || reduceMotion ? 1 : 0)
+-            Spacer(minLength: 32)
+-        }
+-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+-        .coordinateSpace(name: Self.space)
+-        .background(Color(red: 0x0F / 255, green: 0x13 / 255, blue: 0x11 / 255).ignoresSafeArea())
+-        .overlay(alignment: .bottom) { notices }
+-        .opacity(controller.phase == .fading || controller.phase == .finished ? 0 : 1)
+-        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: controller.phase == .fading)
+-        .accessibilityElement(children: .contain)
+-        .accessibilityIdentifier("screen.boarding")
+-        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+-        // 인식 후에도 뒤로가기는 남긴다 — 이탈하면 늦은 전환만 취소하고 저장은 유지한다(AC-14).
+-        .onAppear {
+-            guard !reduceMotion else { entered = true; return }
+-            withAnimation(.easeOut(duration: 0.38).delay(0.12)) { entered = true }
+-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { blink = true }
+-        }
+-        .onDisappear {
+-            controller.cancelPendingTransition()
+-        }
+-        .onChange(of: controller.tapBounceCount) { _, count in
+-            tapBounces = count
+-            guard !reduceMotion else { return }
+-            withAnimation(.spring(duration: 0.18)) { bounceOffset = -14 }
+-            withAnimation(.spring(duration: 0.3).delay(0.18)) { bounceOffset = 0 }
+-        }
+-        .onChange(of: scenePhase) { _, phase in
+-            if phase == .background { controller.cancelPendingTransition() }
+-            else if phase == .active { controller.returnToForeground() }
+-        }
+-        #if DEBUG
+-        .overlay(alignment: .topLeading) { diagnostics }
+-        #endif
+-    }
+ 
+     private var titleLabel: String {
+         let origin = model.confirmedPreparation?.originName ?? ""
+         return "승차 태그, \(origin), 승차 단계. 카드를 위로 밀어 단말기에 대주세요"
+     }
+-
+-    private var terminal: some View {
+-        TimelineView(.everyMinute) { context in
+-            let time = BoardingClock.text(for: context.date)
+-            VStack(spacing: 16) {
+-                Capsule().fill(controller.isRecognized ? Color(red: 0.7, green: 0.85, blue: 0.75) : .gray.opacity(0.6))
+-                    .frame(height: 4).padding(.horizontal, 24)
+-                lcd(time: time)
+-                RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.06))
+-                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.18)))
+-                    .overlay(Image(systemName: "wave.3.right").font(.system(size: 40)).foregroundStyle(.white.opacity(0.7)))
+-                    .frame(width: geometry.tagAreaSize.width, height: geometry.tagAreaSize.height)
+-                    .background(GeometryReader { proxy in
+-                        Color.clear.onAppear { tagFrame = proxy.frame(in: .named(Self.space)); syncLayout() }
+-                            .onChange(of: proxy.frame(in: .named(Self.space))) { _, frame in tagFrame = frame; syncLayout() }
+-                    })
+-                    .accessibilityHidden(true)
+-                    .overlay(Color.clear.accessibilityElement().accessibilityLabel("태그 영역").accessibilityIdentifier("boarding.tagArea"))
+-            }
+-            .padding(.vertical, 18)
+-            .frame(width: 274)
+-            .background(RoundedRectangle(cornerRadius: 28).fill(Color(white: 0.11)))
+-            .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.2)))
+-            .accessibilityElement(children: .ignore)
+-            .accessibilityLabel("Focus Mate 승차 단말기, \(time), \(controller.isRecognized ? "집중동행카드 인식됨" : "승차 준비")")
+-            .accessibilityIdentifier("boarding.terminal")
+-        }
+-        .dynamicTypeSize(.large)
+-    }
+-
+-    private func lcd(time: String) -> some View {
+-        VStack(spacing: 8) {
+-            HStack {
+-                Text("Focus Mate").font(.footnote).foregroundStyle(.secondary)
+-                Spacer()
+-                Text(time).font(.footnote.weight(.semibold)).monospacedDigit()
+-            }
+-            Divider()
+-            Group {
+-                if controller.isRecognized {
+-                    VStack(spacing: 6) {
+-                        Text(PassIdentity.displayName).font(.title3.bold())
+-                        Image(systemName: "checkmark").font(.title3).foregroundStyle(Color(red: 0.7, green: 0.85, blue: 0.75))
+-                    }
+-                } else {
+-                    Text("승차 준비").font(.title3.bold())
+-                }
+-            }
+-            .frame(maxWidth: .infinity, minHeight: 64)
+-            .accessibilityElement(children: .ignore)
+-            .accessibilityValue(controller.isRecognized ? PassIdentity.displayName : "승차 준비")
+-            .accessibilityIdentifier("boarding.lcdStatus")
+-        }
+-        .padding(14)
+-        .background(RoundedRectangle(cornerRadius: 16).fill(Color.black))
+-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2)))
+-        .padding(.horizontal, 18)
+-    }
+-
+-    @State private var tagFrame: CGRect = .zero
+-
+-    @State private var cardRest: CGRect = .zero
+-
+-    /// 바깥 틀(움직이지 않음)로 카드 기준 위치를 재고, 안쪽 카드만 오프셋으로 움직인다.
+-    private var card: some View {
+-        ZStack {
+-            PassFace(style: model.currentCardStyle)
+-                .frame(width: geometry.cardWidth)
+-                .padding(8)
+-                .overlay(RoundedRectangle(cornerRadius: 22)
+-                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+-                    .foregroundStyle(.white.opacity(controller.isRecognized ? 0 : (blink && !reduceMotion ? 0.25 : 0.7))))
+-                .offset(x: controller.cardOffset.width, y: controller.cardOffset.height + bounceOffset)
+-                // 끄는 동안은 손가락을 바로 따라가고, 되돌아갈 때만 부드럽게 움직인다.
+-                .animation(reduceMotion || controller.phase == .dragging ? nil : .spring(duration: 0.3), value: controller.cardOffset)
+-                .contentShape(Rectangle())
+-                .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+-                    .onChanged { controller.dragChanged(translation: $0.translation, reduceMotion: reduceMotion) }
+-                    .onEnded { controller.dragEnded(translation: $0.translation, reduceMotion: reduceMotion) })
+-                .accessibilityElement(children: .ignore)
+-                .accessibilityLabel(PassIdentity.displayName)
+-                .accessibilityHint("카드를 여기에 대면 승차해요. 눌러서 태그하기")
+-                .accessibilityAddTraits(.isButton)
+-                .accessibilityAction { controller.activate(reduceMotion: reduceMotion) }
+-                .accessibilityIdentifier("boarding.card")
+-        }
+-        .background(GeometryReader { proxy in
+-            Color.clear
+-                .onAppear { cardRest = proxy.frame(in: .named(Self.space)).insetBy(dx: 8, dy: 8); syncLayout() }
+-                .onChange(of: proxy.frame(in: .named(Self.space))) { _, frame in cardRest = frame.insetBy(dx: 8, dy: 8); syncLayout() }
+-        })
+-    }
+-
+-    private func syncLayout() { controller.updateLayout(cardRest: cardRest, tagArea: tagFrame) }
+-
+-    @ViewBuilder private var notices: some View {
+-        VStack(spacing: 8) {
+-            if controller.showsTapHint {
+-                Text("카드를 위로 밀어 단말기에 대주세요").font(.subheadline)
+-                    .accessibilityIdentifier("boarding.tapHint")
+-            }
+-            if controller.showsSaveFailure {
+-                Text("승차 정보를 저장하지 못했어요. 카드를 다시 대주세요.").font(.subheadline).foregroundStyle(.orange)
+-                    .accessibilityIdentifier("boarding.saveFailure")
+-            }
+-        }
+-        .multilineTextAlignment(.center)
+-        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+-        .padding(.horizontal, 24).padding(.bottom, 8)
+-    }
+-
+-    #if DEBUG
+-    private var diagnostics: some View {
+-        VStack(spacing: 0) {
+-            Text("승차 진단").accessibilityValue(diagnosticJSON).accessibilityIdentifier("test.boarding")
+-            Button { controller.activate(reduceMotion: reduceMotion) } label: {
+-                Text("카드 활성화").font(.system(size: 1)).foregroundStyle(.clear)
+-                    .frame(width: 44, height: 44).contentShape(Rectangle())
+-            }
+-            .accessibilityLabel("카드 활성화").accessibilityIdentifier("test.activateBoardingCard")
+-        }
+-        .font(.system(size: 1)).foregroundStyle(.clear)
+-    }
+-
+-    private var diagnosticJSON: String {
+-        let phase: String = switch controller.phase {
+-        case .ready: "ready"
+-        case .dragging: "dragging"
+-        case .contacting: "contacting"
+-        case .held: "held"
+-        case .fading: "fading"
+-        case .finished: "finished"
+-        case .failed: "failed"
+-        case .abandoned: "abandoned"
+-        }
+-        let object: [String: Any] = ["phase": phase, "offsetY": Double(controller.cardOffset.height),
+-                                     "showsTapHint": controller.showsTapHint, "tapBounces": tapBounces]
+-        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return "null" }
+-        return String(decoding: data, as: UTF8.self)
+-    }
+-    #endif
+ }
+diff --git a/ios/FocusMate/CardTagScreen.swift b/ios/FocusMate/CardTagScreen.swift
+new file mode 100644
+index 0000000..c7a4114
+--- /dev/null
++++ b/ios/FocusMate/CardTagScreen.swift
+@@ -0,0 +1,255 @@
++import SwiftUI
++
++/// 승차·하차 태그 화면의 차이. 조작·기하·타이밍은 같고 식별자·문구·이탈 규칙만 다르다.
++enum CardTagKind: Equatable {
++    case boarding, alighting
++
++    var idPrefix: String { self == .boarding ? "boarding" : "alighting" }
++    var screenID: String { self == .boarding ? "screen.boarding" : "alighting.tag" }
++    var readyLCDText: String { self == .boarding ? "승차 준비" : "하차 준비" }
++    var failureText: String {
++        self == .boarding ? "승차 정보를 저장하지 못했어요. 카드를 다시 대주세요." : JourneyTimerDisplay.transitionFailureText
++    }
++    /// 하차는 되돌아갈 곳이 없다 — 뒤로가기를 숨기고 스와이프를 막고 첫 초점을 카드에 둔다(FR-3, AC-6).
++    var locksNavigation: Bool { self == .alighting }
++    fileprivate var terminalName: String { self == .boarding ? "승차 단말기" : "하차 단말기" }
++    fileprivate var cardHint: String { self == .boarding ? "카드를 여기에 대면 승차해요. 눌러서 태그하기" : "카드를 여기에 대면 하차해요. 눌러서 태그하기" }
++    fileprivate var debugActivateID: String { self == .boarding ? "test.activateBoardingCard" : "test.activateAlightingCard" }
++}
++
++/// 카드 태그(시안 kxUUR·JmXmQ·Vts6F). 화면에는 단말기·카드·올림 안내만 두고, 제목·정류장·단계·안내 문구는 낭독용으로만 둔다.
++@MainActor
++struct CardTagScreen: View {
++    @Bindable var model: AppModel
++    let services: JourneyServices
++    let controller: BoardingTagController
++    let kind: CardTagKind
++    let title: String
++    /// 화면이 다시 나타나거나 상태가 바뀔 때 부른다. 하차는 저장 뒤 중단된 경로를 요약으로 정리한다.
++    var onSettle: () -> Void = {}
++    @State private var entered = false
++    @State private var blink = false
++    /// 터치 튐 연출을 실제로 실행한 횟수(동작 줄이기에서는 연출 없이 횟수만 센다).
++    @State private var tapBounces = 0
++    @State private var bounceOffset: CGFloat = 0
++    @AccessibilityFocusState private var cardFocused: Bool
++    @State private var requestsCardFocus = false
++    @Environment(\.scenePhase) private var scenePhase
++    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
++
++    private static let space = "cardTag"
++    private let geometry = BoardingGeometry()
++
++    private var reduceMotion: Bool { services.reduceMotion(system: systemReduceMotion) }
++    private var prefix: String { kind.idPrefix }
++
++    var body: some View {
++        VStack(spacing: 0) {
++            Text(title).font(.system(size: 1)).foregroundStyle(.clear).frame(width: 1, height: 1)
++                .accessibilityLabel(title).accessibilityAddTraits(.isHeader).accessibilityIdentifier("\(prefix).title")
++            Spacer(minLength: 24)
++            terminal
++                .opacity(entered || reduceMotion ? 1 : 0)
++            Spacer(minLength: 40)
++            Image(systemName: "chevron.up.2").font(.title2).foregroundStyle(.white.opacity(0.85))
++                .accessibilityHidden(true)
++                .padding(.bottom, 12)
++            card
++                .offset(y: entered || reduceMotion ? 0 : 80)
++                .opacity(entered || reduceMotion ? 1 : 0)
++            Spacer(minLength: 32)
++        }
++        .frame(maxWidth: .infinity, maxHeight: .infinity)
++        .coordinateSpace(name: Self.space)
++        .background(Color(red: 0x0F / 255, green: 0x13 / 255, blue: 0x11 / 255).ignoresSafeArea())
++        .overlay(alignment: .bottom) { notices }
++        .opacity(controller.phase == .fading || controller.phase == .finished ? 0 : 1)
++        .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: controller.phase == .fading)
++        .accessibilityElement(children: .contain)
++        .accessibilityIdentifier(kind.screenID)
++        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
++        // 승차는 뒤로가기를 남긴다 — 이탈하면 늦은 전환만 취소하고 저장은 유지한다(AC-14). 하차는 잠근다.
++        .navigationBarBackButtonHidden(kind.locksNavigation)
++        .background { if kind.locksNavigation { NavigationPopBlocker() } }
++        .onAppear {
++            if kind.locksNavigation {
++                requestsCardFocus = true
++                cardFocused = true
++            }
++            onSettle()
++            guard !reduceMotion else { entered = true; return }
++            withAnimation(.easeOut(duration: 0.38).delay(0.12)) { entered = true }
++            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { blink = true }
++        }
++        .onDisappear {
++            controller.cancelPendingTransition()
++        }
++        .onChange(of: controller.tapBounceCount) { _, count in
++            tapBounces = count
++            guard !reduceMotion else { return }
++            withAnimation(.spring(duration: 0.18)) { bounceOffset = -14 }
++            withAnimation(.spring(duration: 0.3).delay(0.18)) { bounceOffset = 0 }
++        }
++        .onChange(of: controller.phase) { _, _ in onSettle() }
++        .onChange(of: scenePhase) { _, phase in
++            if phase == .background { controller.cancelPendingTransition() }
++            else if phase == .active {
++                controller.returnToForeground()
++                onSettle()
++            }
++        }
++        #if DEBUG
++        .overlay(alignment: .topLeading) { diagnostics }
++        #endif
++    }
++
++    private var terminal: some View {
++        TimelineView(.everyMinute) { context in
++            let time = BoardingClock.text(for: context.date)
++            VStack(spacing: 16) {
++                Capsule().fill(controller.isRecognized ? Color(red: 0.7, green: 0.85, blue: 0.75) : .gray.opacity(0.6))
++                    .frame(height: 4).padding(.horizontal, 24)
++                lcd(time: time)
++                RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.06))
++                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.18)))
++                    .overlay(Image(systemName: "wave.3.right").font(.system(size: 40)).foregroundStyle(.white.opacity(0.7)))
++                    .frame(width: geometry.tagAreaSize.width, height: geometry.tagAreaSize.height)
++                    .background(GeometryReader { proxy in
++                        Color.clear.onAppear { tagFrame = proxy.frame(in: .named(Self.space)); syncLayout() }
++                            .onChange(of: proxy.frame(in: .named(Self.space))) { _, frame in tagFrame = frame; syncLayout() }
++                    })
++                    .accessibilityHidden(true)
++                    .overlay(Color.clear.accessibilityElement().accessibilityLabel("태그 영역").accessibilityIdentifier("\(prefix).tagArea"))
++            }
++            .padding(.vertical, 18)
++            .frame(width: 274)
++            .background(RoundedRectangle(cornerRadius: 28).fill(Color(white: 0.11)))
++            .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.2)))
++            .accessibilityElement(children: .ignore)
++            .accessibilityLabel("Focus Mate \(kind.terminalName), \(time), \(controller.isRecognized ? "집중동행카드 인식됨" : kind.readyLCDText)")
++            .accessibilityIdentifier("\(prefix).terminal")
++        }
++        .dynamicTypeSize(.large)
++    }
++
++    private func lcd(time: String) -> some View {
++        VStack(spacing: 8) {
++            HStack {
++                Text("Focus Mate").font(.footnote).foregroundStyle(.secondary)
++                Spacer()
++                Text(time).font(.footnote.weight(.semibold)).monospacedDigit()
++            }
++            Divider()
++            Group {
++                if controller.isRecognized {
++                    VStack(spacing: 6) {
++                        Text(PassIdentity.displayName).font(.title3.bold())
++                        Image(systemName: "checkmark").font(.title3).foregroundStyle(Color(red: 0.7, green: 0.85, blue: 0.75))
++                    }
++                } else {
++                    Text(kind.readyLCDText).font(.title3.bold())
++                }
++            }
++            .frame(maxWidth: .infinity, minHeight: 64)
++            .accessibilityElement(children: .ignore)
++            .accessibilityValue(controller.isRecognized ? PassIdentity.displayName : kind.readyLCDText)
++            .accessibilityIdentifier("\(prefix).lcdStatus")
++        }
++        .padding(14)
++        .background(RoundedRectangle(cornerRadius: 16).fill(Color.black))
++        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2)))
++        .padding(.horizontal, 18)
++    }
++
++    @State private var tagFrame: CGRect = .zero
++
++    @State private var cardRest: CGRect = .zero
++
++    /// 바깥 틀(움직이지 않음)로 카드 기준 위치를 재고, 안쪽 카드만 오프셋으로 움직인다.
++    private var card: some View {
++        ZStack {
++            PassFace(style: model.currentCardStyle)
++                .frame(width: geometry.cardWidth)
++                .padding(8)
++                .overlay(RoundedRectangle(cornerRadius: 22)
++                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
++                    .foregroundStyle(.white.opacity(controller.isRecognized ? 0 : (blink && !reduceMotion ? 0.25 : 0.7))))
++                .offset(x: controller.cardOffset.width, y: controller.cardOffset.height + bounceOffset)
++                // 끄는 동안은 손가락을 바로 따라가고, 되돌아갈 때만 부드럽게 움직인다.
++                .animation(reduceMotion || controller.phase == .dragging ? nil : .spring(duration: 0.3), value: controller.cardOffset)
++                .contentShape(Rectangle())
++                .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
++                    .onChanged { controller.dragChanged(translation: $0.translation, reduceMotion: reduceMotion) }
++                    .onEnded { controller.dragEnded(translation: $0.translation, reduceMotion: reduceMotion) })
++                .accessibilityElement(children: .ignore)
++                .accessibilityLabel(PassIdentity.displayName)
++                .accessibilityHint(kind.cardHint)
++                .accessibilityAddTraits(.isButton)
++                .accessibilityAction { controller.activate(reduceMotion: reduceMotion) }
++                .accessibilityIdentifier("\(prefix).card")
++                .accessibilityFocused($cardFocused)
++        }
++        .background(GeometryReader { proxy in
++            Color.clear
++                .onAppear { cardRest = proxy.frame(in: .named(Self.space)).insetBy(dx: 8, dy: 8); syncLayout() }
++                .onChange(of: proxy.frame(in: .named(Self.space))) { _, frame in cardRest = frame.insetBy(dx: 8, dy: 8); syncLayout() }
++        })
++    }
++
++    private func syncLayout() { controller.updateLayout(cardRest: cardRest, tagArea: tagFrame) }
++
++    @ViewBuilder private var notices: some View {
++        VStack(spacing: 8) {
++            if controller.showsTapHint {
++                Text("카드를 위로 밀어 단말기에 대주세요").font(.subheadline)
++                    .accessibilityIdentifier("\(prefix).tapHint")
++            }
++            if controller.showsSaveFailure {
++                Text(kind.failureText).font(.subheadline).foregroundStyle(.orange)
++                    .accessibilityIdentifier("\(prefix).saveFailure")
++            }
++        }
++        .multilineTextAlignment(.center)
++        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
++        .padding(.horizontal, 24).padding(.bottom, 8)
++    }
++
++    #if DEBUG
++    private var diagnostics: some View {
++        VStack(spacing: 0) {
++            Text("태그 진단").accessibilityValue(diagnosticJSON).accessibilityIdentifier("test.\(prefix)")
++            debugButton("카드 활성화", id: kind.debugActivateID) { controller.activate(reduceMotion: reduceMotion) }
++            if kind == .alighting, let failure = services.failNextSave {
++                debugButton("다음 저장 실패", id: "test.alighting.failNextSave") { failure.arm() }
++            }
++        }
++        .font(.system(size: 1)).foregroundStyle(.clear)
++    }
++
++    private func debugButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
++        Button(action: action) {
++            Text(label).font(.system(size: 1)).foregroundStyle(.clear)
++                .frame(width: 44, height: 44).contentShape(Rectangle())
++        }
++        .accessibilityLabel(label).accessibilityIdentifier(id)
++    }
++
++    private var diagnosticJSON: String {
++        let phase: String = switch controller.phase {
++        case .ready: "ready"
++        case .dragging: "dragging"
++        case .contacting: "contacting"
++        case .held: "held"
++        case .fading: "fading"
++        case .finished: "finished"
++        case .failed: "failed"
++        case .abandoned: "abandoned"
++        }
++        let object: [String: Any] = ["phase": phase, "offsetY": Double(controller.cardOffset.height),
++                                     "showsTapHint": controller.showsTapHint, "tapBounces": tapBounces,
++                                     "focus": requestsCardFocus ? "card" : NSNull()]
++        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return "null" }
++        return String(decoding: data, as: UTF8.self)
++    }
++    #endif
++}
+diff --git a/ios/FocusMate/DestinationScreen.swift b/ios/FocusMate/DestinationScreen.swift
+index 70d9c81..6a1fb1f 100644
+--- a/ios/FocusMate/DestinationScreen.swift
++++ b/ios/FocusMate/DestinationScreen.swift
+@@ -18,6 +18,10 @@ struct DestinationScreen: View {
+             BoardingTagView(model: model, services: services)
+         } else if destination == .journey {
+             JourneyView(model: model, services: services)
++        } else if destination == .alighting {
++            AlightingTagView(model: model, services: services)
++        } else if destination == .alightingSummary {
++            AlightingSummaryView(model: model, services: services)
+         } else {
+             placeholderOrTime
+         }
+diff --git a/ios/FocusMate/JourneyLifecycleText.swift b/ios/FocusMate/JourneyLifecycleText.swift
+index 59ace28..6a47332 100644
+--- a/ios/FocusMate/JourneyLifecycleText.swift
++++ b/ios/FocusMate/JourneyLifecycleText.swift
+@@ -10,6 +10,8 @@ enum JourneyLifecycleText {
+     /// 낭독에서는 화살표를 읽지 않는다.
+     static let resumeButtonLabel = "이전 여정 이어가기"
+     static let newJourneyButton = "새 여정 시작"
++    /// 도착 여정 카드의 유일한 동작(W09).
++    static let alightButton = "하차하기"
+ 
+     static let newJourneyTitle = "새 여정을 시작할까요?"
+     static let newJourneyMessage = "이전 여정은 그만두고 새 여행을 준비해요. 완료 기록은 남기지 않아요."
+diff --git a/ios/FocusMate/JourneyTimerView.swift b/ios/FocusMate/JourneyTimerView.swift
+index d5be6e8..a43aebe 100644
+--- a/ios/FocusMate/JourneyTimerView.swift
++++ b/ios/FocusMate/JourneyTimerView.swift
+@@ -7,6 +7,9 @@ struct JourneyTimerView: View {
+     let controller: JourneyTimerController
+     let map: JourneyMapController?
+     let reduceMotion: Bool
++    /// 도착 안내가 덮을 때는 내용을 그리지 않는다 — 숨김 수식어만으로는 아래 "남은 시간 0분"이 낭독에 남는다(BR-7).
++    /// 등장 처리(진도·앱 밖 표시 동기화)와 진단은 그대로 둔다.
++    var concealed = false
+     #if DEBUG
+     var path: [Destination] = []
+     #endif
+@@ -25,7 +28,8 @@ struct JourneyTimerView: View {
+ 
+     var body: some View {
+         Group {
+-            if let map { mapBody(map) } else { legacyBody }
++            if concealed { Color.clear }
++            else if let map { mapBody(map) } else { legacyBody }
+         }
+         .onAppear {
+             controller.appear()
+@@ -91,10 +95,8 @@ struct JourneyTimerView: View {
+         case .paused:
+             roundButton(JourneyTimerDisplay.resumeLabel, systemImage: "play.fill", id: "journey.timer.resume") { controller.resume() }
+         case .arrived:
+-            Text("도착했어요").font(.title3.bold())
+-                .padding(.horizontal, 14).frame(minHeight: 48)
+-                .background(.black.opacity(0.6), in: Capsule())
+-                .accessibilityIdentifier("journey.arrived")
++            // 도착 안내가 위를 덮는다(W09).
++            EmptyView()
+         }
+     }
+ 
+@@ -210,8 +212,8 @@ struct JourneyTimerView: View {
+         case .paused:
+             controlButton(JourneyTimerDisplay.resumeLabel, systemImage: "play.fill", id: "journey.timer.resume") { controller.resume() }
+         case .arrived:
+-            // 임시 도착 상태. 도착 안내·하차 태그는 W09가 대체한다.
+-            Text("도착했어요").font(.title2.bold()).accessibilityIdentifier("journey.arrived")
++            // 도착 안내가 위를 덮는다(W09).
++            EmptyView()
+         }
+     }
+ 
+diff --git a/ios/FocusMate/JourneyView.swift b/ios/FocusMate/JourneyView.swift
+index 006e588..c29949d 100644
+--- a/ios/FocusMate/JourneyView.swift
++++ b/ios/FocusMate/JourneyView.swift
+@@ -11,11 +11,15 @@ struct JourneyView: View {
+     @State private var timer: JourneyTimerController?
+     /// 지도 상태는 이 화면 수명 동안만 있다. 다시 들어오면 기본값으로 시작한다(FR-9).
+     @State private var map: JourneyMapController?
++    /// 도착 안내. 타이머가 생긴 뒤 여정 내용으로 한 번 만든다(정류장 이름 고정).
++    @State private var arrival: ArrivalBriefingController?
+     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+ 
+     var body: some View {
+         Group {
+-            if let briefing { JourneyScreen(model: model, services: services, briefing: briefing, timer: timer, map: map) }
++            if let briefing {
++                JourneyScreen(model: model, services: services, briefing: briefing, timer: timer, map: map, arrival: arrival)
++            }
+             else { Color.clear }
+         }
+         .onAppear {
+@@ -39,6 +43,9 @@ struct JourneyView: View {
+                                        clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
+                                        observer: liveActivity)
+         if resumed { services.announcer.announce(JourneyLifecycleText.resumeAnnouncement) }
++        if let timer, let content = ArrivalBriefingContent(journey: journey) {
++            arrival = ArrivalBriefingController(content: content, progress: timer, confirmer: model, sleep: services.sleep)
++        }
+         // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
+         if let timer, let course = CourseJourney(journey: journey) {
+             map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,
+@@ -54,23 +61,28 @@ private struct JourneyScreen: View {
+     let briefing: DepartureBriefingController
+     let timer: JourneyTimerController?
+     let map: JourneyMapController?
++    let arrival: ArrivalBriefingController?
+     @AccessibilityFocusState private var startFocused: Bool
+     @Environment(\.scenePhase) private var scenePhase
+     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+ 
+     private var reduceMotion: Bool { services.reduceMotion(system: systemReduceMotion) }
+     private var awaitingDeparture: Bool { model.activeJourney?.phase == .awaitingDeparture && !briefing.isConfirmed }
++    private var arrived: Bool { timer?.status == .arrived }
+ 
+     var body: some View {
+         // Group은 수식어를 자식마다 나눠 붙여 안쪽 식별자를 덮으므로, 컨테이너 하나로 감싼다.
+         ZStack {
+             if awaitingDeparture { departureBriefing }
+             else if let timer {
++                // 도착하면 타이머·지도 내용은 비우고 도착 안내를 덮는다(BR-7). 타이머 생명주기는 유지한다.
++                let concealed = arrived && arrival != nil
+                 #if DEBUG
+-                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, path: model.path)
++                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, concealed: concealed, path: model.path)
+                 #else
+-                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion)
++                JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, concealed: concealed)
+                 #endif
++                if concealed, let arrival { ArrivalBriefingView(controller: arrival) }
+             } else { Color.clear }
+         }
+         // 하단 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다. 일시정지가 아니면 버튼 없이 아래 여백만 남는다.
+@@ -84,6 +96,7 @@ private struct JourneyScreen: View {
+         .toolbar(.hidden, for: .navigationBar)
+         .background(NavigationPopBlocker())
+         .task { if awaitingDeparture { await briefing.begin(reduceMotion: reduceMotion) } }
++        .task(id: arrived) { if arrived, let arrival { await arrival.begin(reduceMotion: reduceMotion) } }
+         // 생명주기는 여기 한 곳에서 단계별로 나눈다. 비활성(제어 센터 등)은 무시하고 시간은 계속 흐른다.
+         .onChange(of: scenePhase) { _, phase in
+             if awaitingDeparture {
+@@ -92,10 +105,15 @@ private struct JourneyScreen: View {
+                     Task { await briefing.begin(reduceMotion: reduceMotion) }
+                 }
+             } else if let timer {
+-                if phase == .background { timer.enterBackground() }
+-                else if phase == .active {
++                if phase == .background {
++                    timer.enterBackground()
++                    if arrived { arrival?.reset() }
++                } else if phase == .active {
+                     services.beforeForeground()
+                     timer.returnToForeground()
++                    if arrived, let arrival, !arrival.showsConfirm {
++                        Task { await arrival.begin(reduceMotion: reduceMotion) }
++                    }
+                 }
+             }
+         }
+diff --git a/ios/FocusMate/MainActiveJourneyView.swift b/ios/FocusMate/MainActiveJourneyView.swift
+index 6481990..9abff7e 100644
+--- a/ios/FocusMate/MainActiveJourneyView.swift
++++ b/ios/FocusMate/MainActiveJourneyView.swift
+@@ -1,10 +1,11 @@
+ import SwiftUI
+ 
+-/// 메인 진행 여정 카드. 정보 묶음은 한 요소로 읽히고, 이어가기 버튼은 따로 읽힌다(FR-1, FR-12).
++/// 메인 진행 여정 카드. 정보 묶음은 한 요소로 읽히고, 이어가기·하차하기 버튼은 따로 읽힌다(FR-1, FR-12).
+ /// 컨테이너에는 식별자를 두지 않는다 — 스크롤 뷰 안 중첩 컨테이너의 식별자는 흡수될 수 있다.
+ struct ActiveJourneyCardView: View {
+     let content: ActiveJourneyCardContent
+     let onResume: () -> Void
++    let onAlight: () -> Void
+ 
+     var body: some View {
+         VStack(alignment: .leading, spacing: 12) {
+@@ -28,6 +29,13 @@ struct ActiveJourneyCardView: View {
+                 .accessibilityLabel(JourneyLifecycleText.resumeButtonLabel)
+                 .accessibilityIdentifier("main.resumeJourney")
+             }
++            if content.showsAlight {
++                Button(action: onAlight) {
++                    Text(JourneyLifecycleText.alightButton).frame(minHeight: 44)
++                }
++                .buttonStyle(.borderedProminent)
++                .accessibilityIdentifier("open.alighting")
++            }
+         }
+     }
+ }
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index 987d659..98e46a8 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -197,12 +197,13 @@ struct RootView: View {
+                 Text(JourneyLifecycleText.saveFailure).foregroundStyle(.orange).accessibilityIdentifier("main.saveFailure")
+             }
+             if let card = model.activeJourneyCard {
+-                ActiveJourneyCardView(content: card) { apply(model.resumeJourney()) }
++                ActiveJourneyCardView(content: card, onResume: { apply(model.resumeJourney()) },
++                                      onAlight: { apply(model.beginAlighting()) })
+             }
+             PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
+             Button("카드 꾸미기", action: startCardCustomization)
+                 .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
+-            ForEach(Destination.mainMenu, id: \.self) { destination in
++            ForEach(model.mainMenuDestinations, id: \.self) { destination in
+                 Button(destination == .preparation ? model.mainStartTitle : destination.mainMenuTitle) {
+                     if destination != .preparation { model.open(destination.mainMenuTarget) }
+                     // 진행 여정은 확인을 거쳐서만 정리한다(W07).
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index 83ea44d..74e12e1 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -296,7 +296,11 @@ struct UITestBootstrap {
+     }
+ 
+     /// W07 시드: 재실행된 상태(출발 후 일시정지)의 2014번 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
+-    private struct LifecycleSeed { let originStopID: String; let direction: Int; let elapsed: Int? }
++    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destinationStopID`가 있으면 계산 도착지 대신 그 값을 저장한다.
++    private struct LifecycleSeed {
++        let originStopID: String; let direction: Int; let elapsed: Int?
++        var task = "생명주기 시드"; var withRecord = true; var destinationStopID: String?
++    }
+     private static let lifecycleSeeds: [String: LifecycleSeed] = [
+         "lifePaused90": .init(originStopID: "seongsu", direction: 1, elapsed: 90),
+         "lifePaused600": .init(originStopID: "seongsu", direction: 1, elapsed: 600),
+@@ -308,6 +312,10 @@ struct UITestBootstrap {
+         "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", direction: 1, elapsed: 900),
+         "lifeArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500),
+         "lifeAwaiting": .init(originStopID: "seongsu", direction: 1, elapsed: nil),
++        "alightPaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499, task: "논문", withRecord: false),
++        "alightArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문", withRecord: false),
++        "alightMismatchArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문",
++                                       withRecord: false, destinationStopID: "ttukseom"),
+     ]
+     private static let lifecycleRecord = RecordSnapshot(
+         id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014", tag: "독서",
+@@ -320,14 +328,14 @@ struct UITestBootstrap {
+                                                      stops: 25 / bus.minutesPerStop) else { return nil }
+         let journey = JourneySnapshot(
+             id: "seed-life", cardID: fixedCard.id, originStopID: seed.originStopID, direction: seed.direction, minutes: 25,
+-            busID: bus.id, destinationStopID: destination.id,
+-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "생명주기 시드",
++            busID: bus.id, destinationStopID: seed.destinationStopID ?? destination.id,
++            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: seed.task,
+             sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000),
+             phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
+             progress: JourneySnapshot.Progress(elapsedSeconds: seed.elapsed ?? 0), paused: seed.elapsed != nil)
+         return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: origin, currentStation: origin)
+             .issuingCard(fixedCard)
+-            .updating(records: RecordSection(items: [lifecycleRecord]))
++            .updating(records: RecordSection(items: seed.withRecord ? [lifecycleRecord] : []))
+             .updating(journey: JourneySection(active: journey))
+     }
+ 
+diff --git a/ios/FocusMateTests/LifecycleSeedTests.swift b/ios/FocusMateTests/LifecycleSeedTests.swift
+index c669371..c5ee006 100644
+--- a/ios/FocusMateTests/LifecycleSeedTests.swift
++++ b/ios/FocusMateTests/LifecycleSeedTests.swift
+@@ -111,5 +111,60 @@ final class LifecycleSeedTests: XCTestCase {
+             XCTAssertEqual(journey.minutes, 25, row.name)
+         }
+     }
++
++    // MARK: W09 alight* 시드
++
++    private static let alightNames = ["alightPaused1499", "alightArrived", "alightMismatchArrived"]
++
++    // 깨짐: 시드 이름이 빠지거나 바뀌면 nil이 되어 실패한다(UITestBootstrap에 새 시드가 없으면 전부 실패).
++    func test_alight_시드가_존재하고_저장_형식_검증을_통과한다() throws {
++        for name in Self.alightNames {
++            let snapshot = try seed(name)
++            XCTAssertNoThrow(try SnapshotCodec.decode(try SnapshotCodec.encode(snapshot)), name)
++        }
++    }
++
++    // 깨짐: 할 일이 "논문"이 아니거나 기록이 0건이 아니면(요약·기록 수 단언의 전제) 실패한다.
++    func test_alight_시드는_할_일_논문이고_기록은_0건이다() throws {
++        for name in Self.alightNames {
++            XCTAssertEqual(try active(name).task, "논문", name)
++            XCTAssertEqual(try seed(name).records.items.count, 0, name)
++        }
++    }
++
++    // 깨짐: 기본 값(2014번 25분 성수역 정방향 독서 출발 후 일시정지, 현재 정류장 성수역)이 다르면 실패한다.
++    func test_alight_시드의_기본_값은_설계와_같다() throws {
++        for name in Self.alightNames {
++            let snapshot = try seed(name)
++            let journey = try active(name)
++            XCTAssertEqual(journey.busID, "2014", name)
++            XCTAssertEqual(journey.minutes, 25, name)
++            XCTAssertEqual(journey.originStopID, "seongsu", name)
++            XCTAssertEqual(journey.direction, 1, name)
++            XCTAssertEqual(journey.phase, .departed, name)
++            XCTAssertTrue(journey.paused, name)
++            XCTAssertEqual(snapshot.currentStation?.id, "seongsu", name)
++        }
++    }
++
++    // 깨짐: 1499는 도착 직전(1499), 나머지는 도착(1500)이 아니면 실패한다.
++    func test_alight_시드의_경과_초와_도착_여부() throws {
++        XCTAssertEqual(try active("alightPaused1499").progress.elapsedSeconds, 1499)
++        XCTAssertEqual(try active("alightArrived").progress.elapsedSeconds, 1500)
++        XCTAssertEqual(try active("alightMismatchArrived").progress.elapsedSeconds, 1500)
++    }
++
++    // 깨짐: 저장 도착지가 서울숲 입구(정상)/뚝섬역(불일치)이 아니면 실패한다.
++    func test_alight_시드의_저장_도착지() throws {
++        XCTAssertEqual(try active("alightPaused1499").destinationStopID, "seoulForestGate")
++        XCTAssertEqual(try active("alightArrived").destinationStopID, "seoulForestGate")
++        XCTAssertEqual(try active("alightMismatchArrived").destinationStopID, "ttukseom")
++    }
++
++    // 깨짐: 정상 도착지 시드가 코스 여정으로 변환되지 않거나, 불일치 시드가 변환되면(지도가 그려지면) 실패한다.
++    func test_alight_코스_여정_변환은_정상만_성공한다() throws {
++        XCTAssertNotNil(CourseJourney(journey: try active("alightArrived")))
++        XCTAssertNil(CourseJourney(journey: try active("alightMismatchArrived")))
++    }
+ }
+ #endif
+diff --git a/ios/FocusMateUITests/AlightingFlowUITests.swift b/ios/FocusMateUITests/AlightingFlowUITests.swift
+new file mode 100644
+index 0000000..07881aa
+--- /dev/null
++++ b/ios/FocusMateUITests/AlightingFlowUITests.swift
+@@ -0,0 +1,337 @@
++import Foundation
++import XCTest
++
++/// 도착 안내 → 하차 태그 → 요약 → 메인 흐름 (alight* 시드, 수동 시계).
++/// AC-1~9, 10, 12, 13, 14, 15, 17, 18, 20, 21, 22, 23.
++@MainActor
++final class AlightingFlowUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    /// 문장 3개(약 1.7초 간격) + 확인 노출까지 기다리는 여유.
++    private let briefingTimeout: TimeInterval = 10
++    private let sentences = ["곧 서울숲 입구에 도착합니다", "버스가 멈추면 일어나주세요", "카드를 찍고 내려주세요"]
++    private let reduceMotion = ["--fm-ui-reduce-motion", "on"]
++    private let saveFailureText = "저장하지 못했어요. 다시 눌러주세요."
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    // MARK: helpers
++
++    private func resumeFromMain(_ h: FocusMateUIHarness) {
++        let resume = h.app.buttons["main.resumeJourney"]
++        XCTAssertTrue(resume.waitForExistence(timeout: timeout), "main.resumeJourney 없음")
++        resume.tap()
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++    }
++
++    private func openAlighting(_ h: FocusMateUIHarness) {
++        let button = h.app.buttons["open.alighting"]
++        XCTAssertTrue(button.waitForExistence(timeout: timeout), "open.alighting 없음")
++        button.tap()
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout), "alighting.briefing 없음")
++    }
++
++    private func confirmBriefing(_ h: FocusMateUIHarness) {
++        let confirm = h.element("alighting.confirm")
++        XCTAssertTrue(confirm.waitForExistence(timeout: briefingTimeout), "alighting.confirm 없음")
++        confirm.tap()
++        XCTAssertTrue(h.element("alighting.tag").waitForExistence(timeout: timeout), "alighting.tag 없음")
++    }
++
++    private func activateCard(_ h: FocusMateUIHarness) {
++        h.tap("test.activateAlightingCard")
++    }
++
++    private func toSummary(_ h: FocusMateUIHarness) {
++        openAlighting(h)
++        confirmBriefing(h)
++        activateCard(h)
++        XCTAssertTrue(h.element("screen.alightingSummary").waitForExistence(timeout: timeout), "요약 화면 없음")
++    }
++
++    private func jsonDiagnostic(_ h: FocusMateUIHarness, _ id: String) throws -> [String: Any] {
++        let raw = try h.diagnostic(id)
++        let data = try XCTUnwrap(raw.data(using: .utf8))
++        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++    }
++
++    private func briefing(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        try jsonDiagnostic(h, "test.arrivalBriefing")
++    }
++
++    /// Live Activity 요청 기록 중 시작 − 종료 수(활성 표시 수).
++    private func activeLiveActivities(_ h: FocusMateUIHarness) -> Int? {
++        guard let raw = h.value("test.liveActivity"),
++              let data = raw.data(using: .utf8),
++              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
++              let requests = root["requests"] as? [[String: Any]] else { return nil }
++        let starts = requests.filter { ($0["op"] as? String) == "start" }.count
++        let ends = requests.filter { ($0["op"] as? String) == "end" }.count
++        return starts - ends
++    }
++
++    private func persistedMemoText(_ h: FocusMateUIHarness) throws -> String {
++        try h.persistedText()
++    }
++
++    // MARK: ① 도착 안내 → 하차 태그 (AC-1, 6, 7, 8, 9, 21, 22)
++
++    // 깨짐: 도착해도 도착 안내가 안 뜨거나, 문장이 순서대로 나오지 않거나, 확인이 안 나오거나,
++    // 일시정지·포기가 남거나, 안내 중에 기록이 생긴다.
++    func testAC1_22_도착하면_도착_안내가_문장_순서대로_나오고_확인이_나오며_일시정지와_포기는_없다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightPaused1499")
++        resumeFromMain(h)
++
++        h.advance(1)
++
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
++        // 문장 순서는 ArrivalBriefingControllerTests가 결정적으로 검증한다. UI는 처음엔 확인이 없고 끝에 마지막 문장과 함께 나옴을 본다.
++        XCTAssertEqual(try briefing(h)["showsConfirm"] as? Bool, false)
++        XCTAssertFalse(h.element("alighting.confirm").exists)
++        XCTAssertTrue(h.element("alighting.confirm").waitForExistence(timeout: briefingTimeout), "확인 버튼이 나오지 않음")
++        XCTAssertEqual(h.element("alighting.sentence").label, sentences[2])
++        XCTAssertEqual(try briefing(h)["index"] as? Int, 2)
++        XCTAssertFalse(h.element("journey.pause").exists)
++        XCTAssertFalse(h.element("journey.abandon").exists)
++        XCTAssertFalse(h.element("journey.arrived").exists)
++        XCTAssertEqual(try h.recordCount(), 0)
++    }
++
++    // 깨짐: 확인 뒤 하차 태그로 가지 않거나, 카드에 초점이 없거나, 뒤로가기가 보이거나,
++    // 카드 탭만으로 저장·하차 처리가 되거나, 터치 안내가 없거나, LCD에 카드 번호·옛 문구가 나온다.
++    func testAC6_7_8_9_21_하차_태그는_카드에_초점이_있고_뒤로가_없으며_탭만으로는_완료되지_않고_활성화하면_카드_이름이_보인다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightPaused1499")
++        resumeFromMain(h)
++        h.advance(1, times: 2)
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
++        confirmBriefing(h)
++
++        XCTAssertEqual(try jsonDiagnostic(h, "test.alighting")["focus"] as? String, "card")
++        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
++        let before = try h.writeAttempts()
++        let card = h.element("alighting.card")
++        XCTAssertTrue(card.waitForExistence(timeout: timeout))
++        card.tap()
++        let hint = h.element("alighting.tapHint")
++        XCTAssertTrue(hint.waitForExistence(timeout: timeout), "터치 뒤 안내가 없음")
++        XCTAssertTrue(hint.label.contains("카드를 위로 밀어 단말기에 대주세요"), hint.label)
++        XCTAssertEqual(try h.writeAttempts(), before)
++        XCTAssertTrue(h.element("alighting.tag").exists)
++        XCTAssertFalse(h.element("screen.alightingSummary").exists)
++
++        activateCard(h)
++
++        XCTAssertTrue(h.waitForValue("alighting.lcdStatus", "집중동행카드"), h.value("alighting.lcdStatus") ?? "nil")
++        XCTAssertFalse(h.app.staticTexts["하차 완료"].exists)
++        XCTAssertFalse(h.element("alighting.lcdStatus").label.contains("하차 완료"))
++    }
++
++    // MARK: ② 하차 → 요약 → 메인 (AC-5, 10, 15, 17)
++
++    // 깨짐: 요약이 할 일·시간·도착지를 보이지 않거나, 메모 저장 뒤 기록이 1건·메모가 아니거나,
++    // 여정이 남거나 현재 정류장이 도착지로 바뀌지 않거나 Live Activity가 남는다.
++    func testAC5_10_15_17_하차하면_요약을_보이고_메모와_함께_완료하면_기록_1건이_저장되고_메인으로_돌아온다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        openAlighting(h)
++        confirmBriefing(h)
++
++        activateCard(h)
++
++        XCTAssertTrue(h.element("screen.alightingSummary").waitForExistence(timeout: timeout))
++        XCTAssertEqual(h.element("summary.task").label, "논문")
++        XCTAssertEqual(h.element("summary.minutes").label, "25 min")
++        XCTAssertEqual(h.element("summary.destination").label, "서울숲 입구")
++
++        let memo = h.element("summary.memo")
++        XCTAssertTrue(memo.waitForExistence(timeout: timeout))
++        memo.tap()
++        memo.typeText("집중 잘됨")
++        h.tap("summary.home")
++
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("main.activeJourney").exists)
++        XCTAssertNil(try h.persistedJourney().active)
++        XCTAssertEqual(try h.persistedCurrentStation().id, "seoulForestGate")
++        XCTAssertEqual(try h.persistedRecordCount(), 1)
++        XCTAssertTrue(try persistedMemoText(h).contains("집중 잘됨"))
++        XCTAssertEqual(activeLiveActivities(h), 0)
++    }
++
++    // MARK: ③ 동작 줄이기 (AC-2, 3)
++
++    // 깨짐: 동작 줄이기에서 문장이 순차로만 나오거나 확인이 지연된다.
++    func testAC2_동작_줄이기에서는_세_문장과_확인이_즉시_함께_보인다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightPaused1499", extraArguments: reduceMotion)
++        resumeFromMain(h)
++
++        h.advance(1, times: 2)
++
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.confirm").waitForExistence(timeout: 1))
++        let diag = try briefing(h)
++        XCTAssertEqual(diag["showsAll"] as? Bool, true)
++        XCTAssertEqual(diag["showsConfirm"] as? Bool, true)
++        let label = h.element("alighting.sentence").label
++        for sentence in sentences {
++            XCTAssertTrue(label.contains(sentence), "문장 누락: \(sentence) / \(label)")
++        }
++    }
++
++    // 깨짐: 도착이 저장되지 않거나(1500 아님), 쓰기가 1회가 아니거나, 도착만으로 기록이 생긴다.
++    func testAC3_도착하면_저장본은_도착_상태이고_쓰기는_1회이며_기록은_0건이다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightPaused1499", extraArguments: reduceMotion)
++        resumeFromMain(h)
++        let before = try h.writeAttempts()
++
++        h.advance(1, times: 2)
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
++
++        XCTAssertEqual(try h.persistedElapsed(), 1500)
++        XCTAssertEqual(try h.writeAttempts(), before + 1)
++        XCTAssertEqual(try h.persistedRecordCount(), 0)
++    }
++
++    // MARK: ④ 복원 (AC-4, 13, 14, 21)
++
++    // 깨짐: 도착 카드에 새 여정 시작이 남거나 하차하기가 없다.
++    func testAC21_도착_여정_카드에는_하차하기만_있고_새_여정_시작은_없다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++
++        let alight = h.app.buttons["open.alighting"]
++        XCTAssertTrue(alight.waitForExistence(timeout: timeout))
++        XCTAssertEqual(alight.label, "하차하기")
++        XCTAssertFalse(h.element("open.preparation").exists)
++        XCTAssertFalse(h.app.buttons["새 여정 시작"].exists)
++        XCTAssertFalse(h.app.buttons["이어가기"].exists)
++        XCTAssertFalse(h.element("main.resumeJourney").exists)
++    }
++
++    // 깨짐: 안내 중 재실행 후 안내가 처음부터 다시 시작하지 않는다.
++    func testAC4_안내_중_재실행하면_메인에서_하차하기로_안내를_처음부터_다시_본다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        openAlighting(h)
++        XCTAssertTrue(h.element("alighting.confirm").waitForExistence(timeout: briefingTimeout))
++        XCTAssertEqual(try briefing(h)["showsConfirm"] as? Bool, true)
++
++        h.relaunch(extraArguments: FocusMateUIHarness.manualClockArguments)
++
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        openAlighting(h)
++        // 확인을 이미 본 뒤 재실행했는데 다시 확인 없이 시작한다 = 처음부터. 이후 다시 확인이 나온다.
++        XCTAssertEqual(try briefing(h)["showsConfirm"] as? Bool, false)
++        XCTAssertFalse(h.element("alighting.confirm").exists)
++        XCTAssertTrue(h.element("alighting.confirm").waitForExistence(timeout: briefingTimeout))
++    }
++
++    // 깨짐: 하차 태그에서 재실행했을 때 기록이 생기거나 하차하기로 복귀하지 못한다.
++    func testAC14_하차_태그에서_재실행하면_기록_없이_메인_하차하기로_돌아온다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        openAlighting(h)
++        confirmBriefing(h)
++
++        h.relaunch(extraArguments: FocusMateUIHarness.manualClockArguments)
++
++        XCTAssertTrue(h.app.buttons["open.alighting"].waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.persistedRecordCount(), 0)
++    }
++
++    // 깨짐: 요약에서 재실행하면 요약이 복원되거나 기록이 사라진다(요약은 메모리 전용).
++    func testAC13_요약에서_재실행하면_메인으로_돌아오고_기록은_1건_요약은_없다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        toSummary(h)
++
++        h.relaunch(extraArguments: FocusMateUIHarness.manualClockArguments)
++
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("screen.alightingSummary").exists)
++        XCTAssertFalse(h.element("main.activeJourney").exists)
++        XCTAssertEqual(try h.persistedRecordCount(), 1)
++        XCTAssertEqual(try h.recordCount(), 1)
++    }
++
++    // MARK: ⑤ 실패 (AC-12, 18, 20)
++
++    // 깨짐: 하차 저장 실패에 태그 화면을 떠나거나, 실패 문구가 없거나, 기록·현재 정류장·여정이 바뀐다.
++    func testAC12_하차_저장_실패는_태그_화면에_남고_상태를_바꾸지_않으며_다시_하면_요약으로_간다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        openAlighting(h)
++        confirmBriefing(h)
++
++        h.tap("test.alighting.failNextSave")
++        activateCard(h)
++
++        let failure = h.element("alighting.saveFailure")
++        XCTAssertTrue(failure.waitForExistence(timeout: timeout))
++        XCTAssertEqual(failure.label, saveFailureText)
++        XCTAssertTrue(h.element("alighting.tag").exists)
++        XCTAssertFalse(h.element("screen.alightingSummary").exists)
++        XCTAssertEqual(try h.persistedRecordCount(), 0)
++        XCTAssertEqual(try h.persistedCurrentStation().id, "seongsu")
++        XCTAssertNotNil(try h.persistedJourney().active)
++
++        activateCard(h)
++
++        XCTAssertTrue(h.element("screen.alightingSummary").waitForExistence(timeout: timeout))
++    }
++
++    // 깨짐: 메모 길이 상한(200)이 없거나 카운터가 200 / 200이 아니다.
++    func testAC18_메모에_201자를_붙여넣으면_200자로_잘리고_카운터는_200_200이다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        toSummary(h)
++
++        let memo = h.element("summary.memo")
++        XCTAssertTrue(memo.waitForExistence(timeout: timeout))
++        memo.tap()
++        memo.typeText(String(repeating: "가", count: 201))
++
++        XCTAssertEqual((memo.value as? String)?.count, 200)
++        XCTAssertEqual(h.element("summary.memoCounter").label, "200 / 200")
++    }
++
++    // 깨짐: 요약 저장 실패에 메인으로 가거나, 입력이 지워지거나, 실패 문구가 없다.
++    func testAC20_요약_저장_실패는_요약에_남고_입력을_보존하며_다시_하면_메인으로_간다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
++        toSummary(h)
++        h.tap("test.summary.failNextSave")
++        let memo = h.element("summary.memo")
++        XCTAssertTrue(memo.waitForExistence(timeout: timeout))
++        memo.tap()
++        memo.typeText("집중 잘됨")
++        // 키보드가 메인으로 버튼을 가리면 화면 윗부분을 눌러 내린다.
++        if h.app.keyboards.count > 0 {
++            h.element("screen.alightingSummary").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
++        }
++
++        h.tap("summary.home")
++
++        let failure = h.element("summary.saveFailure")
++        XCTAssertTrue(failure.waitForExistence(timeout: timeout))
++        XCTAssertEqual(failure.label, saveFailureText)
++        XCTAssertTrue(h.element("screen.alightingSummary").exists)
++        XCTAssertFalse(h.element("screen.main").exists)
++        XCTAssertEqual(memo.value as? String, "집중 잘됨")
++
++        h.tap("summary.home")
++
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
++        XCTAssertEqual(try h.persistedRecordCount(), 1)
++    }
++
++    // MARK: ⑥ 지도 생략 (AC-23)
++
++    // 깨짐: 계산 도착지와 저장 도착지가 다른데 지도가 그려지거나 지도 도구가 눌릴 수 있다.
++    func testAC23_도착지가_계산과_다르면_지도와_지도_도구_없이_확인만_보인다() throws {
++        let h = FocusMateUIHarness.launchLifecycle(seed: "alightMismatchArrived")
++        openAlighting(h)
++
++        XCTAssertTrue(h.element("alighting.confirm").waitForExistence(timeout: briefingTimeout))
++        XCTAssertFalse(h.element("journey.map").exists)
++        XCTAssertFalse(h.element("test.map").exists)
++        for id in ["journey.map.follow", "journey.map.theme"] {
++            let tool = h.element(id)
++            XCTAssertTrue(!tool.exists || !tool.isEnabled, "지도 도구가 눌릴 수 있음: \(id)")
++        }
++    }
++}
+diff --git a/ios/FocusMateUITests/JourneyAbandonUITests.swift b/ios/FocusMateUITests/JourneyAbandonUITests.swift
+index a4c3328..2094539 100644
+--- a/ios/FocusMateUITests/JourneyAbandonUITests.swift
++++ b/ios/FocusMateUITests/JourneyAbandonUITests.swift
+@@ -96,7 +96,7 @@ final class JourneyAbandonUITests: XCTestCase {
+ 
+         h.advance(1, times: 2)
+ 
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         XCTAssertFalse(h.element("journey.abandon").exists)
+     }
+ 
+@@ -392,7 +392,7 @@ final class JourneyAbandonUITests: XCTestCase {
+         resumeFromMain(h)
+         XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
+         h.advance(1, times: 2)
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         try assertStaysOnJourneyAfterSwipes(h)
+     }
+ 
+diff --git a/ios/FocusMateUITests/JourneyMapUITests.swift b/ios/FocusMateUITests/JourneyMapUITests.swift
+index a607be8..25c71b0 100644
+--- a/ios/FocusMateUITests/JourneyMapUITests.swift
++++ b/ios/FocusMateUITests/JourneyMapUITests.swift
+@@ -168,15 +168,17 @@ final class JourneyMapUITests: XCTestCase {
+         XCTAssertTrue(h.waitUntil { h.element("journey.map.follow").isEnabled && h.element("journey.map.theme").isEnabled })
+     }
+ 
+-    // 깨짐: 시트가 열린 채 도착해도 시트가 남거나 도착 후 도구가 잠긴다.
+-    func testAC24_시트가_열린_채_도착하면_시트가_닫히고_도구는_활성이다() {
++    // 깨짐: 시트가 열린 채 도착해도 시트가 남거나, 도착 안내 아래의 지도 도구가 눌릴 수 있다.
++    func testAC24_시트가_열린_채_도착하면_시트가_닫히고_도구는_도착_안내에_가려져_누를_수_없다() {
+         let h = running("timerNearArrival")
+         openSheet(h)
+         h.advance(60)
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         XCTAssertTrue(h.waitUntil { !h.element("journey.map.themeSheet").exists })
+-        XCTAssertTrue(h.element("journey.map.follow").isEnabled)
+-        XCTAssertTrue(h.element("journey.map.theme").isEnabled)
++        for id in ["journey.map.follow", "journey.map.theme"] {
++            let tool = h.element(id)
++            XCTAssertTrue(!tool.exists || !tool.isEnabled || !tool.isHittable, "도착 안내 아래 도구가 눌릴 수 있음: \(id)")
++        }
+     }
+ 
+     // 깨짐: 일시정지 상태에서 테마 버튼이 활성이거나 탭하면 시트가 열린다.
+@@ -247,15 +249,18 @@ final class JourneyMapUITests: XCTestCase {
+ 
+     // MARK: AC-39
+ 
+-    // 깨짐: 남은 정류장·거리 표시가 5개/2.6km, 0개/0.0km가 아니다.
+-    func testAC39_남은_정류장과_거리가_진행과_도착에서_올바르게_표시된다() {
++    // 깨짐: 진행 중 남은 정류장·거리 표시가 5개/2.6km가 아니거나, 도착하면 도착 안내가 아닌 타이머 지표가 그대로 노출된다.
++    func testAC39_남은_정류장과_거리는_진행에서_표시되고_도착에서는_도착_안내가_대신한다() {
+         let paused = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
+         XCTAssertTrue(paused.waitForValue("journey.timer.stops", "5개"))
+         XCTAssertTrue(paused.waitForValue("journey.timer.distance", "2.6km"))
+         paused.app.terminate()
+ 
+         let arrived = FocusMateUIHarness.launchJourney(seed: "timerArrived")
+-        XCTAssertTrue(arrived.waitForValue("journey.timer.stops", "0개"))
+-        XCTAssertTrue(arrived.waitForValue("journey.timer.distance", "0.0km"))
++        XCTAssertTrue(arrived.element("alighting.briefing").waitForExistence(timeout: timeout))
++        let stops = arrived.element("journey.timer.stops")
++        let distance = arrived.element("journey.timer.distance")
++        XCTAssertTrue(!stops.exists || (stops.value as? String) != "0개")
++        XCTAssertTrue(!distance.exists || (distance.value as? String) != "0.0km")
+     }
+ }
+diff --git a/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift b/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+index 031a181..31c506b 100644
+--- a/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
++++ b/ios/FocusMateUITests/JourneyTimerAccessibilityUITests.swift
+@@ -22,13 +22,14 @@ final class JourneyTimerAccessibilityUITests: XCTestCase {
+         XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
+     }
+ 
+-    // 깨짐: 0초 도달 때 낭독 값이 "남은 시간 0분"이 아니다.
+-    func testV7_AC27_도착하면_낭독_값은_남은_시간_0분이다() throws {
++    // 깨짐: 도착하면 도착 안내가 뜨지 않거나, 도착 안내 아래의 "남은 시간 0분" 타이머가 낭독 대상으로 남는다.
++    func testV7_AC27_도착하면_도착_안내가_낭독되고_남은_시간_0분_타이머는_낭독되지_않는다() throws {
+         let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
+-        let remaining = h.element("journey.timer.remaining")
+-        XCTAssertTrue(remaining.waitForExistence(timeout: timeout))
+ 
+-        XCTAssertEqual(remaining.value as? String, "남은 시간 0분")
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.route").exists)
++        let remaining = h.element("journey.timer.remaining")
++        XCTAssertTrue(!remaining.exists || (remaining.value as? String) != "남은 시간 0분")
+     }
+ 
+     // 깨짐: 버튼 라벨이 상태와 어긋나거나, 전환 알림이 1회가 아니거나, 시간이 흐르는 동안 알림이 생긴다.
+diff --git a/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift b/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift
+index 6d1eb56..ca362a1 100644
+--- a/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift
++++ b/ios/FocusMateUITests/JourneyTimerLifecycleUITests.swift
+@@ -104,7 +104,7 @@ final class JourneyTimerLifecycleUITests: XCTestCase {
+ 
+         h.goBackground()
+ 
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         XCTAssertEqual(try h.persistedElapsed(), 1500)
+         XCTAssertFalse(h.element("journey.timer.pause").exists)
+         XCTAssertFalse(h.element("journey.timer.resume").exists)
+diff --git a/ios/FocusMateUITests/JourneyTimerUITests.swift b/ios/FocusMateUITests/JourneyTimerUITests.swift
+index e9e0831..4add52b 100644
+--- a/ios/FocusMateUITests/JourneyTimerUITests.swift
++++ b/ios/FocusMateUITests/JourneyTimerUITests.swift
+@@ -135,7 +135,7 @@ final class JourneyTimerUITests: XCTestCase {
+         h.tap("journey.timer.resume")
+         h.advance(60)
+ 
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "0 min")
+         XCTAssertFalse(h.element("journey.timer.pause").exists)
+         XCTAssertFalse(h.element("journey.timer.resume").exists)
+@@ -147,7 +147,7 @@ final class JourneyTimerUITests: XCTestCase {
+ 
+         h.relaunch(extraArguments: FocusMateUIHarness.manualClockArguments + ["--fm-ui-route", "journey"])
+ 
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         XCTAssertFalse(h.element("journey.timer.pause").exists)
+         XCTAssertFalse(h.element("journey.timer.resume").exists)
+         XCTAssertEqual(try h.memoryElapsed(), 1500)
+@@ -189,7 +189,7 @@ final class JourneyTimerUITests: XCTestCase {
+     // 깨짐: 도착 화면에 뒤로가기 버튼이 보이거나 스와이프로 메인에 돌아간다.
+     func testV8_AC9_도착_화면은_뒤로가기와_스와이프로_나갈_수_없다() throws {
+         let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
+-        XCTAssertTrue(h.element("journey.arrived").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+         try assertStaysOnJourneyAfterSwipes(h)
+     }
+ }
+diff --git a/ios/FocusMateUITests/MainActiveJourneyCardUITests.swift b/ios/FocusMateUITests/MainActiveJourneyCardUITests.swift
+index bec8ed8..3f0592a 100644
+--- a/ios/FocusMateUITests/MainActiveJourneyCardUITests.swift
++++ b/ios/FocusMateUITests/MainActiveJourneyCardUITests.swift
+@@ -89,12 +89,17 @@ final class MainActiveJourneyCardUITests: XCTestCase {
+         XCTAssertTrue(card.waitForExistence(timeout: timeout))
+         XCTAssertTrue(card.label.contains("도착한 여정이 있어요"), card.label)
+         XCTAssertFalse(h.element("main.resumeJourney").exists)
++        XCTAssertTrue(h.app.buttons["open.alighting"].exists)
+     }
+ 
+-    // 깨짐: 도착 여정의 시작 버튼 문구가 "새 여정 시작"이 아니다.
+-    func testAC24_도착_여정의_시작_버튼은_새_여정_시작이다() throws {
++    // 깨짐: 도착 여정 카드에 하차하기가 없거나 새 여정 시작 경로(open.preparation)·"새 여정 시작"이 남는다.
++    func testAC24_도착_여정은_하차하기만_있고_새_여정_시작_경로가_없다() throws {
+         let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
+-        XCTAssertEqual(startButton(h).label, "새 여정 시작")
++        let alight = h.app.buttons["open.alighting"]
++        XCTAssertTrue(alight.waitForExistence(timeout: timeout))
++        XCTAssertEqual(alight.label, "하차하기")
++        XCTAssertFalse(h.element("open.preparation").exists)
++        XCTAssertFalse(h.app.buttons["새 여정 시작"].exists)
+     }
+ 
+     // MARK: AC-25
+diff --git a/ios/FocusMateUITests/NewJourneyUITests.swift b/ios/FocusMateUITests/NewJourneyUITests.swift
+index 6a7512d..6436432 100644
+--- a/ios/FocusMateUITests/NewJourneyUITests.swift
++++ b/ios/FocusMateUITests/NewJourneyUITests.swift
+@@ -306,30 +306,17 @@ final class NewJourneyUITests: XCTestCase {
+         XCTAssertEqual(try h.writeAttempts(), before)
+     }
+ 
+-    // MARK: AC-24 (확정)
++    // MARK: AC-24 (도착 여정은 새 여정 경로 없음)
+ 
+-    // 깨짐: 도착 여정 확정이 출발지나 식 값이 아니라 저장된 도착지(서울숲 입구)를 현재 정류장으로 쓰지 않는다.
+-    func testAC24_도착_여정을_확정하면_현재_정류장은_서울숲_입구_정방향이다() throws {
++    // 깨짐: 도착 여정에 새 여정 시작 경로(open.preparation)가 남거나, 확정 알림이 열리거나 저장이 일어난다.
++    // 기존 확정 경로 2건(현재 정류장 서울숲 입구 / 여정 삭제·기록 1건)은 하차 흐름으로 이동해 중복이라 하나로 합쳤다.
++    func testAC24_도착_여정에는_새_여정_경로가_없고_하차하기만_있다() throws {
+         let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
+-        openAlert(h)
+-
+-        tapConfirm(h)
+-
+-        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
+-        let station = try h.persistedCurrentStation()
+-        XCTAssertEqual(station.id, "seoulForestGate")
+-        XCTAssertEqual(station.direction, 1)
+-    }
+-
+-    // 깨짐: 도착 여정 확정이 여정을 지우지 않거나 완료 기록을 만든다.
+-    func testAC24_도착_여정을_확정하면_여정은_삭제되고_완료_기록은_1건_그대로다() throws {
+-        let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
+-        openAlert(h)
+-
+-        tapConfirm(h)
+-        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
++        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+ 
+-        XCTAssertNil(try h.persistedJourney().active)
++        XCTAssertTrue(h.app.buttons["open.alighting"].waitForExistence(timeout: timeout))
++        XCTAssertFalse(h.element("open.preparation").exists)
++        XCTAssertFalse(h.alert(titled: alertTitle).exists)
+         XCTAssertEqual(try h.persistedRecordCount(), 1)
+     }
+ }

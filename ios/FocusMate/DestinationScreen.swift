@@ -18,6 +18,12 @@ struct DestinationScreen: View {
             BoardingTagView(model: model, services: services)
         } else if destination == .journey {
             JourneyView(model: model, services: services)
+        } else if destination == .alighting {
+            AlightingTagView(model: model, services: services)
+        } else if destination == .alightingSummary {
+            AlightingSummaryView(model: model, services: services)
+        } else if destination == .records {
+            RecordsView(model: model, services: services)
         } else {
             placeholderOrTime
         }
@@ -33,7 +39,6 @@ struct DestinationScreen: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(destination.title).font(.largeTitle.bold())
                         .accessibilityIdentifier("screen.\(destination.rawValue)")
-                    if destination == .records { Text("아직 여행 기록이 없어요.").foregroundStyle(.secondary) }
                     Spacer()
                 }
             }

@@ -7,6 +7,29 @@ protocol JourneyBoarding: AnyObject {
     func boardJourney() -> Bool
 }
 
+/// 하차 접촉 커밋 경계. AppModel이 채택한다.
+@MainActor
+protocol JourneyAlighting: AnyObject {
+    func alightJourney() -> Bool
+}
+
+/// 승차·하차 태그의 낭독 문구.
+struct CardTagCopy: Equatable {
+    let recognizedAnnouncement, failedAnnouncement: String
+    static let boarding = CardTagCopy(recognizedAnnouncement: "집중동행카드 인식됨, 승차했습니다",
+                                      failedAnnouncement: "승차 정보를 저장하지 못했어요. 카드를 다시 대주세요.")
+    static let alighting = CardTagCopy(recognizedAnnouncement: "집중동행카드 인식됨, 하차했습니다",
+                                       failedAnnouncement: JourneyTimerDisplay.transitionFailureText)
+}
+
+/// 하차 저장 뒤 중단된 태그 화면의 출구 규칙. 저장 여부는 컨트롤러 phase가 아니라 모델 상태로 판단한다.
+enum AlightingTagRecovery {
+    /// 하차가 저장됐고 늦은 전환(접촉·유지·페이드)이 진행 중이 아니면 바로 요약으로 간다.
+    static func shouldFinish(phase: BoardingTagController.Phase, alightingSaved: Bool) -> Bool {
+        alightingSaved && ![.contacting, .held, .fading].contains(phase)
+    }
+}
+
 /// 승차 태그 상태 기계. 끌어서 태그 영역과 30% 이상 겹치는 순간(손을 떼기 전) 인식하고, 접촉 이동 뒤 진행 여정을 1회 저장한 다음
 /// 인식 유지·페이드를 거쳐 여행으로 넘긴다. 저장(recognitionID)과 전환(transitionToken)은 서로 다른 토큰이라 전환 취소가 저장을 막지 않는다.
 @MainActor @Observable
@@ -14,8 +37,8 @@ final class BoardingTagController {
     enum Phase: Equatable { case ready, dragging, contacting, held, fading, finished, failed, abandoned }
     enum LCDState: Equatable { case ready, recognized }
 
-    static let recognizedAnnouncement = "집중동행카드 인식됨, 승차했습니다"
-    static let failedAnnouncement = "승차 정보를 저장하지 못했어요. 카드를 다시 대주세요."
+    static let recognizedAnnouncement = CardTagCopy.boarding.recognizedAnnouncement
+    static let failedAnnouncement = CardTagCopy.boarding.failedAnnouncement
 
     private(set) var phase: Phase = .ready
     private(set) var cardOffset: CGSize = .zero
@@ -30,7 +53,9 @@ final class BoardingTagController {
     @ObservationIgnored private(set) var pendingSave: Task<Void, Never>?
     @ObservationIgnored private(set) var pendingTransition: Task<Void, Never>?
 
-    @ObservationIgnored private let boarder: JourneyBoarding
+    /// 접촉 커밋(승차 또는 하차 저장).
+    @ObservationIgnored private let save: () -> Bool
+    @ObservationIgnored private let copy: CardTagCopy
     @ObservationIgnored private let haptics: IssuanceHaptics
     @ObservationIgnored private let announcer: AccessibilityAnnouncing
     @ObservationIgnored private let geometry: BoardingGeometry
@@ -50,12 +75,31 @@ final class BoardingTagController {
     /// 저장 실패 뒤에는 손을 뗄 때까지 같은 동작으로 다시 인식하지 않는다(실패 안내 반복 방지).
     @ObservationIgnored private var awaitingRelease = false
 
-    init(boarder: JourneyBoarding, haptics: IssuanceHaptics, announcer: AccessibilityAnnouncing,
-         geometry: BoardingGeometry = .init(), timing: BoardingTiming = .standard,
-         sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) },
-         holdSleep: ((Duration) async -> Void)? = nil,
-         onFinished: @escaping () -> Void) {
-        self.boarder = boarder
+    convenience init(boarder: JourneyBoarding, haptics: IssuanceHaptics, announcer: AccessibilityAnnouncing,
+                     geometry: BoardingGeometry = .init(), timing: BoardingTiming = .standard,
+                     sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+                     holdSleep: ((Duration) async -> Void)? = nil,
+                     onFinished: @escaping () -> Void) {
+        self.init(save: { boarder.boardJourney() }, copy: .boarding, haptics: haptics, announcer: announcer,
+                  geometry: geometry, timing: timing, sleep: sleep, holdSleep: holdSleep, onFinished: onFinished)
+    }
+
+    /// 하차 태그. 조작·기하·타이밍은 승차와 같고 저장과 문구만 다르다.
+    convenience init(alighter: JourneyAlighting, haptics: IssuanceHaptics, announcer: AccessibilityAnnouncing,
+                     geometry: BoardingGeometry = .init(), timing: BoardingTiming = .standard,
+                     sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+                     holdSleep: ((Duration) async -> Void)? = nil,
+                     onFinished: @escaping () -> Void) {
+        self.init(save: { alighter.alightJourney() }, copy: .alighting, haptics: haptics, announcer: announcer,
+                  geometry: geometry, timing: timing, sleep: sleep, holdSleep: holdSleep, onFinished: onFinished)
+    }
+
+    private init(save: @escaping () -> Bool, copy: CardTagCopy, haptics: IssuanceHaptics,
+                 announcer: AccessibilityAnnouncing, geometry: BoardingGeometry, timing: BoardingTiming,
+                 sleep: @escaping (Duration) async -> Void, holdSleep: ((Duration) async -> Void)?,
+                 onFinished: @escaping () -> Void) {
+        self.save = save
+        self.copy = copy
         self.haptics = haptics
         self.announcer = announcer
         self.geometry = geometry
@@ -166,15 +210,15 @@ final class BoardingTagController {
 
     private func commit(_ id: Int, reduceMotion: Bool) {
         guard recognitionID == id, phase == .contacting else { return }
-        guard boarder.boardJourney() else {
+        guard save() else {
             awaitingRelease = hasDragged
             phase = .failed
             cardOffset = .zero
             showsSaveFailure = true
-            announcer.announce(Self.failedAnnouncement)
+            announcer.announce(copy.failedAnnouncement)
             return
         }
-        announcer.announce(Self.recognizedAnnouncement)
+        announcer.announce(copy.recognizedAnnouncement)
         if transitionCancelled {
             if resetWhenSettled { resetToReady() } else { phase = .abandoned }
             return

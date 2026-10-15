@@ -197,12 +197,13 @@ struct RootView: View {
                 Text(JourneyLifecycleText.saveFailure).foregroundStyle(.orange).accessibilityIdentifier("main.saveFailure")
             }
             if let card = model.activeJourneyCard {
-                ActiveJourneyCardView(content: card) { apply(model.resumeJourney()) }
+                ActiveJourneyCardView(content: card, onResume: { apply(model.resumeJourney()) },
+                                      onAlight: { apply(model.beginAlighting()) })
             }
             PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
             Button("카드 꾸미기", action: startCardCustomization)
                 .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
-            ForEach(Destination.mainMenu, id: \.self) { destination in
+            ForEach(model.mainMenuDestinations, id: \.self) { destination in
                 Button(destination == .preparation ? model.mainStartTitle : destination.mainMenuTitle) {
                     if destination != .preparation { model.open(destination.mainMenuTarget) }
                     // 진행 여정은 확인을 거쳐서만 정리한다(W07).

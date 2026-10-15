@@ -306,30 +306,17 @@ final class NewJourneyUITests: XCTestCase {
         XCTAssertEqual(try h.writeAttempts(), before)
     }
 
-    // MARK: AC-24 (확정)
+    // MARK: AC-24 (도착 여정은 새 여정 경로 없음)
 
-    // 깨짐: 도착 여정 확정이 출발지나 식 값이 아니라 저장된 도착지(서울숲 입구)를 현재 정류장으로 쓰지 않는다.
-    func testAC24_도착_여정을_확정하면_현재_정류장은_서울숲_입구_정방향이다() throws {
+    // 깨짐: 도착 여정에 새 여정 시작 경로(open.preparation)가 남거나, 확정 알림이 열리거나 저장이 일어난다.
+    // 기존 확정 경로 2건(현재 정류장 서울숲 입구 / 여정 삭제·기록 1건)은 하차 흐름으로 이동해 중복이라 하나로 합쳤다.
+    func testAC24_도착_여정에는_새_여정_경로가_없고_하차하기만_있다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
-        openAlert(h)
+        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
 
-        tapConfirm(h)
-
-        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
-        let station = try h.persistedCurrentStation()
-        XCTAssertEqual(station.id, "seoulForestGate")
-        XCTAssertEqual(station.direction, 1)
-    }
-
-    // 깨짐: 도착 여정 확정이 여정을 지우지 않거나 완료 기록을 만든다.
-    func testAC24_도착_여정을_확정하면_여정은_삭제되고_완료_기록은_1건_그대로다() throws {
-        let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
-        openAlert(h)
-
-        tapConfirm(h)
-        XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
-
-        XCTAssertNil(try h.persistedJourney().active)
+        XCTAssertTrue(h.app.buttons["open.alighting"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(h.element("open.preparation").exists)
+        XCTAssertFalse(h.alert(titled: alertTitle).exists)
         XCTAssertEqual(try h.persistedRecordCount(), 1)
     }
 }

@@ -7,6 +7,9 @@ struct JourneyTimerView: View {
     let controller: JourneyTimerController
     let map: JourneyMapController?
     let reduceMotion: Bool
+    /// 도착 안내가 덮을 때는 내용을 그리지 않는다 — 숨김 수식어만으로는 아래 "남은 시간 0분"이 낭독에 남는다(BR-7).
+    /// 등장 처리(진도·앱 밖 표시 동기화)와 진단은 그대로 둔다.
+    var concealed = false
     #if DEBUG
     var path: [Destination] = []
     #endif
@@ -25,7 +28,8 @@ struct JourneyTimerView: View {
 
     var body: some View {
         Group {
-            if let map { mapBody(map) } else { legacyBody }
+            if concealed { Color.clear }
+            else if let map { mapBody(map) } else { legacyBody }
         }
         .onAppear {
             controller.appear()
@@ -91,10 +95,8 @@ struct JourneyTimerView: View {
         case .paused:
             roundButton(JourneyTimerDisplay.resumeLabel, systemImage: "play.fill", id: "journey.timer.resume") { controller.resume() }
         case .arrived:
-            Text("도착했어요").font(.title3.bold())
-                .padding(.horizontal, 14).frame(minHeight: 48)
-                .background(.black.opacity(0.6), in: Capsule())
-                .accessibilityIdentifier("journey.arrived")
+            // 도착 안내가 위를 덮는다(W09).
+            EmptyView()
         }
     }
 
@@ -210,8 +212,8 @@ struct JourneyTimerView: View {
         case .paused:
             controlButton(JourneyTimerDisplay.resumeLabel, systemImage: "play.fill", id: "journey.timer.resume") { controller.resume() }
         case .arrived:
-            // 임시 도착 상태. 도착 안내·하차 태그는 W09가 대체한다.
-            Text("도착했어요").font(.title2.bold()).accessibilityIdentifier("journey.arrived")
+            // 도착 안내가 위를 덮는다(W09).
+            EmptyView()
         }
     }
 

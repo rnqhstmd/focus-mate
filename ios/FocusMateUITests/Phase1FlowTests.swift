@@ -162,9 +162,10 @@ final class Phase1FlowTests: XCTestCase {
         let app = launch(seed: "ready")
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
 
+        // 기록은 W09a에서 실제 화면(연도 이동·잔디·목록)이 되어 진입·복귀만 확인한다.
         let destinations = [
-            (button: "기록", screen: "screen.records"),
-            (button: "설정", screen: "screen.settings"),
+            (button: "기록", screen: "screen.records", placeholder: false),
+            (button: "설정", screen: "screen.settings", placeholder: true),
         ]
 
         for destination in destinations {
@@ -174,7 +175,9 @@ final class Phase1FlowTests: XCTestCase {
             let navigationBar = app.navigationBars.firstMatch
             XCTAssertTrue(navigationBar.waitForExistence(timeout: timeout))
             XCTAssertEqual(navigationBar.buttons.count, 1)
-            XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
+            if destination.placeholder {
+                XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
+            }
 
             let backButton = navigationBar.buttons.firstMatch
             XCTAssertTrue(backButton.exists)

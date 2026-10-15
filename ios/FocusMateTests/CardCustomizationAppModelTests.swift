@@ -153,7 +153,7 @@ final class CardCustomizationAppModelTests: XCTestCase {
                 initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
                 currentStation: StationSnapshot(id: "seongsu", name: "성수역", direction: -1))
             XCTAssertTrue(model.save(latest)) // Existing public API; no snapshot setter.
-            XCTAssertTrue(model.saveRecordMemo("진입 후 메모", forJourneyID: "journey-001"))
+            XCTAssertEqual(model.updateRecordMemo("진입 후 메모", forJourneyID: "journey-001"), .done)
             let latestRecords = try XCTUnwrap(model.snapshot).records
             let latestJourney = try XCTUnwrap(model.snapshot).journey
             // When

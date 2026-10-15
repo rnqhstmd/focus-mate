@@ -22,13 +22,13 @@ final class JourneyTimerAccessibilityUITests: XCTestCase {
         XCTAssertEqual(try h.timerDiagnostic()["text"] as? String, "24 min")
     }
 
-    // 깨짐: 0초 도달 때 낭독 값이 "남은 시간 0분"이 아니다.
-    func testV7_AC27_도착하면_낭독_값은_남은_시간_0분이다() throws {
+    // 깨짐: 도착하면 도착 안내가 뜨지 않거나, 도착 안내 아래의 "남은 시간 0분" 타이머가 낭독 대상으로 남는다.
+    func testV7_AC27_도착하면_도착_안내가_낭독되고_남은_시간_0분_타이머는_낭독되지_않는다() throws {
         let h = FocusMateUIHarness.launchJourney(seed: "timerArrived")
-        let remaining = h.element("journey.timer.remaining")
-        XCTAssertTrue(remaining.waitForExistence(timeout: timeout))
 
-        XCTAssertEqual(remaining.value as? String, "남은 시간 0분")
+        XCTAssertTrue(h.element("alighting.briefing").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("alighting.route").exists)
+        XCTAssertFalse(h.element("journey.timer.remaining").exists, "journey.timer.remaining")
     }
 
     // 깨짐: 버튼 라벨이 상태와 어긋나거나, 전환 알림이 1회가 아니거나, 시간이 흐르는 동안 알림이 생긴다.

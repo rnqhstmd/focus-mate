@@ -136,3 +136,21 @@
 - 수정 요청 — 후속 질문에서 수정할 부분을 입력
 
 **A.** 승인
+
+## 2026-10-15 17:39 · Ruling: T5 테스트 헬퍼 중복 정리 이월
+
+**판정.** T5 리뷰 Important([동작불변]) "JourneyLiveActivitySyncTests.makeRigWithLeftovers가 makeRig와 중복"은 이 태스크에서 고치지 않고 phase-review 4b 정리로 넘긴다.
+**근거.** 대상이 테스트 파일이라 구현 주체는 수정 금지이고, T6 RED가 같은 파일에 케이스를 추가 중이라 지금 고치면 해시 기준선이 어긋난다. 동작 영향 없음.
+**틀리면.** phase-review에서 makeRig에 existing 매개변수를 두고 makeRigWithLeftovers를 위임으로 바꾼다(테스트 동작 불변).
+
+## 2026-10-15 18:12 · Ruling: review 동작 불변 정리 2건 + Minor 2건 정리
+
+**판정.** Important [동작불변] 2건(SyncTests makeRigWithLeftovers 중복 제거, RED 단계 주석 표기 제거)과 Minor 3건(Parity 테스트 주석, Policy 주석 M3, 게이트웨이 선택 지점 일원화 M5)을 정리한다. 테스트 파일은 red-writer, 프로덕션 주석·FocusMateApp은 세션이 정리.
+**근거.** 동작 불변이고 같은 파일을 이미 고치는 중이라 비용이 작다.
+**틀리면.** reports/review-cleanup.md 목록으로 되돌린다.
+
+## 2026-10-15 18:12 · Ruling: review Minor 7건 유예 · MEDIUM 6건 (문서 반영 4 · 유예 1 · 증거 확인 1)
+
+**판정.** quality Minor M1(전체 테스트는 verify에서), M4, M6, M7, M8, M9, M10은 유예. security MEDIUM: 순서 비보장·읽기 실패 정리는 PRD 알려진 한계(M-15·M-16)로, 개인정보 노출은 PRD 가정으로 문서 반영, 중복 카드 선택 경합은 동작 변경을 동반해 유예, 서명·임베드와 단위 테스트 게이트웨이는 증거 확인으로 종결.
+**근거.** 판정 규약 기본값(Minor 유예, MEDIUM은 동작 불변이 명백하면 정리·아니면 유예).
+**틀리면.** reports/review-deferred.md 항목을 후속 작업으로 연다.

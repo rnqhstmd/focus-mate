@@ -1,0 +1,273 @@
+diff --git a/ios/FocusMate.xcodeproj/project.pbxproj b/ios/FocusMate.xcodeproj/project.pbxproj
+index a368b10..187fe18 100644
+--- a/ios/FocusMate.xcodeproj/project.pbxproj
++++ b/ios/FocusMate.xcodeproj/project.pbxproj
+@@ -5,66 +5,87 @@
+ 	objectVersion = 77;
+ 	objects = {
+ 
++/* Begin PBXBuildFile section */
++		A10000000000000000000001 = {isa = PBXBuildFile; fileRef = A20000000000000000000014; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
++/* End PBXBuildFile section */
+ /* Begin PBXContainerItemProxy section */
+ 		A30000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000001; remoteInfo = FocusMate; };
+ 		A30000000000000000000002 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000001; remoteInfo = FocusMate; };
++		A30000000000000000000003 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000004; remoteInfo = FocusMateWidgets; };
+ /* End PBXContainerItemProxy section */
++/* Begin PBXCopyFilesBuildPhase section */
++		A60000000000000000000031 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A10000000000000000000001); name = "Embed Foundation Extensions"; runOnlyForDeploymentPostprocessing = 0; };
++/* End PBXCopyFilesBuildPhase section */
+ /* Begin PBXFileReference section */
+ 		A20000000000000000000011 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+ 		A20000000000000000000012 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+ 		A20000000000000000000013 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
++		A20000000000000000000014 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FocusMateWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+ /* End PBXFileReference section */
+ /* Begin PBXFrameworksBuildPhase section */
+ 		A60000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ 		A60000000000000000000012 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ 		A60000000000000000000013 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000014 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ /* End PBXFrameworksBuildPhase section */
++/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
++		A80000000000000000000001 = {isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = (Info.plist, ); target = A50000000000000000000004; };
++/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+ /* Begin PBXFileSystemSynchronizedRootGroup section */
+ 		A40000000000000000000002 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMate; sourceTree = "<group>"; };
+ 		A40000000000000000000003 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMateTests; sourceTree = "<group>"; };
+ 		A40000000000000000000004 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMateUITests; sourceTree = "<group>"; };
++		A40000000000000000000007 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
++		A40000000000000000000006 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A80000000000000000000001, ); explicitFileTypes = {}; explicitFolders = (); path = FocusMateWidgets; sourceTree = "<group>"; };
+ /* End PBXFileSystemSynchronizedRootGroup section */
+ /* Begin PBXGroup section */
+-		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002, A40000000000000000000003, A40000000000000000000004, A40000000000000000000005); sourceTree = "<group>"; };
+-		A40000000000000000000005 = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013); name = Products; sourceTree = "<group>"; };
++		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002, A40000000000000000000007, A40000000000000000000006, A40000000000000000000003, A40000000000000000000004, A40000000000000000000005); sourceTree = "<group>"; };
++		A40000000000000000000005 = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013, A20000000000000000000014); name = Products; sourceTree = "<group>"; };
+ /* End PBXGroup section */
+ /* Begin PBXNativeTarget section */
+-		A50000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000001; buildPhases = (A60000000000000000000001, A60000000000000000000011, A60000000000000000000021); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000002); dependencies = (); name = FocusMate; productName = FocusMate; productReference = A20000000000000000000011; productType = "com.apple.product-type.application"; };
++		A50000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000001; buildPhases = (A60000000000000000000001, A60000000000000000000011, A60000000000000000000021, A60000000000000000000031); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000002, A40000000000000000000007); dependencies = (A70000000000000000000003); name = FocusMate; productName = FocusMate; productReference = A20000000000000000000011; productType = "com.apple.product-type.application"; };
+ 		A50000000000000000000002 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000002; buildPhases = (A60000000000000000000002, A60000000000000000000012, A60000000000000000000022); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000003); dependencies = (A70000000000000000000001); name = FocusMateTests; productName = FocusMateTests; productReference = A20000000000000000000012; productType = "com.apple.product-type.bundle.unit-test"; };
+ 		A50000000000000000000003 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000003; buildPhases = (A60000000000000000000003, A60000000000000000000013, A60000000000000000000023); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000004); dependencies = (A70000000000000000000002); name = FocusMateUITests; productName = FocusMateUITests; productReference = A20000000000000000000013; productType = "com.apple.product-type.bundle.ui-testing"; };
++		A50000000000000000000004 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000004; buildPhases = (A60000000000000000000004, A60000000000000000000014, A60000000000000000000024); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000006, A40000000000000000000007); dependencies = (); name = FocusMateWidgets; productName = FocusMateWidgets; productReference = A20000000000000000000014; productType = "com.apple.product-type.app-extension"; };
+ /* End PBXNativeTarget section */
+ /* Begin PBXProject section */
+-		A90000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2700; TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 27.0; }; A50000000000000000000002 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000003 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; }; }; buildConfigurationList = AA0000000000000000000000; preferredProjectObjectVersion = 77; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A40000000000000000000001; productRefGroup = A40000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001, A50000000000000000000002, A50000000000000000000003); };
++		A90000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2700; TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 27.0; }; A50000000000000000000002 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000003 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000004 = {CreatedOnToolsVersion = 27.0; }; }; }; buildConfigurationList = AA0000000000000000000000; preferredProjectObjectVersion = 77; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A40000000000000000000001; productRefGroup = A40000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001, A50000000000000000000002, A50000000000000000000003, A50000000000000000000004); };
+ /* End PBXProject section */
+ /* Begin PBXResourcesBuildPhase section */
+ 		A60000000000000000000021 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ 		A60000000000000000000022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ 		A60000000000000000000023 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000024 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ /* End PBXResourcesBuildPhase section */
+ /* Begin PBXSourcesBuildPhase section */
+ 		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ 		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ 		A60000000000000000000003 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
++		A60000000000000000000004 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+ /* End PBXSourcesBuildPhase section */
+ /* Begin PBXTargetDependency section */
+ 		A70000000000000000000001 = {isa = PBXTargetDependency; target = A50000000000000000000001; targetProxy = A30000000000000000000001; };
+ 		A70000000000000000000002 = {isa = PBXTargetDependency; target = A50000000000000000000001; targetProxy = A30000000000000000000002; };
++		A70000000000000000000003 = {isa = PBXTargetDependency; target = A50000000000000000000004; targetProxy = A30000000000000000000003; };
+ /* End PBXTargetDependency section */
+ /* Begin XCBuildConfiguration section */
+-		AB0000000000000000000000 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; }; name = Debug; };
+-		AB0000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+-		AB0000000000000000000010 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
+-		AB0000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
++		AB0000000000000000000000 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 1; }; name = Debug; };
++		AB0000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 1; }; name = Release; };
++		AB0000000000000000000010 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_NSSupportsLiveActivities = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
++		AB0000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_NSSupportsLiveActivities = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
+ 		AB0000000000000000000020 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.tests; PRODUCT_NAME = "$(TARGET_NAME)"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FocusMate"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
+ 		AB0000000000000000000021 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.tests; PRODUCT_NAME = "$(TARGET_NAME)"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FocusMate"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
+ 		AB0000000000000000000030 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = FocusMate; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
+ 		AB0000000000000000000031 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = FocusMate; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
++		AB0000000000000000000040 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = FocusMateWidgets/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = FocusMate; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.widgets; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; APPLICATION_EXTENSION_API_ONLY = YES; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"); SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
++		AB0000000000000000000041 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = FocusMateWidgets/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = FocusMate; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.widgets; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; APPLICATION_EXTENSION_API_ONLY = YES; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"); SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
+ /* End XCBuildConfiguration section */
+ /* Begin XCConfigurationList section */
+ 		AA0000000000000000000000 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000000, AB0000000000000000000001); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+ 		AA0000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000010, AB0000000000000000000011); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+ 		AA0000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000020, AB0000000000000000000021); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+ 		AA0000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000030, AB0000000000000000000031); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
++		AA0000000000000000000004 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000040, AB0000000000000000000041); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+ /* End XCConfigurationList section */
+ 	};
+ 	rootObject = A90000000000000000000001;
+diff --git a/ios/FocusMateTests/AppInfoLiveActivityTests.swift b/ios/FocusMateTests/AppInfoLiveActivityTests.swift
+new file mode 100644
+index 0000000..ceddab5
+--- /dev/null
++++ b/ios/FocusMateTests/AppInfoLiveActivityTests.swift
+@@ -0,0 +1,48 @@
++import Foundation
++import XCTest
++
++/// AC-29 프로젝트 구성: Live Activity 지원 설정과 위젯 확장 임베드를 확인한다.
++final class AppInfoLiveActivityTests: XCTestCase {
++    private let appexName = "FocusMateWidgets.appex"
++
++    private func widgetBundle() -> Bundle? {
++        guard let url = Bundle.main.builtInPlugInsURL?.appendingPathComponent(appexName),
++              FileManager.default.fileExists(atPath: url.path) else { return nil }
++        return Bundle(url: url)
++    }
++
++    // 깨짐: Info.plist에서 NSSupportsLiveActivities 키가 빠지거나 false가 된다.
++    func testV15_AC29_앱_Info가_라이브_액티비티_지원을_선언한다() {
++        XCTAssertEqual(
++            Bundle.main.object(forInfoDictionaryKey: "NSSupportsLiveActivities") as? Bool,
++            true
++        )
++    }
++
++    // 깨짐: 위젯 확장이 앱의 PlugIns 폴더에 임베드되지 않는다.
++    func testV15_AC29_위젯_확장이_앱_번들에_내장되어_있다() {
++        XCTAssertNotNil(widgetBundle(), "PlugIns/\(appexName) 없음")
++    }
++
++    // 깨짐: 확장의 extension point가 widgetkit-extension이 아니게 된다.
++    func testV15_AC29_위젯_확장의_확장_포인트가_위젯킷이다() throws {
++        let bundle = try XCTUnwrap(widgetBundle(), "PlugIns/\(appexName) 없음")
++        let ext = bundle.object(forInfoDictionaryKey: "NSExtension") as? [String: Any]
++        XCTAssertEqual(ext?["NSExtensionPointIdentifier"] as? String, "com.apple.widgetkit-extension")
++    }
++
++    // 깨짐: 확장의 번들 식별자가 app.focusmate.prototype.widgets에서 바뀐다.
++    func testV15_AC29_위젯_확장의_번들_식별자가_약속된_값이다() throws {
++        let bundle = try XCTUnwrap(widgetBundle(), "PlugIns/\(appexName) 없음")
++        XCTAssertEqual(bundle.bundleIdentifier, "app.focusmate.prototype.widgets")
++    }
++
++    // 깨짐: 앱과 확장의 마케팅 버전이 어긋나거나 비게 된다.
++    func testV15_AC29_앱과_위젯_확장의_버전이_같고_비어_있지_않다() throws {
++        let bundle = try XCTUnwrap(widgetBundle(), "PlugIns/\(appexName) 없음")
++        let app = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
++        let ext = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
++        XCTAssertFalse((app ?? "").isEmpty)
++        XCTAssertEqual(app, ext)
++    }
++}
+diff --git a/ios/FocusMateWidgets/FocusMateWidgetsBundle.swift b/ios/FocusMateWidgets/FocusMateWidgetsBundle.swift
+new file mode 100644
+index 0000000..20195c3
+--- /dev/null
++++ b/ios/FocusMateWidgets/FocusMateWidgetsBundle.swift
+@@ -0,0 +1,10 @@
++import SwiftUI
++import WidgetKit
++
++/// 위젯 확장 진입점. 홈 화면 위젯 없이 여행 Live Activity만 제공한다.
++@main
++struct FocusMateWidgetsBundle: WidgetBundle {
++    var body: some Widget {
++        JourneyLiveActivityWidget()
++    }
++}
+diff --git a/ios/FocusMateWidgets/Info.plist b/ios/FocusMateWidgets/Info.plist
+new file mode 100644
+index 0000000..8b56bfa
+--- /dev/null
++++ b/ios/FocusMateWidgets/Info.plist
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists/PropertyList-1.0.dtd">
++<plist version="1.0">
++<dict>
++	<key>NSExtension</key>
++	<dict>
++		<key>NSExtensionPointIdentifier</key>
++		<string>com.apple.widgetkit-extension</string>
++	</dict>
++</dict>
++</plist>
+diff --git a/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift b/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift
+new file mode 100644
+index 0000000..48645e5
+--- /dev/null
++++ b/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift
+@@ -0,0 +1,80 @@
++import ActivityKit
++import SwiftUI
++import WidgetKit
++
++/// 여행 진행 표시(잠금 화면·다이나믹 아일랜드). 문구·시간 선택은 `JourneyActivityDisplay`가 정하고 여기서는 그리기만 한다.
++struct JourneyLiveActivityWidget: Widget {
++    var body: some WidgetConfiguration {
++        ActivityConfiguration(for: JourneyActivityAttributes.self) { context in
++            JourneyLockScreenView(context: context)
++                .activityBackgroundTint(Color.black.opacity(0.8))
++                .activitySystemActionForegroundColor(.white)
++        } dynamicIsland: { context in
++            DynamicIsland {
++                DynamicIslandExpandedRegion(.leading) {
++                    Label(context.attributes.busNumber, systemImage: "bus.fill").font(.headline)
++                }
++                DynamicIslandExpandedRegion(.trailing) {
++                    JourneyActivityTimeText(context: context).font(.title3.monospacedDigit())
++                }
++                DynamicIslandExpandedRegion(.bottom) {
++                    HStack {
++                        Text(context.attributes.destinationName).lineLimit(1)
++                        Spacer()
++                        Text(JourneyActivityDisplay.statusName(displayStatus(context)))
++                    }
++                    .font(.subheadline)
++                    .foregroundStyle(.secondary)
++                }
++            } compactLeading: {
++                Image(systemName: "bus.fill")
++                    .accessibilityLabel("\(context.attributes.busNumber)번 버스")
++            } compactTrailing: {
++                JourneyActivityTimeText(context: context).monospacedDigit().frame(maxWidth: 56)
++            } minimal: {
++                JourneyActivityTimeText(context: context).monospacedDigit()
++            }
++        }
++    }
++}
++
++/// 만료된 운행 중 카드는 도착으로 보인다. 일시정지는 만료가 없다.
++private func displayStatus(_ context: ActivityViewContext<JourneyActivityAttributes>) -> JourneyActivityStatus {
++    context.state.status == .running && context.isStale ? .arrived : context.state.status
++}
++
++private struct JourneyLockScreenView: View {
++    let context: ActivityViewContext<JourneyActivityAttributes>
++
++    var body: some View {
++        HStack(spacing: 12) {
++            Image(systemName: "bus.fill").font(.title2).accessibilityHidden(true)
++            VStack(alignment: .leading, spacing: 2) {
++                Text("\(context.attributes.busNumber) \(context.attributes.busKind)").font(.headline)
++                Text(context.attributes.destinationName).font(.subheadline).lineLimit(1)
++            }
++            Spacer()
++            VStack(alignment: .trailing, spacing: 2) {
++                Text(JourneyActivityDisplay.statusName(displayStatus(context))).font(.caption)
++                JourneyActivityTimeText(context: context).font(.title2.monospacedDigit())
++            }
++        }
++        .foregroundStyle(.white)
++        .padding(16)
++        .accessibilityElement(children: .combine)
++        .accessibilityLabel(JourneyActivityDisplay.accessibilityLabel(attributes: context.attributes,
++                                                                     state: context.state, isStale: context.isStale))
++    }
++}
++
++/// 운행 중은 시스템 카운트다운, 일시정지·만료는 정적 문자열.
++private struct JourneyActivityTimeText: View {
++    let context: ActivityViewContext<JourneyActivityAttributes>
++
++    var body: some View {
++        switch JourneyActivityDisplay.timeContent(state: context.state, isStale: context.isStale, now: .now) {
++        case .countdown(let range): Text(timerInterval: range, countsDown: true, showsHours: false)
++        case .fixed(let text): Text(text)
++        }
++    }
++}

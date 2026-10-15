@@ -33,8 +33,10 @@ struct JourneyView: View {
     /// '시작'을 이 화면에서 직접 본 경우에만 바로 진행한다. 저장된 진행 상태만으로는 자동 시작하지 않는다.
     private func ensureTimer() {
         guard timer == nil, let journey = model.activeJourney, journey.phase == .departed else { return }
+        let liveActivity = JourneyLiveActivitySync(journey: journey, gateway: services.liveActivities)
         timer = JourneyTimerController(journey: journey, autoStart: briefing?.isConfirmed == true, saver: model,
-                                       clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer)
+                                       clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
+                                       observer: liveActivity)
         // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
         if let timer, let course = CourseJourney(journey: journey) {
             map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,

@@ -104,5 +104,17 @@ struct FocusMateApp: App {
             try testBootstrap?.applyRoute(to: model)
         } catch { testSetupError = String(describing: error) }
         #endif
+        cleanUpLiveActivities()
+    }
+
+    /// 이전 실행이 남긴 앱 밖 표시를 저장 상태에 맞춘다. 읽기 실패는 "여행 없음"이 아니므로 건드리지 않는다.
+    private func cleanUpLiveActivities() {
+        guard case .ready = model.launchState else { return }
+        #if DEBUG
+        let services = journeyServices
+        #else
+        let services = JourneyServices.live()
+        #endif
+        JourneyLiveActivityCleanup.atLaunch(gateway: services.liveActivities, journey: model.activeJourney)
     }
 }

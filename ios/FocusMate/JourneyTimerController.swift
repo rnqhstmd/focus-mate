@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+/// 타이머 상태가 바뀌거나 처음 보일 때 알림을 받는다(앱 밖 표시 동기화). 진도·저장에는 관여하지 않는다.
+@MainActor protocol JourneyTimerObserving: AnyObject {
+    func timerDidChange(status: JourneyTimerController.Status, remainingSeconds: Int)
+}
+
 /// 출발 뒤 실제 분 타이머. 진도는 단조 시계 차이로 계산하고 틱은 화면 갱신·체크포인트 계기일 뿐이다.
 /// 앱이 살아 있는 동안(비활성·백그라운드 포함)은 시간이 흐르고, 백그라운드 진입 시 진행 상태로 즉시 저장한다.
 /// 모든 전환은 동기다. 저장자는 결과를 Bool로 돌려주고, 실패하면 사용자가 알 수 있게 표시한다(BR-7).
@@ -22,6 +27,7 @@ final class JourneyTimerController {
     @ObservationIgnored private let clock: JourneyClock
     @ObservationIgnored private let ticker: JourneyTicker
     @ObservationIgnored private let announcer: AccessibilityAnnouncing
+    @ObservationIgnored private let observer: JourneyTimerObserving?
     /// 마지막 정지·재개 시점까지의 정밀 진도.
     @ObservationIgnored private var baseElapsed: Duration
     /// 진행 중일 때만 있는 기준 시각. `status == .running`과 함께 움직인다.
@@ -31,7 +37,8 @@ final class JourneyTimerController {
 
     /// `autoStart`는 같은 화면이 '시작'을 직접 본 경우에만 true다. 저장된 paused=false만으로는 자동 시작하지 않는다.
     init(journey: JourneySnapshot, autoStart: Bool, saver: JourneyProgressSaving, clock: JourneyClock,
-         ticker: JourneyTicker, announcer: AccessibilityAnnouncing, checkpointInterval: Int = 10) {
+         ticker: JourneyTicker, announcer: AccessibilityAnnouncing, checkpointInterval: Int = 10,
+         observer: JourneyTimerObserving? = nil) {
         journeyID = journey.id
         totalSeconds = journey.totalSeconds
         self.checkpointInterval = checkpointInterval
@@ -39,6 +46,7 @@ final class JourneyTimerController {
         self.clock = clock
         self.ticker = ticker
         self.announcer = announcer
+        self.observer = observer
         baseElapsed = .seconds(journey.progress.elapsedSeconds)
         lastSavedElapsed = journey.progress.elapsedSeconds
         if journey.isArrived {
@@ -66,6 +74,7 @@ final class JourneyTimerController {
         case .arrived: retryArrivalIfNeeded()
         }
         refresh()
+        notifyObserver()
     }
 
     func tick() {
@@ -102,6 +111,7 @@ final class JourneyTimerController {
         showsSaveWarning = false
         showsTransitionFailure = false
         refresh()
+        notifyObserver()
         announcer.announce(JourneyTimerDisplay.resumedAnnouncement)
     }
 
@@ -150,6 +160,7 @@ final class JourneyTimerController {
         ticker.stop()
         status = .paused
         refresh()
+        notifyObserver()
     }
 
     private func stopForSaveFailure() {
@@ -169,6 +180,7 @@ final class JourneyTimerController {
         refresh()
         arrivalPersisted = save(totalSeconds, paused: true)
         showsSaveWarning = !arrivalPersisted
+        notifyObserver()
     }
 
     private func retryArrivalIfNeeded() {
@@ -176,6 +188,8 @@ final class JourneyTimerController {
         arrivalPersisted = save(totalSeconds, paused: true)
         showsSaveWarning = !arrivalPersisted
     }
+
+    private func notifyObserver() { observer?.timerDidChange(status: status, remainingSeconds: remainingSeconds) }
 
     private func save(_ elapsed: Int, paused: Bool) -> Bool {
         guard saver.saveJourneyProgress(journeyID: journeyID, elapsedSeconds: elapsed, paused: paused) else { return false }

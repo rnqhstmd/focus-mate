@@ -17,6 +17,8 @@ struct JourneyServices {
     var makeTicker: @MainActor () -> JourneyTicker
     /// 포그라운드 복귀 처리 직전에 부른다(UI 테스트가 백그라운드 경과를 재현한다).
     var beforeForeground: @MainActor () -> Void
+    /// 앱 밖 표시(Live Activity) 요청 창구. UI 테스트는 기록기로 바꾼다.
+    var liveActivities: LiveActivityGateway = ActivityKitLiveActivityGateway()
     #if DEBUG
     var testClock: ManualJourneyClock?
     var failNextSave: UITestNextSaveFailure?

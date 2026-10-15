@@ -1,0 +1,28 @@
+ context/journey/architecture.md                    |   2 +-
+ context/journey/status.md                          |   2 +-
+ ios/FocusMate.xcodeproj/project.pbxproj            |  37 +-
+ ios/FocusMate/FocusMateApp.swift                   |  12 +
+ ios/FocusMate/JourneyLiveActivityCleanup.swift     |  11 +
+ ios/FocusMate/JourneyLiveActivityPolicy.swift      |  68 +++
+ ios/FocusMate/JourneyLiveActivitySync.swift        |  57 +++
+ ios/FocusMate/JourneyServices.swift                |   2 +
+ ios/FocusMate/JourneyTimerController.swift         |  16 +-
+ ios/FocusMate/JourneyView.swift                    |   4 +-
+ ios/FocusMate/LiveActivityGateway.swift            | 111 +++++
+ ios/FocusMate/RootView.swift                       |   3 +
+ ios/FocusMate/UITestBootstrap.swift                |   2 +
+ ios/FocusMateTests/AppInfoLiveActivityTests.swift  |  48 ++
+ .../JourneyActivityDisplayTests.swift              | 254 ++++++++++
+ .../JourneyLiveActivityCleanupTests.swift          | 103 +++++
+ .../JourneyLiveActivityPolicyTests.swift           | 201 ++++++++
+ .../JourneyLiveActivitySyncTests.swift             | 513 +++++++++++++++++++++
+ .../JourneyTimerObserverParityTests.swift          | 121 +++++
+ .../JourneyLiveActivityUITests.swift               |  69 +++
+ ios/FocusMateWidgets/FocusMateWidgetsBundle.swift  |  10 +
+ ios/FocusMateWidgets/Info.plist                    |  11 +
+ .../JourneyLiveActivityWidget.swift                |  81 ++++
+ ios/Shared/JourneyActivityAttributes.swift         |  23 +
+ ios/Shared/JourneyActivityDisplay.swift            |  64 +++
+ 25 files changed, 1813 insertions(+), 12 deletions(-)
+---
+위는 요약입니다. 변경된 파일을 Read 도구로 직접 확인하라.

@@ -5,66 +5,87 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 = {isa = PBXBuildFile; fileRef = A20000000000000000000014; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
 /* Begin PBXContainerItemProxy section */
 		A30000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000001; remoteInfo = FocusMate; };
 		A30000000000000000000002 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000001; remoteInfo = FocusMate; };
+		A30000000000000000000003 = {isa = PBXContainerItemProxy; containerPortal = A90000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000004; remoteInfo = FocusMateWidgets; };
 /* End PBXContainerItemProxy section */
+/* Begin PBXCopyFilesBuildPhase section */
+		A60000000000000000000031 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A10000000000000000000001); name = "Embed Foundation Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
 /* Begin PBXFileReference section */
 		A20000000000000000000011 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusMate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000012 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusMateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000013 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000014 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FocusMateWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 /* Begin PBXFrameworksBuildPhase section */
 		A60000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000012 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000013 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000014 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A80000000000000000000001 = {isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = (Info.plist, ); target = A50000000000000000000004; };
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A40000000000000000000002 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMate; sourceTree = "<group>"; };
 		A40000000000000000000003 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMateTests; sourceTree = "<group>"; };
 		A40000000000000000000004 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = FocusMateUITests; sourceTree = "<group>"; };
+		A40000000000000000000007 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
+		A40000000000000000000006 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A80000000000000000000001, ); explicitFileTypes = {}; explicitFolders = (); path = FocusMateWidgets; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 /* Begin PBXGroup section */
-		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002, A40000000000000000000003, A40000000000000000000004, A40000000000000000000005); sourceTree = "<group>"; };
-		A40000000000000000000005 = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013); name = Products; sourceTree = "<group>"; };
+		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002, A40000000000000000000007, A40000000000000000000006, A40000000000000000000003, A40000000000000000000004, A40000000000000000000005); sourceTree = "<group>"; };
+		A40000000000000000000005 = {isa = PBXGroup; children = (A20000000000000000000011, A20000000000000000000012, A20000000000000000000013, A20000000000000000000014); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
-		A50000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000001; buildPhases = (A60000000000000000000001, A60000000000000000000011, A60000000000000000000021); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000002); dependencies = (); name = FocusMate; productName = FocusMate; productReference = A20000000000000000000011; productType = "com.apple.product-type.application"; };
+		A50000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000001; buildPhases = (A60000000000000000000001, A60000000000000000000011, A60000000000000000000021, A60000000000000000000031); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000002, A40000000000000000000007); dependencies = (A70000000000000000000003); name = FocusMate; productName = FocusMate; productReference = A20000000000000000000011; productType = "com.apple.product-type.application"; };
 		A50000000000000000000002 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000002; buildPhases = (A60000000000000000000002, A60000000000000000000012, A60000000000000000000022); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000003); dependencies = (A70000000000000000000001); name = FocusMateTests; productName = FocusMateTests; productReference = A20000000000000000000012; productType = "com.apple.product-type.bundle.unit-test"; };
 		A50000000000000000000003 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000003; buildPhases = (A60000000000000000000003, A60000000000000000000013, A60000000000000000000023); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000004); dependencies = (A70000000000000000000002); name = FocusMateUITests; productName = FocusMateUITests; productReference = A20000000000000000000013; productType = "com.apple.product-type.bundle.ui-testing"; };
+		A50000000000000000000004 = {isa = PBXNativeTarget; buildConfigurationList = AA0000000000000000000004; buildPhases = (A60000000000000000000004, A60000000000000000000014, A60000000000000000000024); buildRules = (); fileSystemSynchronizedGroups = (A40000000000000000000006, A40000000000000000000007); dependencies = (); name = FocusMateWidgets; productName = FocusMateWidgets; productReference = A20000000000000000000014; productType = "com.apple.product-type.app-extension"; };
 /* End PBXNativeTarget section */
 /* Begin PBXProject section */
-		A90000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2700; TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 27.0; }; A50000000000000000000002 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000003 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; }; }; buildConfigurationList = AA0000000000000000000000; preferredProjectObjectVersion = 77; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A40000000000000000000001; productRefGroup = A40000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001, A50000000000000000000002, A50000000000000000000003); };
+		A90000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2700; TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 27.0; }; A50000000000000000000002 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000003 = {CreatedOnToolsVersion = 27.0; TestTargetID = A50000000000000000000001; }; A50000000000000000000004 = {CreatedOnToolsVersion = 27.0; }; }; }; buildConfigurationList = AA0000000000000000000000; preferredProjectObjectVersion = 77; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A40000000000000000000001; productRefGroup = A40000000000000000000005; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001, A50000000000000000000002, A50000000000000000000003, A50000000000000000000004); };
 /* End PBXProject section */
 /* Begin PBXResourcesBuildPhase section */
 		A60000000000000000000021 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000023 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000024 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
 		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000003 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000004 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 /* Begin PBXTargetDependency section */
 		A70000000000000000000001 = {isa = PBXTargetDependency; target = A50000000000000000000001; targetProxy = A30000000000000000000001; };
 		A70000000000000000000002 = {isa = PBXTargetDependency; target = A50000000000000000000001; targetProxy = A30000000000000000000002; };
+		A70000000000000000000003 = {isa = PBXTargetDependency; target = A50000000000000000000004; targetProxy = A30000000000000000000003; };
 /* End PBXTargetDependency section */
 /* Begin XCBuildConfiguration section */
-		AB0000000000000000000000 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; }; name = Debug; };
-		AB0000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
-		AB0000000000000000000010 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
-		AB0000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
+		AB0000000000000000000000 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 1; }; name = Debug; };
+		AB0000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TARGETED_DEVICE_FAMILY = 1; MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 1; }; name = Release; };
+		AB0000000000000000000010 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_NSSupportsLiveActivities = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
+		AB0000000000000000000011 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_NSSupportsLiveActivities = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
 		AB0000000000000000000020 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.tests; PRODUCT_NAME = "$(TARGET_NAME)"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FocusMate"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
 		AB0000000000000000000021 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.tests; PRODUCT_NAME = "$(TARGET_NAME)"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusMate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FocusMate"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
 		AB0000000000000000000030 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = FocusMate; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; ENABLE_TESTABILITY = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Debug; };
 		AB0000000000000000000031 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; TEST_TARGET_NAME = FocusMate; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
+		AB0000000000000000000040 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = FocusMateWidgets/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = FocusMate; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.widgets; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; APPLICATION_EXTENSION_API_ONLY = YES; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"); SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		AB0000000000000000000041 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = FocusMateWidgets/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = FocusMate; PRODUCT_BUNDLE_IDENTIFIER = app.focusmate.prototype.widgets; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; APPLICATION_EXTENSION_API_ONLY = YES; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"); SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
 		AA0000000000000000000000 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000000, AB0000000000000000000001); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		AA0000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000010, AB0000000000000000000011); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		AA0000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000020, AB0000000000000000000021); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		AA0000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000030, AB0000000000000000000031); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		AA0000000000000000000004 = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000040, AB0000000000000000000041); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = A90000000000000000000001;

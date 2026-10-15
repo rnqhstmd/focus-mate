@@ -1,5 +1,5 @@
 phase: complete
-status: in_progress
+status: completed
 pipeline: gx-tdd
 verify-status: passed
 verify-fingerprint: "b76f50d:6ff605249116"
@@ -20,8 +20,8 @@ auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 5
 simulator: 497AF082-E352-4A42-8323-A08B2D3BFCB5 (FM-W05)
-current-step: "complete: 인수 검증"
-phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: in_progress }
+current-step: "완료"
+phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed }
 decisions:
   - "체크포인트 주기 10초 / 메인 여행 시작하기는 W07 전까지 정리 후 시작 유지 / 주기 저장 실패 시 일시정지+안내"
   - "손상된 진행 여정: 지금처럼 버림 (백업·안내 없음)"
@@ -48,3 +48,5 @@ steps:
   - { phase: review, agent: reviewer, result: "SPEC PASS 32/32, QUALITY FAIL(Important 3) → 재현 RED R1 + 수정 → 재리뷰 PASS" }
   - { phase: review, agent: security-auditor, result: "CRITICAL 0 HIGH 0 MEDIUM 6 (이월)" }
   - { phase: complete, gate: verify, result: "focused 집합 전부 통과 + 빌드 성공·신규 경고 0, 전체 스위트는 사용자 지시로 생략(위험 수용)" }
+  - { phase: complete, agent: product-owner, result: "ACCEPT — Must 전부 충족" }
+  - { phase: complete, result: "커밋 76354c1, PR #17, status FR-5 ✅, plan W05 완료" }

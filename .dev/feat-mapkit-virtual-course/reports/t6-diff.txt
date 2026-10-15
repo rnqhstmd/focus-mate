@@ -1,0 +1,622 @@
+diff --git a/ios/FocusMate/JourneyMapView.swift b/ios/FocusMate/JourneyMapView.swift
+new file mode 100644
+index 0000000..637cc0c
+--- /dev/null
++++ b/ios/FocusMate/JourneyMapView.swift
+@@ -0,0 +1,89 @@
++import MapKit
++import SwiftUI
++
++/// 여행 화면 배경 지도(FR-1~4·8·11·14). 판단은 컨트롤러가 하고 이 뷰는 그리기와 제스처 전달만 한다.
++@MainActor
++struct JourneyMapView: View {
++    let map: JourneyMapController
++    /// 하단 정보 높이. 지도 안전 영역 아래쪽에 더해 Apple 지도 표기를 하단 정보 위로 올린다.
++    let bottomInset: CGFloat
++    @State private var position: MapCameraPosition
++    /// 버스 아이콘을 화면 기준 진행 방향으로 돌리기 위한 현재 지도 방위. 조작이 끝날 때만 갱신한다.
++    @State private var renderedHeading: Double = 0
++
++    init(map: JourneyMapController, bottomInset: CGFloat) {
++        self.map = map
++        self.bottomInset = bottomInset
++        _position = State(initialValue: .camera(Self.camera(for: map.cameraTarget)))
++    }
++
++    var body: some View {
++        // 앱이 옮길 때는 @State에 직접 대입하므로 setter는 MapKit(사용자 제스처)에서만 호출된다.
++        Map(position: Binding(get: { position }, set: { new in
++            position = new
++            if new.positionedByUser { map.userMovedCamera() }
++        }), interactionModes: [.pan, .zoom, .rotate]) {
++            MapPolyline(coordinates: map.routePoints.map(\.coordinate))
++                .stroke(Color(red: 0.36, green: 0.62, blue: 1), lineWidth: 5)
++            ForEach(map.visibleStops, id: \.id) { stop in
++                Annotation("", coordinate: stop.point.coordinate) {
++                    Circle().fill(.white).frame(width: 10, height: 10)
++                        .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
++                }
++                .annotationTitles(.hidden)
++            }
++            Annotation("", coordinate: map.destinationStop.point.coordinate) {
++                Image(systemName: "flag.fill").font(.system(size: 16, weight: .bold)).foregroundStyle(.orange)
++            }
++            .annotationTitles(.hidden)
++            Annotation("", coordinate: map.bus.point.coordinate) {
++                Image(systemName: "location.north.fill")
++                    .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
++                    .padding(6).background(Circle().fill(Color(red: 0.2, green: 0.45, blue: 0.95)))
++                    .rotationEffect(.degrees(map.bus.headingDegrees - renderedHeading))
++            }
++            .annotationTitles(.hidden)
++        }
++        .mapStyle(mapStyle)
++        .environment(\.colorScheme, .dark)
++        .mapControls {
++            MapCompass().mapControlVisibility(.hidden)
++            MapPitchToggle().mapControlVisibility(.hidden)
++            MapScaleView().mapControlVisibility(.hidden)
++        }
++        .safeAreaPadding(.bottom, bottomInset)
++        .onMapCameraChange(frequency: .onEnd) { context in renderedHeading = context.camera.heading }
++        .onChange(of: map.cameraTarget) { _, target in
++            withAnimation(target.animated ? .linear(duration: 1) : nil) { position = .camera(Self.camera(for: target)) }
++        }
++        // MapKit 내부 요소(실제 지명·법적 표기 등)는 children: .ignore로도 접근성 트리에 남는다(T0).
++        // 지도는 VoiceOver에서 하나의 요소로 읽혀야 하므로(FR-12) 내부를 숨기고 같은 자리에 대표 요소를 둔다.
++        .accessibilityHidden(true)
++        .overlay {
++            Color.clear
++                .allowsHitTesting(false)
++                .accessibilityElement()
++                .accessibilityLabel(JourneyMapDisplay.mapLabel)
++                .accessibilityValue(JourneyMapDisplay.mapValue(next: JourneyCourse.stops[map.nextStopIndex].name,
++                                                               destination: map.destinationStop.name))
++                .accessibilityIdentifier("journey.map")
++        }
++    }
++
++    /// 실제 장소(POI)는 가상 코스와 헷갈리지 않게 숨긴다(BR-1).
++    private var mapStyle: MapStyle {
++        switch map.state.theme {
++        case .dark: .standard(elevation: .realistic, pointsOfInterest: .excludingAll)
++        case .satellite: .hybrid(elevation: .realistic, pointsOfInterest: .excludingAll)
++        }
++    }
++
++    private static func camera(for target: JourneyCameraTarget) -> MapCamera {
++        MapCamera(centerCoordinate: target.center.coordinate, distance: target.distanceMeters,
++                  heading: target.headingDegrees, pitch: target.pitchDegrees)
++    }
++}
++
++private extension CoursePoint {
++    var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
++}
+diff --git a/ios/FocusMate/JourneyTimerView.swift b/ios/FocusMate/JourneyTimerView.swift
+index c2d365b..d5be6e8 100644
+--- a/ios/FocusMate/JourneyTimerView.swift
++++ b/ios/FocusMate/JourneyTimerView.swift
+@@ -1,9 +1,11 @@
+ import SwiftUI
+ 
+-/// 출발 뒤 타이머 화면. 남은 시간과 일시정지/재개만 둔다. 지도(W06)와 도착 안내(W09)는 이 위에 붙는다.
++/// 출발 뒤 타이머 화면. 지도(W06) 위에 남은 시간·정류장·거리와 일시정지·지도 도구를 얹는다.
++/// 지도를 만들 수 없는 여정(저장 도착지 불일치 등)은 W05 배치로 보인다. 도착 안내(W09)는 이 위에 붙는다.
+ @MainActor
+ struct JourneyTimerView: View {
+     let controller: JourneyTimerController
++    let map: JourneyMapController?
+     let reduceMotion: Bool
+     #if DEBUG
+     var path: [Destination] = []
+@@ -11,22 +13,20 @@ struct JourneyTimerView: View {
+     @AccessibilityFocusState private var remainingFocused: Bool
+     /// 일시정지↔재개 버튼이 같은 자리에서 바뀌므로, 연타의 두 번째 탭이 반대 전환으로 들어가지 않게 잠깐 무시한다.
+     @State private var lastControlTap: ContinuousClock.Instant?
++    @State private var bottomHeight: CGFloat = 0
++    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
++    /// 하단 지표 글자(웹 기준 라벨 12·단위 15·숫자 30)를 글자 크기 설정에 맞춰 키운다.
++    @ScaledMetric(relativeTo: .caption) private var labelSize: CGFloat = 12
++    @ScaledMetric(relativeTo: .body) private var unitSize: CGFloat = 15
++    @ScaledMetric(relativeTo: .title) private var valueSize: CGFloat = 30
+     private static let tapGuard: Duration = .milliseconds(500)
+ 
+     private var minutesText: String { JourneyTimerDisplay.text(minutes: controller.remainingMinutes) }
+ 
+     var body: some View {
+-        VStack(spacing: 32) {
+-            Spacer(minLength: 0)
+-            remaining
+-            control
+-            notices
+-            Spacer(minLength: 0)
++        Group {
++            if let map { mapBody(map) } else { legacyBody }
+         }
+-        .padding(24)
+-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+-        .foregroundStyle(.white)
+-        .background(Color.black.ignoresSafeArea())
+         .onAppear {
+             controller.appear()
+             remainingFocused = true
+@@ -36,19 +36,174 @@ struct JourneyTimerView: View {
+         #endif
+     }
+ 
+-    private var remaining: some View {
+-        Text(minutesText)
+-            .font(.system(size: 64, weight: .bold))
+-            .lineLimit(1).minimumScaleFactor(0.5)
++    // MARK: 지도 배치
++
++    private func mapBody(_ map: JourneyMapController) -> some View {
++        ZStack {
++            JourneyMapView(map: map, bottomInset: bottomHeight)
++            VStack(spacing: 0) {
++                topBar(map)
++                Spacer(minLength: 0)
++                bottomInfo(map)
++                    .background(GeometryReader { proxy in
++                        Color.clear.preference(key: BottomInfoHeightKey.self, value: proxy.size.height)
++                    })
++            }
++        }
++        .foregroundStyle(.white)
++        .background(Color.black.ignoresSafeArea())
++        .onPreferenceChange(BottomInfoHeightKey.self) { bottomHeight = $0 }
++        .onChange(of: MapSync(status: controller.status, elapsed: controller.elapsedSeconds)) { _, sync in
++            withAnimation(reduceMotion ? nil : .linear(duration: 1)) { map.sync(status: sync.status, elapsedSeconds: sync.elapsed) }
++        }
++        .onChange(of: reduceMotion) { _, on in map.setReduceMotion(on) }
++        .sheet(isPresented: Binding(get: { map.state.isThemeSheetPresented },
++                                    set: { if !$0 { map.dismissThemeSheet() } })) {
++            JourneyMapThemeSheet(map: map)
++        }
++        #if DEBUG
++        .overlay(alignment: .bottomTrailing) { mapDiagnostics(map) }
++        #endif
++    }
++
++    private func topBar(_ map: JourneyMapController) -> some View {
++        VStack(alignment: .leading, spacing: 8) {
++            HStack(alignment: .top) {
++                roundControl
++                Spacer(minLength: 16)
++                VStack(spacing: 12) {
++                    toolButton(systemImage: "location.fill", label: JourneyMapDisplay.followLabel,
++                               value: JourneyMapDisplay.followValue(map.state.camera), id: "journey.map.follow",
++                               enabled: map.state.toolsEnabled) { map.followTapped() }
++                    toolButton(systemImage: "map", label: JourneyMapDisplay.themeLabel, value: nil,
++                               id: "journey.map.theme", enabled: map.state.toolsEnabled) { map.openThemeSheet() }
++                }
++            }
++            notices.frame(maxWidth: .infinity, alignment: .leading)
++        }
++        .padding(.horizontal, 16).padding(.top, 8)
++    }
++
++    @ViewBuilder private var roundControl: some View {
++        switch controller.status {
++        case .running:
++            roundButton(JourneyTimerDisplay.pauseLabel, systemImage: "pause.fill", id: "journey.timer.pause") { controller.pause() }
++        case .paused:
++            roundButton(JourneyTimerDisplay.resumeLabel, systemImage: "play.fill", id: "journey.timer.resume") { controller.resume() }
++        case .arrived:
++            Text("도착했어요").font(.title3.bold())
++                .padding(.horizontal, 14).frame(minHeight: 48)
++                .background(.black.opacity(0.6), in: Capsule())
++                .accessibilityIdentifier("journey.arrived")
++        }
++    }
++
++    private func roundButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
++        Button { guardedTap(action) } label: {
++            Image(systemName: systemImage).font(.system(size: 20, weight: .bold))
++                .frame(width: 48, height: 48)
++                .background(.black.opacity(0.6), in: Circle())
++        }
++        .buttonStyle(.plain)
++        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
++        .accessibilityLabel(title)
++        .accessibilityIdentifier(id)
++    }
++
++    private func toolButton(systemImage: String, label: String, value: String?, id: String, enabled: Bool,
++                            action: @escaping () -> Void) -> some View {
++        Button(action: action) {
++            Image(systemName: systemImage).font(.system(size: 18, weight: .semibold))
++                .frame(width: 48, height: 48)
++                .background(.black.opacity(0.6), in: Circle())
++        }
++        .buttonStyle(.plain)
++        .disabled(!enabled)
++        .opacity(enabled ? 1 : 0.4)
++        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
++        .accessibilityLabel(label)
++        .accessibilityValue(value ?? "")
++        .accessibilityIdentifier(id)
++    }
++
++    private func bottomInfo(_ map: JourneyMapController) -> some View {
++        // 큰 글자에서는 세 지표를 세로로 쌓는다. ViewThatFits는 두 배치를 모두 만들어 남은 시간의 초기 포커스가 풀리므로 쓰지 않는다.
++        let layout = dynamicTypeSize.isAccessibilitySize
++            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
++        let stacked = dynamicTypeSize.isAccessibilitySize
++        return layout {
++            remainingColumn.frame(maxWidth: stacked ? nil : .infinity, alignment: .leading)
++            stopsColumn(map).frame(maxWidth: stacked ? nil : .infinity, alignment: stacked ? .leading : .center)
++            distanceColumn(map).frame(maxWidth: stacked ? nil : .infinity, alignment: stacked ? .leading : .trailing)
++        }
++        .frame(maxWidth: .infinity, alignment: .leading)
++        .padding(.horizontal, 16).padding(.vertical, 14)
++        .background(.ultraThinMaterial, ignoresSafeAreaEdges: .bottom)
++        .environment(\.colorScheme, .dark)
++    }
++
++    private var remainingColumn: some View {
++        infoColumn(label: "남은 시간", value: Text(minutesText))
+             .contentTransition(reduceMotion ? .identity : .numericText())
+             .animation(reduceMotion ? nil : .default, value: controller.remainingMinutes)
++            .accessibilityElement(children: .ignore)
+             .accessibilityLabel(JourneyTimerDisplay.accessibilityLabel)
+             .accessibilityValue(JourneyTimerDisplay.accessibilityValue(minutes: controller.remainingMinutes))
+             .accessibilityIdentifier("journey.timer.remaining")
+             .accessibilityFocused($remainingFocused)
+     }
+ 
+-    @ViewBuilder private var control: some View {
++    private func stopsColumn(_ map: JourneyMapController) -> some View {
++        infoColumn(label: JourneyMapDisplay.remainingStopsLabel,
++                   value: Text(JourneyMapDisplay.stopsText(map.remainingStops)) + Text(" 개").font(.system(size: unitSize)))
++            .accessibilityElement(children: .ignore)
++            .accessibilityLabel(JourneyMapDisplay.remainingStopsLabel)
++            .accessibilityValue(JourneyMapDisplay.stopsAccessibilityValue(map.remainingStops))
++            .accessibilityIdentifier("journey.timer.stops")
++    }
++
++    private func distanceColumn(_ map: JourneyMapController) -> some View {
++        infoColumn(label: JourneyMapDisplay.remainingDistanceLabel,
++                   value: Text(JourneyMapDisplay.distanceText(tenthsKm: map.remainingDistanceTenthsKm))
++                       + Text(" km").font(.system(size: unitSize)))
++            .accessibilityElement(children: .ignore)
++            .accessibilityLabel(JourneyMapDisplay.remainingDistanceLabel)
++            .accessibilityValue(JourneyMapDisplay.distanceAccessibilityValue(tenthsKm: map.remainingDistanceTenthsKm))
++            .accessibilityIdentifier("journey.timer.distance")
++    }
++
++    private func infoColumn(label: String, value: Text) -> some View {
++        VStack(alignment: .leading, spacing: 2) {
++            Text(label).font(.system(size: labelSize)).foregroundStyle(.white.opacity(0.64))
++            value.font(.system(size: valueSize, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
++        }
++    }
++
++    // MARK: W05 배치 (지도 없음)
++
++    private var legacyBody: some View {
++        VStack(spacing: 32) {
++            Spacer(minLength: 0)
++            Text(minutesText)
++                .font(.system(size: 64, weight: .bold))
++                .lineLimit(1).minimumScaleFactor(0.5)
++                .contentTransition(reduceMotion ? .identity : .numericText())
++                .animation(reduceMotion ? nil : .default, value: controller.remainingMinutes)
++                .accessibilityLabel(JourneyTimerDisplay.accessibilityLabel)
++                .accessibilityValue(JourneyTimerDisplay.accessibilityValue(minutes: controller.remainingMinutes))
++                .accessibilityIdentifier("journey.timer.remaining")
++                .accessibilityFocused($remainingFocused)
++            legacyControl
++            notices
++            Spacer(minLength: 0)
++        }
++        .padding(24)
++        .frame(maxWidth: .infinity, maxHeight: .infinity)
++        .foregroundStyle(.white)
++        .background(Color.black.ignoresSafeArea())
++    }
++
++    @ViewBuilder private var legacyControl: some View {
+         switch controller.status {
+         case .running:
+             controlButton(JourneyTimerDisplay.pauseLabel, systemImage: "pause.fill", id: "journey.timer.pause") { controller.pause() }
+@@ -61,12 +216,7 @@ struct JourneyTimerView: View {
+     }
+ 
+     private func controlButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
+-        Button {
+-            let now = ContinuousClock.now
+-            if let last = lastControlTap, last.duration(to: now) < Self.tapGuard { return }
+-            lastControlTap = now
+-            action()
+-        } label: {
++        Button { guardedTap(action) } label: {
+             Label(title, systemImage: systemImage)
+                 .font(.headline).foregroundStyle(.black)
+                 .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
+@@ -78,16 +228,23 @@ struct JourneyTimerView: View {
+         .accessibilityIdentifier(id)
+     }
+ 
++    private func guardedTap(_ action: () -> Void) {
++        let now = ContinuousClock.now
++        if let last = lastControlTap, last.duration(to: now) < Self.tapGuard { return }
++        lastControlTap = now
++        action()
++    }
++
+     @ViewBuilder private var notices: some View {
+         if controller.showsTransitionFailure {
+             Text(JourneyTimerDisplay.transitionFailureText).font(.subheadline).foregroundStyle(.orange)
+-                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
++                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                 .accessibilityIdentifier("journey.timer.saveFailure")
+         }
+         if controller.showsSaveWarning {
+             Text(controller.status == .arrived ? JourneyTimerDisplay.arrivalWarningText : JourneyTimerDisplay.checkpointWarningText)
+                 .font(.subheadline).foregroundStyle(.orange)
+-                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
++                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                 .accessibilityIdentifier("journey.timer.saveWarning")
+         }
+     }
+@@ -106,5 +263,33 @@ struct JourneyTimerView: View {
+         return Text("타이머 진단").font(.system(size: 1)).foregroundStyle(.clear)
+             .accessibilityValue(json).accessibilityIdentifier("test.timer").allowsHitTesting(false)
+     }
++
++    /// 화면에 보이지 않는 지도 값(렌더 개수·카메라 목표·좌표)만 담는다.
++    private func mapDiagnostics(_ map: JourneyMapController) -> some View {
++        let bus = map.bus, target = map.cameraTarget, destination = map.destinationStop
++        let object: [String: Any] = [
++            "bus": ["lat": bus.point.latitude, "lon": bus.point.longitude, "from": bus.segmentFrom, "to": bus.segmentTo,
++                    "fraction": bus.fraction, "arrived": bus.isArrived],
++            "destination": ["index": destination.index, "lat": destination.point.latitude, "lon": destination.point.longitude],
++            "course": JourneyCourse.stops.map { [$0.point.latitude, $0.point.longitude] },
++            "render": ["route": map.routePoints.count, "stopMarkers": map.visibleStops.count, "bus": true, "destination": true],
++            "camera": ["lat": target.center.latitude, "lon": target.center.longitude, "heading": target.headingDegrees,
++                       "pitch": target.pitchDegrees, "animated": target.animated, "revision": target.revision],
++        ]
++        let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
++            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
++        return Text("지도 진단").font(.system(size: 1)).foregroundStyle(.clear)
++            .accessibilityValue(json).accessibilityIdentifier("test.map").allowsHitTesting(false)
++    }
+     #endif
+ }
++
++private struct MapSync: Equatable {
++    let status: JourneyTimerController.Status
++    let elapsed: Int
++}
++
++private struct BottomInfoHeightKey: PreferenceKey {
++    static let defaultValue: CGFloat = 0
++    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
++}
+diff --git a/ios/FocusMateUITests/JourneyMapAccessibilityUITests.swift b/ios/FocusMateUITests/JourneyMapAccessibilityUITests.swift
+new file mode 100644
+index 0000000..7dead87
+--- /dev/null
++++ b/ios/FocusMateUITests/JourneyMapAccessibilityUITests.swift
+@@ -0,0 +1,219 @@
++import Foundation
++import XCTest
++
++/// 가상 코스 지도 접근성·동작 줄이기·법적 표기 UI 테스트 (수동 시계).
++@MainActor
++final class JourneyMapAccessibilityUITests: XCTestCase {
++    private let timeout: TimeInterval = 5
++    private let reduceMotion = ["--fm-ui-reduce-motion", "on"]
++    private let largeText = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
++    private let stopNames = ["성수역", "성수동", "뚝섬역", "성동구민체육센터", "서울숲역",
++                             "서울숲 입구", "성수대교 북단", "뚝섬한강공원", "성수사거리"]
++
++    override func setUp() {
++        super.setUp()
++        continueAfterFailure = false
++    }
++
++    private func running(_ seed: String = "timerPaused90", extra: [String] = []) -> FocusMateUIHarness {
++        let h = FocusMateUIHarness.launchJourney(seed: seed, extraArguments: extra)
++        h.tap("journey.timer.resume")
++        XCTAssertTrue(h.element("journey.timer.pause").waitForExistence(timeout: timeout))
++        return h
++    }
++
++    private func openSheet(_ h: FocusMateUIHarness) {
++        h.tap("journey.map.theme")
++        XCTAssertTrue(h.element("journey.map.themeSheet").waitForExistence(timeout: timeout))
++    }
++
++    private func disjoint(_ named: [(String, CGRect)], file: StaticString = #filePath, line: UInt = #line) {
++        for i in 0..<named.count {
++            for j in (i + 1)..<named.count where named[i].1.intersects(named[j].1) {
++                XCTFail("겹침: \(named[i].0) \(named[i].1) / \(named[j].0) \(named[j].1)", file: file, line: line)
++            }
++        }
++    }
++
++    private func cameraDiagnostic(_ h: FocusMateUIHarness) throws -> [String: Any] {
++        try XCTUnwrap(try h.mapDiagnostic()["camera"] as? [String: Any])
++    }
++
++    // MARK: AC-3
++
++    // 깨짐: 법적 표기가 하단 정보 위 왼쪽이 아니거나 다른 지표·컨트롤과 겹친다.
++    func testAC3_법적_표기는_하단_정보_위_왼쪽에_있고_다른_요소와_겹치지_않는다() throws {
++        let h = running()
++        let legal = h.app.links["Legal"]
++        guard legal.waitForExistence(timeout: 2) else {
++            XCTContext.runActivity(named: "M-1 수동 확인으로 대체") { _ in }
++            return
++        }
++        let window = h.app.windows.firstMatch
++        let ids = ["remaining": "journey.timer.remaining", "stops": "journey.timer.stops",
++                   "distance": "journey.timer.distance", "follow": "journey.map.follow",
++                   "theme": "journey.map.theme", "pause": "journey.timer.pause"]
++        let frames = ids.mapValues { h.frame($0) }
++        XCTAssertLessThanOrEqual(legal.frame.maxY, try XCTUnwrap(frames["remaining"]).minY)
++        XCTAssertLessThan(legal.frame.midX, window.frame.width / 2)
++        for (name, frame) in frames {
++            XCTAssertFalse(legal.frame.intersects(frame), "법적 표기가 \(name)과 겹침")
++        }
++    }
++
++    // MARK: AC-30, 31
++
++    // 깨짐: 동작 줄이기에서 카메라 이동이 애니메이션이거나 방위가 0이 아니다.
++    func testAC30_동작_줄이기에서는_카메라가_애니메이션_없이_방위_0으로_움직인다() throws {
++        let h = running(extra: reduceMotion)
++        h.advance(10)
++        let camera = try cameraDiagnostic(h)
++        XCTAssertEqual(camera["animated"] as? Bool, false)
++        XCTAssertEqual(camera["heading"] as? Double, 0)
++    }
++
++    // 깨짐: 동작 줄이기가 꺼져 있는데 카메라 이동이 애니메이션되지 않는다.
++    func testAC31_동작_줄이기가_꺼져_있으면_카메라가_애니메이션으로_움직인다() throws {
++        let h = running()
++        h.advance(10)
++        XCTAssertEqual(try cameraDiagnostic(h)["animated"] as? Bool, true)
++    }
++
++    // MARK: AC-32
++
++    // 깨짐: 동작 줄이기에서 자유 탐색·복귀·테마·정류장·일시정지 결과가 꺼졌을 때와 달라진다.
++    func testAC32_동작_줄이기에서도_지도_조작_결과가_같다() {
++        let h = running(extra: reduceMotion)
++        h.dragMap()
++        XCTAssertTrue(h.waitForValue("journey.map.follow", "자유 탐색 중"))
++        h.tap("journey.map.follow")
++        XCTAssertTrue(h.waitForValue("journey.map.follow", "따라가는 중"))
++
++        openSheet(h)
++        h.tap("journey.map.theme.satellite")
++        XCTAssertTrue(h.waitForValue("journey.map.theme.satellite", "선택됨"))
++        h.tap("journey.map.stops")
++        XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))
++
++        h.tap("journey.timer.pause")
++        XCTAssertTrue(h.waitUntil { !h.element("journey.map.themeSheet").exists })
++        XCTAssertTrue(h.waitUntil { !h.element("journey.map.follow").isEnabled && !h.element("journey.map.theme").isEnabled })
++    }
++
++    // MARK: AC-33
++
++    // 깨짐: 지도 낭독 값에 다음·도착 정류장이 없거나 개별 정류장 마커가 낭독 요소로 노출된다.
++    func testAC33_지도는_하나의_요소로_낭독되고_정류장_마커는_개별_노출되지_않는다() {
++        let h = running()
++        let map = h.element("journey.map")
++        XCTAssertTrue(map.waitForExistence(timeout: timeout))
++        XCTAssertEqual(map.label, "가상 코스 지도")
++        let value = map.value as? String ?? ""
++        XCTAssertTrue(value.contains("성동구민체육센터"), value)
++        XCTAssertTrue(value.contains("성수사거리"), value)
++
++        let children = map.descendants(matching: .any).allElementsBoundByIndex
++        let leaked = children.map(\.label).filter { stopNames.contains($0) }
++        XCTAssertEqual(leaked, [])
++    }
++
++    // MARK: AC-34
++
++    // 깨짐: 따라가기·테마 버튼의 라벨/값이 다르거나 일시정지 때 잠기지 않는다.
++    func testAC34_도구_버튼은_라벨과_값을_낭독하고_일시정지하면_잠긴다() {
++        let h = running()
++        let follow = h.element("journey.map.follow"), theme = h.element("journey.map.theme")
++        XCTAssertEqual(follow.label, "버스 따라가기")
++        XCTAssertEqual(follow.value as? String, "따라가는 중")
++        XCTAssertEqual(theme.label, "지도 테마")
++
++        h.tap("journey.timer.pause")
++        XCTAssertTrue(h.waitUntil { !follow.isEnabled && !theme.isEnabled })
++    }
++
++    // MARK: AC-35
++
++    // 깨짐: 시트 항목의 선택됨/선택 안 됨/켜짐/꺼짐 값이 동작과 어긋난다.
++    func testAC35_테마_시트_항목은_선택_상태를_값으로_낭독한다() {
++        let h = running()
++        openSheet(h)
++        XCTAssertEqual(h.value("journey.map.theme.dark"), "선택됨")
++        XCTAssertEqual(h.value("journey.map.theme.satellite"), "선택 안 됨")
++        XCTAssertEqual(h.value("journey.map.stops"), "켜짐")
++
++        h.tap("journey.map.theme.satellite")
++        XCTAssertTrue(h.waitForValue("journey.map.theme.satellite", "선택됨"))
++        XCTAssertTrue(h.waitForValue("journey.map.theme.dark", "선택 안 됨"))
++
++        h.tap("journey.map.stops")
++        XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))
++    }
++
++    // MARK: AC-36
++
++    // 깨짐: 가장 큰 글자에서 컨트롤이 44pt 미만이거나 닿지 않거나 지표끼리 겹친다.
++    func testAC36_가장_큰_글자에서도_컨트롤이_닿고_지표가_겹치지_않는다() throws {
++        let h = running(extra: largeText)
++        for id in ["journey.map.follow", "journey.map.theme", "journey.timer.pause"] {
++            let e = h.element(id)
++            XCTAssertTrue(e.waitForExistence(timeout: timeout), id)
++            XCTAssertTrue(e.isHittable, id)
++            XCTAssertGreaterThanOrEqual(e.frame.width, 44, id)
++            XCTAssertGreaterThanOrEqual(e.frame.height, 44, id)
++        }
++        let remaining = h.frame("journey.timer.remaining")
++        let stops = h.frame("journey.timer.stops")
++        let distance = h.frame("journey.timer.distance")
++        let pause = h.frame("journey.timer.pause")
++        disjoint([("remaining", remaining), ("stops", stops), ("distance", distance), ("pause", pause)])
++
++        h.tap("journey.map.theme")
++        XCTAssertTrue(h.element("journey.map.themeSheet").waitForExistence(timeout: timeout))
++        for id in ["journey.map.theme.dark", "journey.map.theme.satellite", "journey.map.stops"] {
++            let e = h.element(id)
++            XCTAssertTrue(e.waitForExistence(timeout: timeout), id)
++            var tries = 0
++            while !e.isHittable && tries < 3 {
++                h.element("journey.map.themeSheet").swipeUp()
++                tries += 1
++            }
++            XCTAssertTrue(e.isHittable, id)
++        }
++    }
++
++    // MARK: AC-37
++
++    // 깨짐: 일시정지/재개 전환 낭독이 1회씩이 아니다.
++    // VoiceOver 초기 포커스(남은 시간)는 시뮬레이터에서 관찰 불가 → 수동 확인 M-2
++    func testAC37_일시정지와_재개는_한_번씩_낭독된다() throws {
++        let h = running()
++        let afterResume = try h.diagnostic("test.announcements")
++        XCTAssertEqual(afterResume.components(separatedBy: "재개됨").count - 1, 1, afterResume)
++
++        h.tap("journey.timer.pause")
++        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
++        let afterPause = try h.diagnostic("test.announcements")
++        XCTAssertEqual(afterPause.components(separatedBy: "일시정지됨").count - 1, 1, afterPause)
++        XCTAssertEqual(afterPause.components(separatedBy: "재개됨").count - 1, 1, afterPause)
++    }
++
++    // MARK: AC-38
++
++    // 깨짐: 큰 글자에서 저장 경고가 재개 버튼·도구·지표를 가리거나 재개가 44pt 미만이다.
++    func testAC38_큰_글자와_저장_경고가_함께여도_재개와_지표가_가려지지_않는다() throws {
++        let h = running(extra: largeText)
++        h.failNextSave { h.advance(10) }
++        let warning = h.element("journey.timer.saveWarning")
++        XCTAssertTrue(warning.waitForExistence(timeout: timeout))
++        let resume = h.element("journey.timer.resume")
++        XCTAssertTrue(resume.waitForExistence(timeout: timeout))
++        XCTAssertTrue(resume.isHittable)
++        XCTAssertGreaterThanOrEqual(resume.frame.width, 44)
++        XCTAssertGreaterThanOrEqual(resume.frame.height, 44)
++
++        for id in ["journey.timer.resume", "journey.map.follow", "journey.map.theme",
++                   "journey.timer.remaining", "journey.timer.stops", "journey.timer.distance"] {
++            XCTAssertFalse(warning.frame.intersects(h.frame(id)), "저장 경고가 \(id)와 겹침")
++        }
++    }
++}

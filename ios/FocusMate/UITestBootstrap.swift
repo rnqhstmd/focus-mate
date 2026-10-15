@@ -274,7 +274,8 @@ struct UITestBootstrap {
     private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot {
         JourneySnapshot(
             id: "seed-timer", cardID: fixedCard.id, originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
-            destinationStopID: "seongdongSportsCenter",
+            // 서울숲역(4)에서 역방향 5정류장 = 성수사거리(8). 지도는 계산값과 다른 도착지를 손상으로 본다.
+            destinationStopID: RouteStops.all[RouteStops.wrap(4 - 5)].id,
             tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "타이머 시드",
             sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: phase,
             progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)

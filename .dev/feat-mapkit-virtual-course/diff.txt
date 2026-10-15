@@ -1,0 +1,22 @@
+ context/journey/architecture.md                    |   2 +-
+ ios/FocusMate/JourneyCourse.swift                  |  44 +++
+ ios/FocusMate/JourneyCourseProgress.swift          | 101 +++++++
+ ios/FocusMate/JourneyMapController.swift           |  60 ++++
+ ios/FocusMate/JourneyMapDisplay.swift              |  22 ++
+ ios/FocusMate/JourneyMapState.swift                |  65 ++++
+ ios/FocusMate/JourneyMapThemeSheet.swift           |  64 ++++
+ ios/FocusMate/JourneyMapView.swift                 |  89 ++++++
+ ios/FocusMate/JourneyTimerView.swift               | 233 +++++++++++++--
+ ios/FocusMate/JourneyView.swift                    |  26 +-
+ ios/FocusMate/UITestBootstrap.swift                |   3 +-
+ ios/FocusMateTests/AppInfoLocationTests.swift      |  18 ++
+ .../JourneyCourseProgressTests.swift               | 187 ++++++++++++
+ ios/FocusMateTests/JourneyCourseTests.swift        |  43 +++
+ ios/FocusMateTests/JourneyMapControllerTests.swift | 328 +++++++++++++++++++++
+ ios/FocusMateTests/JourneyMapDisplayTests.swift    |  58 ++++
+ ios/FocusMateTests/JourneyMapStateTests.swift      | 199 +++++++++++++
+ .../JourneyMapAccessibilityUITests.swift           | 219 ++++++++++++++
+ ios/FocusMateUITests/JourneyMapUITests.swift       | 261 ++++++++++++++++
+ ios/FocusMateUITests/UITestLaunchSupport.swift     |  58 ++++
+ 20 files changed, 2047 insertions(+), 33 deletions(-)
+--- 변경 파일을 Read로 직접 확인하라.

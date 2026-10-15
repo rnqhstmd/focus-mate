@@ -172,3 +172,61 @@ extension FocusMateUIHarness {
         return try XCTUnwrap(cards["items"] as? [Any]).count
     }
 }
+
+/// 가상 코스 지도 UI 테스트 도우미.
+extension FocusMateUIHarness {
+    /// 조건이 참이 될 때까지 폴링한다.
+    @MainActor
+    func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return condition()
+    }
+
+    /// 요소의 accessibilityValue가 기대 문자열이 될 때까지 기다린다.
+    @MainActor
+    func waitForValue(_ identifier: String, _ expected: String, timeout: TimeInterval = 5) -> Bool {
+        waitUntil(timeout: timeout) { (element(identifier).value as? String) == expected }
+    }
+
+    @MainActor
+    func value(_ identifier: String) -> String? {
+        element(identifier).value as? String
+    }
+
+    @MainActor
+    func frame(_ identifier: String) -> CGRect {
+        let target = element(identifier)
+        XCTAssertTrue(target.waitForExistence(timeout: Self.timeout), "Missing: \(identifier)")
+        return target.frame
+    }
+
+    /// test.map 진단 JSON.
+    @MainActor
+    func mapDiagnostic() throws -> [String: Any] {
+        let raw = try diagnostic("test.map")
+        let data = try XCTUnwrap(raw.data(using: .utf8))
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    /// 사용자 손가락 드래그로 지도를 민다.
+    @MainActor
+    func dragMap() {
+        let map = element("journey.map")
+        XCTAssertTrue(map.waitForExistence(timeout: Self.timeout), "Missing: journey.map")
+        let start = map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+        let end = map.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.7))
+        start.press(forDuration: 0.1, thenDragTo: end)
+    }
+
+    /// 저장 파일 원문(base64 디코드한 JSON 문자열).
+    @MainActor
+    func persistedText() throws -> String {
+        let raw = try persistedBytes()
+        let data = try XCTUnwrap(Data(base64Encoded: raw), "persistedBytes가 base64가 아님: \(raw)")
+        return try XCTUnwrap(String(data: data, encoding: .utf8))
+    }
+}

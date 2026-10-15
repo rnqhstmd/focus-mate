@@ -1,0 +1,507 @@
+diff --git a/ios/FocusMate/JourneyCourseProgress.swift b/ios/FocusMate/JourneyCourseProgress.swift
+new file mode 100644
+index 0000000..69e71c6
+--- /dev/null
++++ b/ios/FocusMate/JourneyCourseProgress.swift
+@@ -0,0 +1,101 @@
++import Foundation
++
++/// 지도 계산에 필요한 여정 입력. 진도 계산은 정수 초로 해서 경계 값이 정확히 맞게 한다.
++struct CourseJourney: Equatable {
++    let originIndex: Int
++    let direction: Int
++    let minutesPerStop: Int
++    let totalMinutes: Int
++
++    var totalStops: Int { totalMinutes / minutesPerStop }
++    var totalSeconds: Int { totalMinutes * 60 }
++    var destinationIndex: Int { RouteStops.wrap(originIndex + direction * totalStops) }
++
++    init(originIndex: Int, direction: Int, minutesPerStop: Int, totalMinutes: Int) {
++        self.originIndex = originIndex
++        self.direction = direction
++        self.minutesPerStop = minutesPerStop
++        self.totalMinutes = totalMinutes
++    }
++
++    /// 저장된 여정에서 지도 입력을 만든다. 카탈로그 밖 값이거나 저장된 도착지가 계산값과 다르면 nil이다.
++    /// nil이면 여행 화면은 지도 없이 W05 배치로 보인다(W09 도착 안내도 같은 일관성 규칙을 따른다).
++    init?(journey: JourneySnapshot) {
++        guard let origin = RouteStops.all.firstIndex(where: { $0.id == journey.originStopID }),
++              let bus = journey.bus, bus.minutesPerStop > 0, journey.minutes % bus.minutesPerStop == 0
++        else { return nil }
++        self.init(originIndex: origin, direction: journey.direction, minutesPerStop: bus.minutesPerStop,
++                  totalMinutes: journey.minutes)
++        guard RouteStops.all[destinationIndex].id == journey.destinationStopID else { return nil }
++    }
++}
++
++struct CourseBusPosition: Equatable {
++    let point: CoursePoint
++    let headingDegrees: Double
++    let segmentFrom: Int
++    let segmentTo: Int
++    /// 구간 안 위치(0이면 segmentFrom 정류장 위).
++    let fraction: Double
++    let isArrived: Bool
++}
++
++/// 진도 → 버스 위치·남은 값(BR-2, BR-7). 진도 자체는 타이머가 소유하고 여기서는 읽기만 한다.
++enum JourneyCourseProgress {
++    private static let hundredthsKmPerStop = 55
++
++    static func position(of journey: CourseJourney, elapsedSeconds: Int) -> CourseBusPosition {
++        let (k, remainder) = travelled(journey, elapsedSeconds)
++        if k >= journey.totalStops {
++            let to = journey.destinationIndex
++            let from = RouteStops.wrap(to - journey.direction)
++            return CourseBusPosition(point: JourneyCourse.point(at: to), headingDegrees: heading(from: from, to: to),
++                                     segmentFrom: to, segmentTo: to, fraction: 0, isArrived: true)
++        }
++        let from = RouteStops.wrap(journey.originIndex + journey.direction * k)
++        let to = RouteStops.wrap(from + journey.direction)
++        let fraction = Double(remainder) / Double(secondsPerStop(journey))
++        let a = JourneyCourse.point(at: from), b = JourneyCourse.point(at: to)
++        let point = CoursePoint(latitude: a.latitude + (b.latitude - a.latitude) * fraction,
++                                longitude: a.longitude + (b.longitude - a.longitude) * fraction)
++        return CourseBusPosition(point: point, headingDegrees: heading(from: from, to: to),
++                                 segmentFrom: from, segmentTo: to, fraction: fraction, isArrived: false)
++    }
++
++    static func nextStopIndex(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
++        let k = travelled(journey, elapsedSeconds).stops
++        return RouteStops.wrap(journey.originIndex + journey.direction * min(journey.totalStops, k + 1))
++    }
++
++    static func remainingStops(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
++        journey.totalStops - min(journey.totalStops, travelled(journey, elapsedSeconds).stops)
++    }
++
++    /// 0.1km 단위 정수. 소수 첫째 자리 반올림(half-up)을 정수 산술로 한다.
++    static func remainingDistanceTenthsKm(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
++        let total = journey.totalSeconds
++        guard total > 0 else { return 0 }
++        let elapsed = clamped(journey, elapsedSeconds)
++        let scaled = journey.totalStops * hundredthsKmPerStop * (total - elapsed)
++        return (2 * scaled + 10 * total) / (20 * total)
++    }
++
++    private static func secondsPerStop(_ journey: CourseJourney) -> Int { journey.minutesPerStop * 60 }
++
++    private static func clamped(_ journey: CourseJourney, _ elapsed: Int) -> Int {
++        min(max(elapsed, 0), journey.totalSeconds)
++    }
++
++    private static func travelled(_ journey: CourseJourney, _ elapsed: Int) -> (stops: Int, remainder: Int) {
++        let e = clamped(journey, elapsed), sps = secondsPerStop(journey)
++        return (e / sps, e % sps)
++    }
++
++    /// 국지 평면 근사 방위(북쪽 0°, 시계 방향). 같은 구간을 반대로 가면 정확히 180° 차이가 난다.
++    private static func heading(from: Int, to: Int) -> Double {
++        let a = JourneyCourse.point(at: from), b = JourneyCourse.point(at: to)
++        let meanLatitude = (a.latitude + b.latitude) / 2 * .pi / 180
++        let degrees = atan2((b.longitude - a.longitude) * cos(meanLatitude), b.latitude - a.latitude) * 180 / .pi
++        return degrees < 0 ? degrees + 360 : degrees
++    }
++}
+diff --git a/ios/FocusMate/JourneyMapController.swift b/ios/FocusMate/JourneyMapController.swift
+new file mode 100644
+index 0000000..983b306
+--- /dev/null
++++ b/ios/FocusMate/JourneyMapController.swift
+@@ -0,0 +1,60 @@
++import Foundation
++import Observation
++
++/// 지도 화면 연결부. 타이머 값을 받아 상태·버스 위치·카메라 목표를 갱신한다.
++/// 저장자·타이머를 갖지 않으므로 지도 때문에 저장이 일어날 경로가 없다(BR-6).
++@MainActor
++@Observable
++final class JourneyMapController {
++    private(set) var state: JourneyMapState
++    private(set) var bus: CourseBusPosition
++    private(set) var cameraTarget: JourneyCameraTarget
++    private(set) var nextStopIndex: Int
++    private(set) var remainingStops: Int
++    private(set) var remainingDistanceTenthsKm: Int
++    @ObservationIgnored let journey: CourseJourney
++    @ObservationIgnored private var reduceMotion: Bool
++
++    init(journey: CourseJourney, status: JourneyTimerController.Status, elapsedSeconds: Int, reduceMotion: Bool) {
++        self.journey = journey
++        self.reduceMotion = reduceMotion
++        state = JourneyMapState(status: status)
++        let bus = JourneyCourseProgress.position(of: journey, elapsedSeconds: elapsedSeconds)
++        self.bus = bus
++        cameraTarget = JourneyCameraPolicy.target(center: bus.point, reduceMotion: reduceMotion, revision: 0)
++        nextStopIndex = JourneyCourseProgress.nextStopIndex(of: journey, elapsedSeconds: elapsedSeconds)
++        remainingStops = JourneyCourseProgress.remainingStops(of: journey, elapsedSeconds: elapsedSeconds)
++        remainingDistanceTenthsKm = JourneyCourseProgress.remainingDistanceTenthsKm(of: journey, elapsedSeconds: elapsedSeconds)
++    }
++
++    var routePoints: [CoursePoint] { JourneyCourse.closedPath }
++    var visibleStops: [CourseStop] { state.showsStops ? JourneyCourse.stops : [] }
++    var destinationStop: CourseStop { JourneyCourse.stops[journey.destinationIndex] }
++
++    func sync(status: JourneyTimerController.Status, elapsedSeconds: Int) {
++        if status != state.status { state.timerStatusChanged(status) }
++        bus = JourneyCourseProgress.position(of: journey, elapsedSeconds: elapsedSeconds)
++        nextStopIndex = JourneyCourseProgress.nextStopIndex(of: journey, elapsedSeconds: elapsedSeconds)
++        remainingStops = JourneyCourseProgress.remainingStops(of: journey, elapsedSeconds: elapsedSeconds)
++        remainingDistanceTenthsKm = JourneyCourseProgress.remainingDistanceTenthsKm(of: journey, elapsedSeconds: elapsedSeconds)
++        if state.camera == .follow { retarget() }
++    }
++
++    func setReduceMotion(_ on: Bool) {
++        reduceMotion = on
++        if state.camera == .follow { retarget() }
++    }
++
++    func userMovedCamera() { state.userMovedCamera() }
++    func followTapped() { if state.followTapped() { retarget() } }
++    func openThemeSheet() { state.openThemeSheet() }
++    func dismissThemeSheet() { state.dismissThemeSheet() }
++    func select(theme: JourneyMapTheme) { state.select(theme: theme) }
++    func setShowsStops(_ on: Bool) { state.setShowsStops(on) }
++    func leave() { state.leave() }
++
++    private func retarget() {
++        cameraTarget = JourneyCameraPolicy.target(center: bus.point, reduceMotion: reduceMotion,
++                                                  revision: cameraTarget.revision + 1)
++    }
++}
+diff --git a/ios/FocusMateTests/JourneyMapControllerTests.swift b/ios/FocusMateTests/JourneyMapControllerTests.swift
+new file mode 100644
+index 0000000..6830464
+--- /dev/null
++++ b/ios/FocusMateTests/JourneyMapControllerTests.swift
+@@ -0,0 +1,328 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++/// 지도 컨트롤러 (T3). 타이머 컨트롤러·시계·저장 더블을 실제로 엮어 위치·카메라·상태를 검증한다.
++@MainActor
++final class JourneyMapControllerTests: XCTestCase {
++    private let accuracy = 1e-9
++
++    /// 성수 정방향 25분 2014(5분/정류장) — 도착 정류장은 인덱스 5.
++    private var forwardJourney: CourseJourney {
++        CourseJourney(originIndex: 0, direction: 1, minutesPerStop: 5, totalMinutes: 25)
++    }
++
++    /// 서울숲 역방향 25분 2014 — 도착 정류장은 인덱스 8.
++    private var reverseJourney: CourseJourney {
++        CourseJourney(originIndex: 4, direction: -1, minutesPerStop: 5, totalMinutes: 25)
++    }
++
++    private func makeMap(
++        _ journey: CourseJourney? = nil,
++        status: JourneyTimerController.Status = .running,
++        elapsed: Int = 0,
++        reduceMotion: Bool = false
++    ) -> JourneyMapController {
++        JourneyMapController(
++            journey: journey ?? forwardJourney, status: status, elapsedSeconds: elapsed, reduceMotion: reduceMotion
++        )
++    }
++
++    private struct TimerRig {
++        let timer: JourneyTimerController
++        let clock: ManualJourneyClock
++        let saver: FakeProgressSaver
++    }
++
++    private func makeTimerRig() -> TimerRig {
++        let clock = ManualJourneyClock()
++        let saver = FakeProgressSaver()
++        let snapshot = BoardingFixtures.journey(
++            minutes: 25, destinationStopID: "seoulForestGate", phase: .departed, elapsedSeconds: 0, paused: false
++        )
++        let timer = JourneyTimerController(
++            journey: snapshot, autoStart: true, saver: saver, clock: clock, ticker: clock, announcer: RecordingAnnouncer()
++        )
++        timer.appear()
++        return TimerRig(timer: timer, clock: clock, saver: saver)
++    }
++
++    private func assertPoint(
++        _ p: CoursePoint, equals q: CoursePoint,
++        file: StaticString = #filePath, line: UInt = #line
++    ) {
++        XCTAssertEqual(p.latitude, q.latitude, accuracy: accuracy, file: file, line: line)
++        XCTAssertEqual(p.longitude, q.longitude, accuracy: accuracy, file: file, line: line)
++    }
++
++    // MARK: AC-10 일시정지·재개
++
++    // 깨짐: 일시정지 중 sync가 버스를 옮기거나, 재개 후 정지 지점이 아닌 곳에서 이어가면 실패한다.
++    func test1_AC10_일시정지_중에는_버스가_멈추고_재개하면_멈춘_지점부터_이어간다() {
++        let rig = makeTimerRig()
++        let map = makeMap(status: .running, elapsed: 0)
++
++        rig.clock.advance(by: .seconds(600))
++        map.sync(status: rig.timer.status, elapsedSeconds: rig.timer.elapsedSeconds)
++        assertPoint(map.bus.point, equals: JourneyCourse.stops[2].point)
++
++        rig.timer.pause()
++        rig.clock.advance(by: .seconds(300))
++        map.sync(status: rig.timer.status, elapsedSeconds: rig.timer.elapsedSeconds)
++        assertPoint(map.bus.point, equals: JourneyCourse.stops[2].point)
++
++        rig.timer.resume()
++        rig.clock.advance(by: .seconds(300))
++        map.sync(status: rig.timer.status, elapsedSeconds: rig.timer.elapsedSeconds)
++        assertPoint(map.bus.point, equals: JourneyCourse.stops[3].point)
++    }
++
++    // MARK: AC-11 도착
++
++    // 깨짐: 도착 시 버스가 도착 정류장 좌표에 놓이지 않거나 isArrived가 꺼져 있으면 실패한다.
++    func test2_AC11_도착하면_버스가_도착_정류장에_놓이고_도착_표시가_켜진다() {
++        let map = makeMap()
++
++        map.sync(status: .arrived, elapsedSeconds: 1500)
++
++        assertPoint(map.bus.point, equals: JourneyCourse.stops[5].point)
++        XCTAssertTrue(map.bus.isArrived)
++    }
++
++    // MARK: AC-12 정류장 표시
++
++    // 깨짐: 정류장 표시를 끄면 도착 정류장 좌표까지 사라지거나, 표시 개수·경로 점 수가 어긋나면 실패한다.
++    func test3_AC12_정류장_표시를_꺼도_도착_정류장_좌표와_경로는_유지된다() {
++        let map = makeMap()
++        XCTAssertEqual(map.visibleStops.count, 9)
++
++        map.setShowsStops(false)
++
++        XCTAssertEqual(map.visibleStops.count, 0)
++        XCTAssertEqual(map.routePoints.count, 10)
++        assertPoint(map.destinationStop.point, equals: JourneyCourse.stops[5].point)
++    }
++
++    // MARK: AC-13 초기 카메라
++
++    // 깨짐: 초기 카메라가 follow가 아니거나 pitch가 0이거나 버스 위치가 아닌 곳을 가리키면 실패한다.
++    func test4_AC13_생성_직후_카메라는_버스를_기울여_따라간다() {
++        let map = makeMap(elapsed: 300)
++
++        XCTAssertEqual(map.state.camera, .follow)
++        XCTAssertGreaterThan(map.cameraTarget.pitchDegrees, 0)
++        assertPoint(map.cameraTarget.center, equals: map.bus.point)
++    }
++
++    // MARK: AC-14 앱 갱신
++
++    // 깨짐: 앱의 sync 갱신이 카메라를 explore로 바꾸면 실패한다.
++    func test5_AC14_따라가는_중_앱_갱신을_반복해도_follow가_유지된다() {
++        let map = makeMap()
++
++        map.sync(status: .running, elapsedSeconds: 100)
++        map.sync(status: .running, elapsedSeconds: 200)
++        map.sync(status: .running, elapsedSeconds: 300)
++
++        XCTAssertEqual(map.state.camera, .follow)
++    }
++
++    // MARK: AC-15 탐색·복귀
++
++    // 깨짐: 조작이 explore로 바꾸지 않거나, 복귀 버튼이 현재 버스 위치로 새 목표를 내지 않으면 실패한다.
++    func test6_AC15_사용자가_움직이면_탐색이고_따라가기를_누르면_현재_버스로_복귀한다() {
++        let map = makeMap()
++        map.userMovedCamera()
++        XCTAssertEqual(map.state.camera, .explore)
++        map.sync(status: .running, elapsedSeconds: 600)
++        let revisionBefore = map.cameraTarget.revision
++
++        map.followTapped()
++
++        XCTAssertEqual(map.state.camera, .follow)
++        assertPoint(map.cameraTarget.center, equals: JourneyCourse.stops[2].point)
++        XCTAssertGreaterThan(map.cameraTarget.revision, revisionBefore)
++    }
++
++    // MARK: AC-17 탐색 중 갱신
++
++    // 깨짐: explore 중 sync가 카메라 목표를 새로 내거나 버스 위치를 갱신하지 않으면 실패한다.
++    func test7_AC17_탐색_중_갱신은_버스만_움직이고_카메라_목표는_그대로다() {
++        let map = makeMap()
++        map.userMovedCamera()
++        let busBefore = map.bus.point
++        let targetBefore = map.cameraTarget
++
++        map.sync(status: .running, elapsedSeconds: 300)
++
++        XCTAssertNotEqual(map.bus.point, busBefore)
++        assertPoint(map.bus.point, equals: JourneyCourse.stops[1].point)
++        XCTAssertEqual(map.cameraTarget.revision, targetBefore.revision)
++        XCTAssertEqual(map.cameraTarget.center, targetBefore.center)
++    }
++
++    // MARK: AC-27 기본값 초기화
++
++    // 깨짐: 설정이 인스턴스 밖으로 새어 새 컨트롤러가 이전 값을 물려받으면 실패한다.
++    func test8_AC27_새_컨트롤러는_이전_인스턴스의_변경과_무관하게_기본값으로_시작한다() {
++        let old = makeMap()
++        old.userMovedCamera()
++        old.select(theme: .satellite)
++        old.setShowsStops(false)
++        old.openThemeSheet()
++
++        let fresh = makeMap()
++
++        XCTAssertEqual(fresh.state.camera, .follow)
++        XCTAssertEqual(fresh.state.theme, .dark)
++        XCTAssertTrue(fresh.state.showsStops)
++        XCTAssertFalse(fresh.state.isThemeSheetPresented)
++    }
++
++    // MARK: AC-28 지도 조작은 진도에 영향 없음
++
++    // 깨짐: 지도 조작이 저장을 일으키거나 타이머 경과·상태를 바꾸면 실패한다.
++    func test9_AC28_지도_조작만으로는_저장이_늘지_않고_타이머가_변하지_않는다() {
++        let rig = makeTimerRig()
++        rig.clock.advance(by: .seconds(300))
++        let map = makeMap(status: rig.timer.status, elapsed: rig.timer.elapsedSeconds)
++        let writesBefore = rig.saver.writes.count
++        let elapsedBefore = rig.timer.elapsedSeconds
++        let statusBefore = rig.timer.status
++
++        map.userMovedCamera()
++        map.select(theme: .satellite)
++        map.setShowsStops(false)
++        map.openThemeSheet()
++        map.dismissThemeSheet()
++        map.followTapped()
++
++        XCTAssertEqual(rig.saver.writes.count, writesBefore)
++        XCTAssertEqual(rig.timer.elapsedSeconds, elapsedBefore)
++        XCTAssertEqual(rig.timer.status, statusBefore)
++    }
++
++    // MARK: AC-30 / 31 움직임 줄이기
++
++    // 깨짐: 움직임 줄이기를 무시하고 애니메이션 카메라나 heading 회전을 내면 실패한다.
++    func test10_AC30_움직임_줄이기가_켜지면_카메라는_애니메이션과_회전이_없다() {
++        let map = makeMap(elapsed: 300, reduceMotion: true)
++        XCTAssertFalse(map.cameraTarget.animated)
++        XCTAssertEqual(map.cameraTarget.headingDegrees, 0, accuracy: accuracy)
++
++        map.sync(status: .running, elapsedSeconds: 450)
++
++        XCTAssertFalse(map.cameraTarget.animated)
++        XCTAssertEqual(map.cameraTarget.headingDegrees, 0, accuracy: accuracy)
++    }
++
++    // 깨짐: 기본은 애니메이션이 아니거나, 설정 변경이 이후 목표에 반영되지 않으면 실패한다.
++    func test11_AC31_움직임_줄이기를_중간에_켜면_다음_목표부터_애니메이션이_꺼진다() {
++        let map = makeMap(reduceMotion: false)
++        XCTAssertTrue(map.cameraTarget.animated)
++
++        map.setReduceMotion(true)
++        map.sync(status: .running, elapsedSeconds: 300)
++
++        XCTAssertFalse(map.cameraTarget.animated)
++    }
++
++    // MARK: AC-32 상태 동일성
++
++    // 깨짐: 움직임 줄이기 여부가 카메라 모드·테마·시트 등 상태 전이를 달라지게 하면 실패한다.
++    func test12_AC32_같은_이벤트_열은_움직임_줄이기와_무관하게_같은_상태를_만든다() {
++        let on = makeMap(reduceMotion: true)
++        let off = makeMap(reduceMotion: false)
++
++        for map in [on, off] {
++            map.userMovedCamera()
++            map.followTapped()
++            map.openThemeSheet()
++            map.sync(status: .paused, elapsedSeconds: 300)
++            map.sync(status: .running, elapsedSeconds: 300)
++            map.select(theme: .satellite)
++            map.setShowsStops(false)
++            map.leave()
++        }
++
++        XCTAssertEqual(on.state, off.state)
++    }
++
++    // MARK: AC-22 / 24 시트·도구
++
++    // 깨짐: 일시정지에서 시트가 닫히지 않거나 도구가 잠기지 않으면, 혹은 재개·도착에서 도구가 풀리지 않으면 실패한다.
++    func test13_AC22_일시정지는_시트를_닫고_도구를_잠그며_재개와_도착에서_풀린다() {
++        let map = makeMap()
++        map.openThemeSheet()
++
++        map.sync(status: .paused, elapsedSeconds: 300)
++        XCTAssertFalse(map.state.isThemeSheetPresented)
++        XCTAssertFalse(map.state.toolsEnabled)
++
++        map.sync(status: .running, elapsedSeconds: 300)
++        XCTAssertTrue(map.state.toolsEnabled)
++
++        map.openThemeSheet()
++        map.sync(status: .arrived, elapsedSeconds: 1500)
++        XCTAssertFalse(map.state.isThemeSheetPresented)
++        XCTAssertTrue(map.state.toolsEnabled)
++    }
++
++    // MARK: 남은 값
++
++    // 깨짐: 남은 정류장 수·거리·다음 정류장 계산이 틀리면(방향 부호 포함) 실패한다.
++    func test14_남은값_서울숲_역방향_90초_경과는_남은_5정류장_2점6km_다음_3번이다() {
++        let map = makeMap(reverseJourney, elapsed: 90)
++
++        XCTAssertEqual(map.remainingStops, 5)
++        XCTAssertEqual(map.remainingDistanceTenthsKm, 26)
++        XCTAssertEqual(map.nextStopIndex, 3)
++    }
++
++    // MARK: init?(journey:)
++
++    // 깨짐: 카탈로그 값에서 출발 인덱스·방향·분당 정류장·총 시간을 잘못 채우면 실패한다.
++    func test15_init_정상_스냅샷은_코스_여정으로_변환된다() throws {
++        let snapshot = BoardingFixtures.journey(
++            originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
++            destinationStopID: "seongsuIntersection", phase: .departed
++        )
++
++        let journey = try XCTUnwrap(CourseJourney(journey: snapshot))
++
++        XCTAssertEqual(journey.originIndex, 4)
++        XCTAssertEqual(journey.direction, -1)
++        XCTAssertEqual(journey.minutesPerStop, 5)
++        XCTAssertEqual(journey.totalMinutes, 25)
++    }
++
++    // 깨짐: 저장된 도착 정류장이 계산값과 달라도 변환이 성공하면 실패한다.
++    func test16_init_저장된_도착_정류장이_계산값과_다르면_nil이다() {
++        let snapshot = BoardingFixtures.journey(
++            originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
++            destinationStopID: "seongdongSportsCenter", phase: .departed
++        )
++
++        XCTAssertNil(CourseJourney(journey: snapshot))
++    }
++
++    // 깨짐: 분당 정류장 시간으로 나누어떨어지지 않는 minutes를 허용하면 실패한다.
++    func test17_init_분이_정류장_간격으로_나누어떨어지지_않으면_nil이다() {
++        let snapshot = BoardingFixtures.journey(
++            originStopID: "seoulForest", direction: -1, minutes: 27, busID: "2014",
++            destinationStopID: "seongsuIntersection", phase: .departed
++        )
++
++        XCTAssertNil(CourseJourney(journey: snapshot))
++    }
++
++    // 깨짐: 카탈로그에 없는 버스를 허용하면 실패한다.
++    func test18_init_알_수_없는_버스는_nil이다() {
++        let snapshot = BoardingFixtures.journey(
++            originStopID: "seoulForest", direction: -1, minutes: 25, busID: "unknown-bus",
++            destinationStopID: "seongsuIntersection", phase: .departed
++        )
++
++        XCTAssertNil(CourseJourney(journey: snapshot))
++    }
++}

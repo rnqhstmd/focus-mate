@@ -13,3 +13,4 @@
 - [Minor] JourneyLiveActivityWidget.swift — 일시정지·만료 때 설명 라벨과 시간 텍스트 이중 낭독, 위젯 private statusName 이름 중복(M-9에서 확인)
 - [MEDIUM] JourneyLiveActivityPolicy.swift:53-56 / JourneyLiveActivitySync.swift:50-56 — 앱 시작 정리와 화면 진입 정리의 중복 카드 선택 경합(비동기 end), 후속
 - 태스크 리뷰 유예 Minor: reports/t1, t4, t5, t6, t9, t11-review.md
+- [후속] W07(#19) 병합 후: 포기·새 여정 확정 시점에 Live Activity를 끝내는 연결은 아직 없음 — 포기 후 카드는 일시정지로 남고 다음 앱 시작 정리에서 종료된다(PRD 범위 밖, W07 후속으로 명시된 항목)

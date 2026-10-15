@@ -1,5 +1,5 @@
-phase: complete
-status: in_progress
+phase: completed
+status: completed
 pipeline: gx-tdd
 verify-status: passed
 verify-fingerprint: "0ea1537:00bbb729046e"

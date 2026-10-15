@@ -11,7 +11,7 @@
 | W06 | [P3] MapKit 가상 코스 | journey | journey FR-6 | W05 | feat/mapkit-virtual-course | 완료 |
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | feat/abandon-resume-lifecycle | 완료 |
 | W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 완료 |
-| W09 | [P4] 하차 태그·요약·기록(W09a) | 통합 | journey FR-12, records FR-6(요약·기록·메모) | W05, W08 | feat/alighting-summary-records | 진행 |
+| W09 | [P4] 하차 태그·요약·기록(W09a) | 통합 | journey FR-12, records FR-6(요약·기록·메모) | W05, W08 | feat/alighting-summary-records | 완료 (#23) |
 | W09b | [P4] 분석(주/월·태그·인사이트) | records | records FR-6(분석) | W09 | - | 대기 |
 | W10 | [P5] 카드 꾸미기 | card | card FR-4, NFR-2 | W01 | codex/feat-card-customization | 완료 |
 | W11 | [P5] 마이페이지 | card | card FR-5 | W01, W08 | feat/my-page | 완료 |

@@ -1,4 +1,4 @@
-# Latest execution checkpoint — 전체 종료 / 영향7건·별도 빌드 통과
+# Latest execution checkpoint — Simulator 범위 완료 / 보완24 통과
 
 2026-10-16. 전체 Pen+최신 HTML 동기화 범위는 사용자 승인됨. 첫 전체 iOS 실행은 unit1426건/0실패, UI319건/2실패로 종료(exit65,5931.415초)했다. 두 수정 후 영향 범위7건(RecordsAnalytics5+SimulatorLargeTextRecovery2)은0실패/exit0(245.476초)로 통과했다. 별도 최종 Debug Simulator 빌드는 BUILD SUCCEEDED/exit0(4.065초)다. 전체 실행 자체를 통과로 바꾸거나 서로 다른 실행을1745건 전체 통과로 합산하지 않는다.
 
@@ -22,11 +22,18 @@
 ## Next steps
 
 1. 검증 결과는 `reports/verification.md`에 기록됐다. 전체 재실행 없이 실패2건을 포함한 영향7건만 재실행해 통과했고 별도 빌드도 통과했다.
-2. 최종 문서 검토·갤러리 전달·root의 Git/PR checkpoint를 마무리한다. 첫 전체 manifest와 후속 manifest의 차이는 RecordsAnalyticsView의hit영역1행과 SimulatorLargeTextRecoveryTests의실제도달보조2파일뿐이다.
-3. comparison-gallery 실제 브라우저 표시/이미지·필터·모달 및 전달 ZIP을 최종 점검한다.33개 composite의 서로 다른 수집 provenance를 보존하고40–43 component preview를 OS Widget 실표시 증거로 포함하지 않는다.
-4. 별도 빌드 게이트·Git checkpoint·stacked draft PR 등 남은 전달 단계는 root의 현재 승인 범위와 실제 결과를 따라 진행한다. 생성 PR은 codex_app artifact로 연결한다. 기존 PR 상태를 확인 없이 확정하지 않는다.
+2. 소프트웨어 검증과 갤러리 QA는 완료됐다. 첫 전체 이후 두 수정과 보완24의 테스트 추가를 구분한다. 전체 재실행을 기본 재개 작업으로 잡지 않는다.
+3. 비교 갤러리는 http://127.0.0.1:65144/ 및 comparison-gallery/index.html에 있다.33개 composite와 기준 재사용/미수집 경계를 유지한다.
+4. PR26은 PR25 위의 초안 PR이며 artifact로 연결됐다. 이후 리뷰·base 변경·main 병합은 최신 PR 상태와 사용자 승인 범위를 확인해 진행한다.
 5. 전용 SE 삭제/Pro 종료는 완료됐다. 삭제 할당량2,253,922,304B와 관측 여유증가299,343,872B는 서로 다른 지표다. merged worktree/branch 제거는 사용자 확인 규칙을 따른다.
 
-최종 보고는 기능 회귀·시각 판정·접근성·햅틱·OS Widget/Island를 구분한다. 이전 세션에서 사용한 memory citation 의무는 root가 실제 사용한 파일/라인을 확인하여 유지하며 memory를 임의 갱신하지 않는다.
+최종 보고는 기능 회귀·시각 판정·접근성·햅틱·OS Widget/Island를 구분한다.
 
 후속23은 hit 영역/테스트 도달 보조 변경의 영향 검사이며 재캡처가 아니다.33개 이미지 출처는17+22 그대로다. 실패 전용 attachment export는root확인상빈배열이어서자동실패스크린샷을확보한증거는없다. canonical `.dev/codex-feat-design-sync/state.md`는root소유로이문서작업에서수정하지않았다.
+
+## 마지막 보완24와 전달 상태
+
+- SE3/accessibility5의 `DesignSyncRulerUITests.testLargestTextCanSelectFirstAndLastCandidateAndProceed`:1/1 PASS,exit0,231.091초(test198.577초). 실제2014·421탭과120분/421준비값도달을확인했다. 로그/exit는reports/ios-boundary-24*.
+- 별도빌드24는 `reports/ios-build-24.log`의BUILD SUCCEEDED, `ios-build-24-exit.json`의exit0/4.557초로확인했다. 앞선23의7건과이1건을같은8건실행으로합산하지않고새전체실행도없다.
+- root전달사항:구현commit0201659는push됐고PR26은draft다. 이번coverage/docs추가commit은root가진행중이다. canonicalstate와Git/PR최종정보는root가관리한다.
+- 구SE F1622BB8 삭제/Pro종료와 새SE24 968E325B 종료·삭제까지 완료했다. 새 기기 정리는 reports/boundary-cleanup.json을 따른다. 다른 기기는 건드리지 않았다.

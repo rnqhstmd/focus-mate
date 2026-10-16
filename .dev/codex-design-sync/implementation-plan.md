@@ -53,38 +53,40 @@
 
 - [x] RootView의 현재 정류장/방면·진행 카드·꾸미기·메뉴를 새 MainHomeView의 지도 중심 상단 안내/하단 CTA/보조 탐색으로 구성한다. `mainActionFailed`, 새 여정 확인, recovery/widget 진입 수명은 RootView에 둔다.
 - [x] 실제 정류장 데이터와 기존 지도 컴포넌트 재사용 가능성을 확인한다. 장식 지도 이미지로 실제 지도나 상태를 대체하지 않는다.
-- [ ] 정상/진행/도착 메인과 작은 화면·큰 글자에서 시작/이어가기/하차/기록 진입을 조작하고 기존 lifecycle focused tests를 실행한다.
+- [x] 정상/진행/도착 메인의 소프트웨어 경로를 focused + 마지막 전체에서 검사했다. 전체 로그의 ActiveJourneyMain3, MainActiveJourneyCard14, NewJourney19, JourneyResume16, JourneyLifecycleSafety14건은 각각0실패다. 작은 화면 메인·검색은SE18, 최대글자 메인/승차는after17·전체 BoardingLargeText2건 PASS 근거를 따른다.
 - [x] 갤러리 05/17/30과 최신 HTML #main/#home/#resumeCard를 같은 상태로 대조하고 차이/수정을 기록한다.
 
 ### Task 3: 가로 시간 눈금자와 후보 패널 (time)
 
-- [ ] wheel 의존 테스트/도우미를 `rg -n 'pickerWheels|adjust\(toPickerWheelValue|setMinutes' ios/FocusMateUITests`로 전수 찾고 변경 파일 소유권을 root와 조율한다. 다른 owner 파일의 helper를 동시에 수정하지 않는다.
+- [x] wheel 의존 테스트/도우미를 `rg -n 'pickerWheels|adjust\(toPickerWheelValue|setMinutes' ios/FocusMateUITests`로 전수 찾고 변경 파일 소유권을 root와 조율한다. 다른 owner 파일의 helper를 동시에 수정하지 않는다.
 - [ ] MinuteRulerValue에 범위 clamp·위치↔분·1분 반올림을 순수 함수로 두고 범위 끝/중간/비정상 폭에 대한 기대값 테스트를 먼저 작성한다. JourneyPlanner.minuteRange를 사용하며 5분 snap을 추가하지 않는다.
 - [x] 고정 중앙 포인터와 가로 ticks/선택 분을 Canvas+Drag로 구현한다. `MinuteRuler(value: Binding<Int>, range: ClosedRange<Int>)` 수준의 최소 입력을 사용하고 접근성 slider 식별자는 `time.ruler`, 증가/감소는 1분, 현재 값은 분으로 노출한다.
-- [ ] 기존 TimeSelectionUITests 및 함께 쓰는 UI helper의 wheel 전제를 slider/adjustable 조작으로 이전한다. 실제 drag + 1분 조절, 상하한, 선택 후 분 변경에 따른 후보 해제, 후보 취소/뒤로가기, 후보 재선택 후 진행을 검사한다.
-- [ ] `TimeSelectionUITests` 및 영향 받은 선택/준비 focused tests만 root 큐로 실행한다. 작은 화면·큰 글자에서 CTA와 첫/마지막 후보가 실제 hit 가능함을 확인한다.
+- [x] 기존 TimeSelectionUITests 및 함께 쓰는 helper의 wheel 전제를 실제 drag/접근성±버튼과 native Slider 노출·값 검사로 이전했다. 상하한15/360·60/61의1분 이동·후보 해제/진행 잠금은focused ruler2건으로 확인했다. 취소/뒤로가기/재선택 등 TimeSelection9건과 PreparationFlow7건은 마지막 전체에서 각각0실패다. 실제 VoiceOver 조절 성공으로 확대하지 않는다.
+- [x] `TimeSelectionUITests` 및 영향 선택/준비 경로를 focused + 마지막 전체의 root 단일 큐로 실행했다. 전체 TimeSelection9·PreparationFlow7·BoardingFlow·PreparationEditor12건은0실패이며 SE21 시간/승차2건 PASS다. 첫/마지막 후보를 각각 실제 탭하는 추가 도달 증거는 아래 별도 항목으로 남긴다.
+- [x] 작은 SE/최대 글자의 첫·마지막 후보 실제 탭: `DesignSyncRulerUITests.testLargestTextCanSelectFirstAndLastCandidateAndProceed`를 SE3/accessibility5에서 실행해1/1 PASS(exit0,231.091초; test198.577초). cardOnly 성수120분의3후보에서 첫2014/마지막421 실제 탭, 배타선택·고정CTA·준비값120/421을 검사했다. `reports/ios-boundary-24.log`와exit메타데이터가근거다. 기존전체319건/영향23의7건과다른추가실행이다.
 - [x] 갤러리 06/07, HTML #time/#timeRuler/#timeJourneyOptions와 비교한다. 분·노선·거리·시간 데이터는 예시로 고정하지 않는다.
 
 ### Task 4: 집중·도착·요약 장면 표현 (journey)
 
 - [x] 현재 material HUD를 최신 HTML 투명 HUD/검정 shade로 대응하고 지도 위 정보·pause/resume·노선 rail·도구를 재배치한다. 높이190 등 기준 수치는 같은 viewport 대조의 출발점이며 글자를 자르는 고정 제약으로 쓰지 않는다.
 - [x] JourneyView 출발 안내·ArrivalBriefingView 도착 안내·AlightingSummaryView 지도/어두운 시트/완료 표시/메모/CTA의 장면별 위계를 대응한다.
-- [ ] 기존 타이머·도착 controller tests를 보존하고 `JourneyTimerUITests`, 영향 있는 lifecycle/accessibility tests, 요약/메모 실패 tests를 focused 실행한다. 정지·재개·도착·실패·재진입에서 action 수와 저장 결과가 같다.
-- [ ] 갤러리 14–20을 상태별로 대조한다. DEBUG 가림과 실제 제품 레이아웃을 구분하고 전환은 영상/연속 캡처로 별도 기록한다.
+- [x] 기존 controller 테스트와 타이머/도착 경계를 focused + 마지막 전체에서 검사했다. 전체 JourneyTimer9·JourneyTimerLifecycle8·JourneyTimerAccessibility5·JourneyMapAccessibility10·JourneyAbandon30·AlightingFlow14건은 각각0실패다. 요약 실패 초안/재시도focused2건 및 controller unit 전체0실패와 구분해 기록한다.
+- [x] 갤러리14–20의 실제 정적 이미지와 기준을 상태별 대조했다. DEBUG 가림/지도safe-area띠를 분리해 수정하고 최종journey90 PASS로 기록했다.
+- [ ] 14/18 전환의 정확 시안 일치: 해당 상태 전용 원본JPEG/동일전환기준이 없어 static 구조 검토를 넘어 모션·타이밍의exact-reference 통과로 처리하지 않는다.
 
 ### Task 5: 발급·검색·준비·승하차 표면 정렬 (preparation/card)
 
 - [x] 발급 cardStage/저장/포커스는 유지하고 제목·여백·카드/슬롯·하단 CTA를 정렬한다. 최초 검색/빈 결과/실패의 입력·결과 위계를 정렬한다.
 - [x] 준비 허브의 현재 태그 두 줄·할 일 입력·소리 시트 동작을 살려 공통 패널/CTA와 정렬한다. TagEditorView/SoundSelectionView는 같은 owner가 수정한다.
 - [x] 승차권과 최신 검정 LCD 단말기의 비율·접촉 표시를 정렬한다. 녹색 구형 단말기/독립 태그 관리/좌석/반대편 확인을 복원하지 않는다.
-- [ ] 발급 실패 재시도·태그 생성 취소·소리 선택 취소/미리듣기 이탈 정리·키보드 CTA·접촉 대체 버튼을 focused 검사한다. `.bus` 및 기존 Reduce Motion/햅틱 예외를 검토한다.
+- [x] 발급/검색/준비 편집/접촉 소프트웨어 경로를 focused + 마지막 전체에서 검사했다. 전체 CardIssuanceFlow11·FirstStationSearch8·PreparationEditor12·PreparationFlow7·BoardingTag8건은 각각0실패다. `.bus` 및 기존 Reduce Motion/햅틱 정책 보존은최종정적리뷰, 실제진동체감은별도미검증이다.
 - [x] 갤러리 01–04/08–13/19/29를 최신 HTML과 대조하고 저장 성공과 애니메이션·햅틱 증거를 분리한다.
 
 ### Task 6: 기록·분석·프로필·꾸미기 정렬 (records/profile)
 
 - [x] 기록의 달력/목록/빈 상태, 분석 주월/필터/그래프/최근 기록/메모의 위계를 현행 W09b 데이터와 연결하여 정렬한다.
 - [x] 프로필·꾸미기 패널/도구/저장 취소를 정렬한다. 사진 crop/저장 controller는 유지한다. 출처 화면은 실제 법적 내용을 보존하고 주변 서체/여백만 정렬한다.
-- [ ] RecordsUITests/RecordsAnalyticsUITests/ProfileUITests 및 영향 있는 CardCustomizationFlowTests를 focused 실행한다. 기록→분석→메모→기록 왕복, 필터/날짜, 메모 실패 초안, 꾸미기 취소/저장, 작은 화면 CTA를 검사한다.
+- [x] 기록·분석·프로필·꾸미기 경로를 focused + 마지막 전체와 실패 영향후속으로 검사했다. 전체 Records3·Profile22·CardCustomizationFlow13건은0실패다. RecordsAnalytics5건 중AC5가실패해 contentShape1행을고친뒤 영향23의동일class5건이모두PASS했다. 작은화면Profile은SE20 PASS다. 첫전체실패와후속성공을같은실행으로합산하지않는다.
 - [x] 갤러리 21–28/31–33과 대조하고 전체 집계와 선택 태그/기간 범위를 명시한다. 소스 계산과 정적 캡처 일치를 혼동하지 않는다.
 
 ### Task 7: 통합·최종 한 번 검증·완료 근거 (root)
@@ -109,3 +111,11 @@ after22 collector2/2 PASS가05–16의12개만 갱신했고 다른21개는 after
 **통제된 계획 변경 — Task 3:** 별도 `MinuteRulerValue.swift` 추출/단위 seam은 추가하지 않았다. private Canvas ruler의 작은 좌표 산술/clamp는 실제 drag15/360/60/61·후보 해제, native Slider 노출/값 및 접근성 크기의 실제44pt +/-1분 버튼으로 확인했다. 순수함수/unit 체크박스는 미체크로 유지한다. synthetic AX Slider API의 불안정성을 실제 버튼 입력으로 보완했으며 이는 실기기 VoiceOver 증가/감소 검증과 다르다.
 
 기준 JPEG는22장 수집 이력 중 잘못 명명된04 시간 화면을 제외한 유효21장이다.04/29는03 검색 레이아웃,07은06 시간,30은05 메인을 재사용하고 상태 전용 렌더로 주장하지 않는다. 실기기 햅틱/VoiceOver/OS Widget·Island 실표시는 별도 미검증이다. 아직 실행하지 않은 기능 조합 전체를 focused 결과로 완료 처리하지 않는다.
+
+## 마지막 미체크 감사 — 소프트웨어 근거와 남은 경계
+
+focused만 따로 실행하지 않았다는 형식 때문에 열어두었던 항목은 `reports/ios-full.log`의 해당 class 종료/건수와 `ios-affected-23.log`를 직접 읽어 위와 같이 `focused + 마지막 전체 + 실패 영향후속`으로 정합했다. 각class PASS는 첫전체unit1426/0·UI319/2실패라는실행전체결과를대체하지않는다. wheel전수검색/이전파일목록근거는 `reports/time-impl.md`이며 이후 실제drag/접근성±버튼 경로는최종review와실행로그가우선한다.
+
+별도 MinuteRulerValue/unit seam은 통제된 계획 변경으로 미체크다.14/18의정확한모션기준부재는별도미체크로유지한다. 새 첫/마지막후보검사는추가24의1/1 PASS로근거공백을해소했다. 이후별도빌드24도BUILD SUCCEEDED/exit0(4.557초)다. 첫전체/영향23/추가24를합산한같은실행의8건통과로표기하지않는다.
+
+- [ ] 물리기기 VoiceOver 증가/감소·낭독체감, 햅틱 질감/강도/동기, OS Widget/Island 실제표시·갱신: 이번 소프트웨어/시각 검사 범위밖으로 미검증이다.

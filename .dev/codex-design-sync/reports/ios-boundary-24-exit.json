@@ -1,0 +1,29 @@
+{
+  "exitCode": 0,
+  "elapsedSeconds": 231.091,
+  "finishedAt": "2026-10-16T20:54:26.376908+09:00",
+  "command": [
+    "xcodebuild",
+    "-project",
+    "ios/FocusMate.xcodeproj",
+    "-scheme",
+    "FocusMate",
+    "-destination",
+    "platform=iOS Simulator,id=968E325B-438E-421C-BC75-72EEB0ECE7DA",
+    "-derivedDataPath",
+    "/Users/bonseung/.codex/worktrees/w17-live-activity-design/new/.build/w17-ios",
+    "-parallel-testing-enabled",
+    "NO",
+    "-resultBundlePath",
+    "/Users/bonseung/.codex/worktrees/w17-live-activity-design/new/.build/design-boundary-24.xcresult",
+    "test",
+    "CODE_SIGNING_ALLOWED=NO",
+    "-collect-test-diagnostics",
+    "never",
+    "-only-testing:FocusMateUITests/DesignSyncRulerUITests/testLargestTextCanSelectFirstAndLastCandidateAndProceed"
+  ],
+  "device": "968E325B-438E-421C-BC75-72EEB0ECE7DA",
+  "deviceType": "iPhone SE (3rd generation)",
+  "dynamicType": "accessibility5",
+  "fullSuiteRepeated": false
+}

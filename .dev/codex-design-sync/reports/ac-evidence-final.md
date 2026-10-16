@@ -96,3 +96,9 @@
 후속23은재캡처가아니며33개이미지의17+22출처를유지한다. root가확인한실패attachment전용manifest는빈배열이라실패이미지확보를주장하지않는다. 정리완료수치와빌드확정은[verification.md](verification.md)를따른다.
 
 Python문법빌드후속확인은 [python-build-final-exit.json](python-build-final-exit.json)의exit0/0.055초로확정했다. quiet출력자체를증거로간주하지않으며전체테스트재실행과구분한다.
+
+## 마지막 양끝 후보 보완24 — AC1/AC2 소프트웨어 도달 공백 해소
+
+기존 전체/SE21은2014첫후보진입을확인했지만양끝후보각각의실제탭증거는별도필요했다. root가새 `DesignSyncRulerUITests.testLargestTextCanSelectFirstAndLastCandidateAndProceed`를추가해SE3/accessibility5에서1/1 PASS했다. cardOnly성수120분3후보의첫2014/마지막421실제탭·배타선택·고정CTA·준비값120/421을검사했다. [보완24로그](ios-boundary-24.log)/[exit](ios-boundary-24-exit.json):exit0,231.091초(test198.577초).
+
+보완후 [별도빌드24](ios-build-24.log)/[exit](ios-build-24-exit.json)도BUILD SUCCEEDED/exit0/4.557초다. 위AC6의첫전체unit1426/0·UI319/2실패와영향23의7/7 PASS는그대로보존한다. 추가24의1건을같은8건실행으로합치지않고새전체도실행하지않았다. Simulator범위완료이며실기기VoiceOver/햅틱/OSWidgetIsland/정확모션기준부재의한계는유지한다. source delta두파일이라는이전설명은전체→영향23구간이고,이번24는rulercoverage test추가다.

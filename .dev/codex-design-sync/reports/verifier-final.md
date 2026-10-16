@@ -42,3 +42,17 @@ compileall은 quiet 명령이므로 출력 대신 별도로 제공된 `python-bu
 실기기 VoiceOver Slider 조절·포커스 체감, 물리 햅틱 강도·질감·동기와 오디오 체감, 실제 OS Widget/Island 표시·갱신은 미검증이다. 일반 drag·접근성 ±1분 버튼·AX 노출/값 성공을 실제 VoiceOver Slider 조절 성공으로 대체하지 않는다. 캡처된 일반 크기 지도 출처 수용도 모든 최대 글자/가로/스크롤 조합을 포괄하지 않는다.
 
 최종 source 및 영향 범위 runtime의 미해결 소프트웨어 finding은 확인하지 못했다. compileall exit 근거는 확보됐으며, 위 물리·OS 게이트는 별도 미검증으로 남는다.
+
+## 최대 글자 첫·마지막 후보 도달 coverage 추가 검토
+
+`DesignSyncRulerUITests.testLargestTextCanSelectFirstAndLastCandidateAndProceed` 신규1건만 읽어 검토했다. 정적 판정은 **타당, actionable finding 없음**이며 기존 ruler2건과 production은 바꾸지 않는 coverage 추가다. 기존 affected23 manifest294개 일치 확인은 당시 소스에 대한 것이며, 이후 추가된 이 테스트의 실행 결과를 포함한 것으로 확대하지 않는다.
+
+새 검사는 cardOnly fixture에서 실제 성수역 검색·Search submit·결과 선택·확인으로 시간 화면에 진입한다. 기존90초 helper 제한을 늘리지 않고 보이는 ± 버튼으로60→90→120을 입력하며 정확한120분과 실제 후보2014/302/421 총3개를 확인한다. 첫2014와 마지막421을 각각 실제 scroll reveal·tap하고 선택 상태 교체, 고정 CTA 도달/활성, 준비 진입 및 실제 diagnostic의 minutes120/busID421을 assertion한다. 모델 주입·선택 callback 직접 호출·좌표 고정·시간 값 tolerance는 없다.
+
+`ios-boundary-24.log` 최종 testcase/footer와 `ios-boundary-24-exit.json`을 직접 읽어 **신규1건/0실패, TEST SUCCEEDED, exit0**으로 확인했다. 전용 SE 장치968E325B-438E-421C-BC75-72EEB0ECE7DA(iPhone SE 3세대), accessibility5 설정이며 testcase198.577초, 명령231.091초, 종료20:54:26.376908+09:00이다. 이전 PENDING은 이 실제 결과로 해소됐다.
+
+`ios-boundary-24-source-manifest.json`의294개 SHA-256을 현재 파일과 직접 비교해 **294개 일치·불일치0**을 확인했다. affected23 manifest 대비 바뀐 항목은 `ios/FocusMateUITests/DesignSyncRulerUITests.swift`1개뿐이다. 따라서 production은 affected23 검증 소스와 그대로이며, 새 coverage 테스트1건만 추가됐다.
+
+추가 coverage 이후 별도 빌드도 `ios-build-24.log`의 BUILD SUCCEEDED 및 `ios-build-24-exit.json`의 **exit0·4.557초·종료20:54:47.728413+09:00**을 직접 확인했다. 앞선 최종 build4.065초와 별도 실행이므로 혼합하지 않는다.
+
+이 성공은 첫·마지막 후보를 실제 조작한 coverage1건에 귀속한다. 첫 전체1426unit/0실패·UI319/2실패·exit65 및 수정후affected7/7·exit0은 별도 실행 이력으로 유지한다. 전체 suite를 반복하지 않았고 정확 원본 없는 안내 모션·물리/OS 게이트도 완료로 바꾸지 않는다. 이 추가 검토에서도 production/test 수정·빌드·테스트·시뮬레이터 실행은 하지 않았다.

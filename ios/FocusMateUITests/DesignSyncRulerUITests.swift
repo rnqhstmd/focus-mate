@@ -73,6 +73,72 @@ final class DesignSyncRulerUITests: XCTestCase {
         XCTAssertFalse(harness.element("time.proceed").isEnabled)
     }
 
+    // 작은 화면의 가장 큰 글자에서도 첫/마지막 후보를 실제로 선택하고 고정 CTA로 진행한다.
+    func testLargestTextCanSelectFirstAndLastCandidateAndProceed() throws {
+        let harness = FocusMateUIHarness.launch(seed: "cardOnly", extraArguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        let app = harness.app
+        app.typeStationQuery("성수역")
+        let result = harness.element("search.result.seongsu")
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        if app.keyboards.count > 0 { app.typeText("\n") }
+        for _ in 0..<3 where !result.isHittable {
+            let scroll = app.scrollViews["search.scroll"]
+            let viewport = scroll.frame
+            let distance = min(max(result.frame.midY - viewport.midY, -viewport.height * 0.6), viewport.height * 0.6)
+            let center = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let start = center.withOffset(CGVector(dx: 0, dy: distance / 2))
+            let end = center.withOffset(CGVector(dx: 0, dy: -distance / 2))
+            start.press(forDuration: 0.1, thenDragTo: end)
+        }
+        XCTAssertTrue(result.isHittable)
+        result.tap()
+        let confirm = harness.element("search.confirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.isHittable)
+        confirm.tap()
+        XCTAssertTrue(harness.element("screen.time").waitForExistence(timeout: 5))
+        XCTAssertEqual(try harness.diagnostic("time.origin"), "성수역")
+
+        // Each actual +/- sequence remains within the helper's existing 90-second budget.
+        app.setJourneyMinutes(60)
+        app.setJourneyMinutes(90)
+        app.setJourneyMinutes(120)
+        XCTAssertEqual(try harness.diagnostic("time.minutesLabel"), "120")
+        let first = harness.element("time.candidate.2014")
+        let middle = harness.element("time.candidate.302")
+        let last = harness.element("time.candidate.421")
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(middle.exists)
+        XCTAssertTrue(last.exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "time.candidate.")).count, 3)
+
+        XCTAssertTrue(app.revealTimeContent(first, maxAttempts: 8))
+        XCTAssertTrue(first.isHittable)
+        first.tap()
+        XCTAssertTrue(first.isSelected)
+        XCTAssertFalse(last.isSelected)
+        let proceed = harness.element("time.proceed")
+        XCTAssertTrue(proceed.isHittable)
+        XCTAssertTrue(proceed.isEnabled)
+
+        XCTAssertTrue(app.revealTimeContent(last, maxAttempts: 8))
+        XCTAssertTrue(last.isHittable)
+        last.tap()
+        XCTAssertTrue(last.isSelected)
+        XCTAssertFalse(first.isSelected)
+        XCTAssertTrue(proceed.isHittable)
+        XCTAssertTrue(proceed.isEnabled)
+        proceed.tap()
+        XCTAssertTrue(harness.element("screen.preparation").waitForExistence(timeout: 5))
+        let raw = try harness.diagnostic("test.journeySelection")
+        let data = try XCTUnwrap(raw.data(using: .utf8))
+        let selection = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(selection["minutes"] as? Int, 120)
+        XCTAssertEqual(selection["busID"] as? String, "421")
+    }
+
     private func openTimeScreen() -> FocusMateUIHarness {
         let harness = FocusMateUIHarness.launch(seed: "cardOnly")
         harness.app.typeStationQuery("성수역")

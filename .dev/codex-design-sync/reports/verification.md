@@ -7,6 +7,8 @@
 | 전체 iOS 1회 | Unit 1426/0실패, UI 319/2실패, exit 65, 5931.415초 | [전체 로그](ios-full.log), [exit](ios-full-exit.json) |
 | 수정 후 영향 범위 | RecordsAnalytics 5 + SimulatorLargeTextRecovery 2, 7/7 PASS, exit 0, 245.476초 | [후속 로그](ios-affected-23.log), [exit](ios-affected-23-exit.json) |
 | 별도 Debug Simulator 빌드 | BUILD SUCCEEDED, exit 0, 4.065초 | [빌드 로그](ios-build-final.log), [exit](ios-build-final-exit.json) |
+| 마지막 SE/최대 글자 양끝 후보 보완24 | 1/1 PASS, exit 0, 231.091초(test 198.577초) | [보완 로그](ios-boundary-24.log), [exit](ios-boundary-24-exit.json) |
+| 보완24 후 별도 빌드 | BUILD SUCCEEDED, exit 0, 4.557초 | [빌드24](ios-build-24.log), [exit](ios-build-24-exit.json) |
 | 실제 이미지 시각 대조 | main/time 92, card 90, journey 90, records 91 PASS | [비교표](visual-comparison.md), 각 visual-*-final.json |
 
 전체 실패 1은 분석 메모 행을 눌러도 편집 입력이 나타나지 않은 문제였다. 채워진 배경을 없앤 plain 행 버튼의 label에 `.contentShape(Rectangle())` 한 줄을 추가했다. 원래 AC5의 실제 탭→메모 수정/저장→분석 재진입 최신값 검사가 35.141초에 PASS했다. [실패 분석](records-memo-failure-analysis.md)에 가설과 후속 근거를 구분했다. root가 확인한 실패 attachment 전용 export manifest는 빈 배열이므로 자동 실패 화면을 확보했다고 주장하지 않는다.
@@ -20,3 +22,5 @@
 [정리 메타데이터](resource-cleanup.json)에서 소유 Pro 종료, 전용 SE 삭제, 미상 기기 미접촉, 빌드 근거·워크트리 보존을 확인했다. 삭제 디렉터리 할당량은 2,253,922,304B이고 관측 여유 증가량은 299,343,872B다. 서로 다른 수치를 같은 실제 회수량이라고 보고하지 않는다.
 
 물리 햅틱 질감·강도/동기, 실기기 VoiceOver, OS Widget/Island 실제 표시·갱신은 미검증이다. static preview와 Simulator/자동검사로 대체하지 않는다. 상세 증거는 [AC 원장](ac-evidence-final.md)을 따른다. 이 문서 갱신에서는 로그/메타데이터만 읽었고 추가 소스 수정·빌드·테스트·시뮬레이터 실행을 하지 않았다.
+
+마지막 남은 작은 화면/큰 글자 양끝 후보 도달은 추가24의별도1건으로확인했다. SE3/accessibility5,cardOnly성수120분3후보에서첫2014·마지막421실제탭,배타선택·고정CTA·준비값120/421을검사했다. 로그의187.90초2014탭/194.59초421탭과최종PASS를직접읽었다. 이전전체319/2실패·영향23의7/7PASS·추가24의1/1PASS를한실행으로합산하지않으며전체재실행은없다. 보완24는새재캡처가아니므로33개이미지출처는17+22그대로다. Simulator범위소프트웨어게이트는완료했고위실기기/OS/정확기준부재한계는유지한다.

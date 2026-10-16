@@ -1,6 +1,6 @@
 # 여정 구현 추적
 
-수정일: 2026-10-16(시스템 표면 후속 계획 추가). 도메인 구성은 사용자 확인으로 확정했고 담당자·사용자 규모는 ❓입니다. ID와 AC 번호는 이 도메인 안에서만 유일합니다. `[웹]`과 `[iOS]`는 별도 구현 범위입니다. `[iOS·P2]`의 P 번호는 [개발 단계](../../docs/DEVELOPMENT-PHASES.md)의 담당 Phase입니다.
+수정일: 2026-10-16(W17·W18 인수 검증 반영). 도메인 구성은 사용자 확인으로 확정했고 담당자·사용자 규모는 ❓입니다. ID와 AC 번호는 이 도메인 안에서만 유일합니다. `[웹]`과 `[iOS]`는 별도 구현 범위입니다. `[iOS·P2]`의 P 번호는 [개발 단계](../../docs/DEVELOPMENT-PHASES.md)의 담당 Phase입니다.
 
 ## 범례
 
@@ -27,14 +27,14 @@
 | FR-11 | [iOS·P2] 승차권·승차 태그 | AC-13: 미완성 준비는 승차권 진입을 차단한다. 카드가 태그 영역과 30% 이상 겹치면 놓기 전에 인식(진동)하고, 인식 접촉 성공 시 진행 여정을 1회 저장하고 1400ms 유지·450ms 전환 후 여행 화면의 출발 안내로 간다. 확인 전에는 진행·남은 시간이 멈춘다. 이탈·숨김은 전환만 취소하고 저장은 유지한다. | 🟡 | [#16](https://github.com/rnqhstmd/focus-mate/pull/16) |
 | FR-12 | [iOS·P4] 도착 안내·하차 태그 | AC-14: 진행이 끝나면 도착 안내를 보여주고 확인 뒤 하차 태그로 간다. 하차 접촉 성공 1회에만 완료를 records에 전달하고 도착 정류장을 저장하며 재개 정보를 제거한다. 중복 접촉은 무시한다. | ✅ | W09 PR (작성 중) |
 | FR-13 | [iOS·P3] 포기·이어가기 | AC-15: 포기는 확인 후 도달 정류장을 저장하고 완료 기록 없이 재개 정보를 제거한다. 메인에서 남은 여정을 수동 재개하고, 새 여정은 기존 여정 정리를 확인한다. | ✅ | W07 [#19](https://github.com/rnqhstmd/focus-mate/pull/19) |
-| FR-14 | [iOS·후속] Live Activity 디자인·세션 시간 눈금 타임라인·상태별 표시(W17) | - | ⬜ | - |
-| FR-15 | [iOS·후속] 소형·중형 집중 유도 홈 위젯과 상태별 앱 진입 안내(W18) | - | ⬜ | - |
-| NFR-3 | [iOS·후속] 위젯 링크의 최신 상태 재검증·진행 여정 보존·기존 설정/이어가기/새 여정 확인 경로 준수(W18) | - | ⬜ | - |
+| FR-14 | [iOS·후속] Live Activity 디자인·세션 시간 눈금 타임라인·상태별 표시(W17) | W17 AC-1~5: 네이티브 시간·선형 진행과 눈금, 상태·접근성 계약을 유지한다. | ✅ | [#25](https://github.com/rnqhstmd/focus-mate/pull/25) (코드·Simulator, PR 리뷰 중) |
+| FR-15 | [iOS·후속] 소형·중형 집중 유도 홈 위젯과 상태별 앱 진입 안내(W18) | W18 AC-1·4·6·7: 집중 유도 small·medium과 저장된 진도·상태·기준일을 표시한다. | ✅ | [#25](https://github.com/rnqhstmd/focus-mate/pull/25) (코드·Simulator, PR 리뷰 중) |
+| NFR-3 | [iOS·후속] 위젯 링크의 최신 상태 재검증·진행 여정 보존·기존 설정/이어가기/새 여정 확인 경로 준수(W18) | W18 AC-5: 실제 소비 시 TTL·최신 여정·열린 흐름을 재검증하고 기존 확인·이어가기 경로를 지킨다. | ✅ | [#25](https://github.com/rnqhstmd/focus-mate/pull/25) (코드·Simulator, PR 리뷰 중) |
 
 ## 근거와 개발 연결
 
-- FR-14: W17 대기. W15 구현을 유지하며 승인된 눈금 타임라인을 적용할 계획이다. 실제 GPS/버스 ETA가 아니고 매초 ActivityKit 갱신을 추가하지 않는다.
-- FR-15, NFR-3: W18 대기. 집중 유도·분석 위젯과 공유 기반을 한 작업으로 구현한다. [승인 계획](../../.dev/system-surfaces-plan/plan.md)의 측정 가능한 작업별 AC를 사용하며 원장의 AC는 착수 PRD에서 연결한다. 아직 구현·실기기 검증하지 않았다.
+- FR-14: W17 [#25](https://github.com/rnqhstmd/focus-mate/pull/25) 구현·인수 ACCEPT. 승인된 native M:SS·선형 진행·고정 버스 심볼·눈금 표시를 적용했다. 실제 GPS/버스 ETA가 아니고 매초 ActivityKit 갱신을 추가하지 않는다.
+- FR-15, NFR-3: W18 [#25](https://github.com/rnqhstmd/focus-mate/pull/25) 구현·인수 ACCEPT. 집중 유도 small·medium과 안전한 링크 진입을 구현했다. 실제 갤러리/탭·계정 서명·기기·VoiceOver 청취는 미확보다.
 
 - FR-1 / AC-1: selectTime / currentTimeJourney.
 - FR-2 / AC-2: syncPreparation / completePreparation.
@@ -60,3 +60,7 @@ git-head: -
 svn-revision: -
 pr-merged-at: -
 -->
+
+## W17·W09b·W18 통합 검증 (2026-10-16)
+
+최초 전체에서 iOS 단위1,426건/0실패·UI270통과/47실패, Node/Python 테스트·전체 빌드가 통과했다. 확인창 테스트 도우미 한 파일만 수정한 뒤 전체 호출부7클래스83건/0실패로 재검증해 미해결0건을 확인했다. 단일 전체UI317/0 재실행 결과는 아니다. [최종 검증](../../.dev/codex-system-surfaces-w18/reports/verify-final.md)·[19개 기준 인수](../../.dev/codex-system-surfaces-w18/reports/acceptance-final.md). 실제 OS 배치·서명·실기기·VoiceOver는 별도 미확보 게이트로 남긴다.

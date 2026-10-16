@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import FocusMate
 
-/// 저장 형식 v4: 검증 강화(분·카탈로그·paused), 왕복, v3 읽기. 모킹 없이 실제 LocalSnapshotStore를 쓴다.
+/// 저장 형식 v5 진행 여정: 검증(분·경과·paused), 왕복. (v3·v4 읽기와 카탈로그 대조 테스트는 W16b에서 삭제됨) 모킹 없이 실제 LocalSnapshotStore를 쓴다.
 final class JourneySnapshotV4StorageTests: XCTestCase {
     private typealias F = BoardingFixtures
 
@@ -11,7 +11,7 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
         originStopID: String = "seoulForest", busID: String = "2014", destinationStopID: String = "seongdongSportsCenter"
     ) -> JourneySnapshot {
         F.journey(
-            originStopID: originStopID, minutes: minutes, busID: busID, destinationStopID: destinationStopID,
+            originStopID: originStopID, originName: "서울숲", minutes: minutes, busID: busID, destinationStopID: destinationStopID,
             phase: .departed, elapsedSeconds: elapsed, paused: paused
         )
     }
@@ -74,21 +74,6 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
         }
     }
 
-    // 깨짐: 출발 정류장 카탈로그 대조가 없으면 저장되어 실패. (AC-22)
-    func testAC22_카탈로그_밖_출발_정류장은_쓰기가_거부된다() throws {
-        try assertWriteRejected(departed(originStopID: "gone-stop"), .unknownStop("gone-stop"))
-    }
-
-    // 깨짐: 도착 정류장 카탈로그 대조가 없으면 저장되어 실패. (AC-22)
-    func testAC22_카탈로그_밖_도착_정류장은_쓰기가_거부된다() throws {
-        try assertWriteRejected(departed(destinationStopID: "gone-dest"), .unknownStop("gone-dest"))
-    }
-
-    // 깨짐: 버스 카탈로그 대조가 없으면 저장되어 실패. (AC-22)
-    func testAC22_카탈로그_밖_버스는_쓰기가_거부된다() throws {
-        try assertWriteRejected(departed(busID: "gone-bus"), .unknownBus("gone-bus"))
-    }
-
     // 깨짐: 출발 대기인데 paused=true를 통과시키면 실패. (BR-5 계열 검증, invalidPausedState)
     func testPaused_출발대기_여정에_paused_true는_쓰기가_거부된다() throws {
         try assertWriteRejected(
@@ -121,41 +106,26 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
         try assertReadDropsJourneyOnly(patch: { $0["progress"] = ["elapsedSeconds": -1] }, departedPaused: true)
     }
 
-    // 깨짐: 출발 정류장 카탈로그 대조가 읽기에 없으면 실패. (AC-22)
-    func testAC22_카탈로그_밖_출발_정류장_파일은_여정만_버린다() throws {
-        try assertReadDropsJourneyOnly(patch: { $0["originStopID"] = "gone-stop" })
-    }
-
-    // 깨짐: 도착 정류장 카탈로그 대조가 읽기에 없으면 실패. (AC-22)
-    func testAC22_카탈로그_밖_도착_정류장_파일은_여정만_버린다() throws {
-        try assertReadDropsJourneyOnly(patch: { $0["destinationStopID"] = "gone-dest" })
-    }
-
-    // 깨짐: 버스 카탈로그 대조가 읽기에 없으면 실패. (AC-22)
-    func testAC22_카탈로그_밖_버스_파일은_여정만_버린다() throws {
-        try assertReadDropsJourneyOnly(patch: { $0["busID"] = "gone-bus" })
-    }
-
     // 깨짐: 출발 대기 + paused=true 파일을 읽어 살리면 실패. (invalidPausedState)
     func testPaused_출발대기_paused_true_파일은_여정만_버린다() throws {
         try assertReadDropsJourneyOnly(patch: { $0["paused"] = true })
     }
 
-    // 깨짐: v4에서 paused 키 누락을 기본값으로 채워 살리거나 파일 전체를 corrupt로 던지면 실패. (BR-9)
-    func testBR9_v4에서_paused_키가_없으면_여정만_버리고_카드는_유지된다() throws {
+    // 깨짐: v5에서 paused 키 누락을 기본값으로 채워 살리거나 파일 전체를 corrupt로 던지면 실패. (BR-9)
+    func testBR9_v5에서_paused_키가_없으면_여정만_버리고_카드는_유지된다() throws {
         try assertReadDropsJourneyOnly(patch: { $0.removeValue(forKey: "paused") })
     }
 
-    // MARK: - v4 왕복 (AC-23)
+    // MARK: - v5 왕복 (AC-23)
 
     // 깨짐: paused 또는 경과를 인코드/디코드에서 빠뜨리면 실패. (AC-23)
-    func testAC23_paused_true_경과300은_버전4로_저장되고_같은_값으로_읽힌다() throws {
+    func testAC23_paused_true_경과300은_버전5로_저장되고_같은_값으로_읽힌다() throws {
         try withTemporaryFile { fileURL in
             let journey = departed(elapsed: 300, paused: true)
             try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: journey))
 
             let root = try rootObject(fileURL)
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
             XCTAssertEqual(try activeObject(fileURL)["paused"] as? Bool, true)
             let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
             XCTAssertEqual(loaded.journey.active, journey)
@@ -164,7 +134,7 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
         }
     }
 
-    // 깨짐: paused=false를 true로 바꿔 읽으면(v4에서 phase로 추정) 실패. (AC-23)
+    // 깨짐: paused=false를 true로 바꿔 읽으면(phase로 추정) 실패. (AC-23)
     func testAC23_paused_false_경과300은_그대로_읽힌다() throws {
         try withTemporaryFile { fileURL in
             let journey = departed(elapsed: 300, paused: false)
@@ -172,96 +142,6 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
 
             let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
             XCTAssertEqual(loaded.journey.active?.paused, false)
-        }
-    }
-
-    // MARK: - v3 읽기 (AC-24 ~ AC-26)
-
-    // 깨짐: v3 departed를 paused=false로 읽으면(키 없음을 false로 채우면) 실패. (AC-24)
-    func testAC24_v3_출발완료_여정은_paused_true_경과0으로_읽힌다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false))
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            let active = try XCTUnwrap(loaded.journey.active)
-            XCTAssertEqual(active.phase, .departed)
-            XCTAssertEqual(active.paused, true)
-            XCTAssertEqual(active.progress.elapsedSeconds, 0)
-        }
-    }
-
-    // 깨짐: v3 진도를 버리거나 0으로 초기화하면 실패. (AC-24)
-    func testAC24_v3_출발완료_여정의_경과는_보존된다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: departed(elapsed: 300, paused: false))
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertEqual(loaded.journey.active?.progress.elapsedSeconds, 300)
-        }
-    }
-
-    // 깨짐: v3를 읽은 뒤 재저장이 버전 3 그대로거나 paused 키가 없으면 실패. (AC-24)
-    func testAC24_v3를_읽고_다시_저장하면_버전4이고_paused_키가_있다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false))
-            let store = LocalSnapshotStore(fileURL: fileURL)
-            let loaded = try XCTUnwrap(try store.load())
-
-            try store.save(loaded)
-
-            XCTAssertEqual(try rootObject(fileURL)["version"] as? Int, 4)
-            XCTAssertEqual(try activeObject(fileURL)["paused"] as? Bool, true)
-        }
-    }
-
-    // 깨짐: v3 awaiting을 paused=true로 읽거나 버리면 실패. (AC-25 저장 측면)
-    func testAC25_v3_출발대기_여정은_awaiting_paused_false로_유지된다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: F.awaiting())
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            let active = try XCTUnwrap(loaded.journey.active)
-            XCTAssertEqual(active.phase, .awaitingDeparture)
-            XCTAssertEqual(active.paused, false)
-            XCTAssertEqual(active, F.awaiting())
-        }
-    }
-
-    // 깨짐: v3에 새 분 검증(361)을 적용하지 않으면 실패. (AC-26)
-    func testAC26_v3_분_361_파일은_여정만_버리고_카드는_유지된다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false), patch: { $0["minutes"] = 361 })
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertNil(loaded.journey.active)
-            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
-        }
-    }
-
-    // 깨짐: v3에 카탈로그 검증을 적용하지 않으면 실패. (AC-26)
-    func testAC26_v3_카탈로그_밖_정류장_파일은_여정만_버리고_카드는_유지된다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false), patch: { $0["originStopID"] = "gone-stop" })
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertNil(loaded.journey.active)
-            XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID])
-        }
-    }
-
-    // 깨짐: v3 버스 id 카탈로그 검증을 적용하지 않으면 실패. (AC-26)
-    func testAC26_v3_카탈로그_밖_버스_파일은_여정만_버린다() throws {
-        try withTemporaryFile { fileURL in
-            try seedV3(fileURL, journey: departed(elapsed: 0, paused: false), patch: { $0["busID"] = "gone-bus" })
-
-            let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
-
-            XCTAssertNil(loaded.journey.active)
         }
     }
 
@@ -283,7 +163,7 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
         }
     }
 
-    /// 유효한 v4 파일을 저장한 뒤 active를 patch로 손상시키고, 읽으면 여정만 버려지는지 확인한다.
+    /// 유효한 v5 파일을 저장한 뒤 active를 patch로 손상시키고, 읽으면 여정만 버려지는지 확인한다.
     private func assertReadDropsJourneyOnly(
         patch: (inout [String: Any]) -> Void, departedPaused: Bool = false,
         file: StaticString = #filePath, line: UInt = #line
@@ -297,18 +177,7 @@ final class JourneySnapshotV4StorageTests: XCTestCase {
 
             XCTAssertNil(loaded.journey.active, file: file, line: line)
             XCTAssertEqual(loaded.cards.items.map(\.id), [F.cardID], file: file, line: line)
-            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수", direction: 1), file: file, line: line)
-        }
-    }
-
-    /// v4로 저장한 뒤 version을 3으로, active.paused를 지워 v3 파일을 만든다.
-    private func seedV3(
-        _ fileURL: URL, journey: JourneySnapshot, patch: ((inout [String: Any]) -> Void)? = nil
-    ) throws {
-        try LocalSnapshotStore(fileURL: fileURL).save(F.snapshot(active: journey))
-        try rewriteActive(fileURL, version: 3) { active in
-            active.removeValue(forKey: "paused")
-            patch?(&active)
+            XCTAssertEqual(loaded.currentStation, StationSnapshot(id: "seongsu", name: "성수"), file: file, line: line)
         }
     }
 

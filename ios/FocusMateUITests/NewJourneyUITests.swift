@@ -120,8 +120,8 @@ final class NewJourneyUITests: XCTestCase {
         XCTAssertFalse(h.element("main.activeJourney").exists)
     }
 
-    // 깨짐: 도달 정류장(600초=2칸=뚝섬역)이 아닌 곳이 저장되거나 방향이 바뀐다.
-    func testAC8_확정하면_저장된_현재_정류장은_뚝섬역_정방향이다() throws {
+    // 깨짐: 도달 정류장(600초=2칸=뚝섬역)이 아닌 곳이 저장된다.
+    func testAC8_확정하면_저장된_현재_정류장은_뚝섬역이다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "lifePaused600")
         openAlert(h)
 
@@ -130,7 +130,7 @@ final class NewJourneyUITests: XCTestCase {
 
         let station = try h.persistedCurrentStation()
         XCTAssertEqual(station.id, "ttukseom")
-        XCTAssertEqual(station.direction, 1)
+        XCTAssertEqual(station.name, "뚝섬역")
     }
 
     // 깨짐: 여정이 삭제되지 않거나 완료 기록이 만들어지거나 지워진다.
@@ -186,7 +186,7 @@ final class NewJourneyUITests: XCTestCase {
         let start = h.app.buttons["open.preparation"]
         XCTAssertTrue(start.waitForExistence(timeout: timeout))
         XCTAssertNotEqual(start.label, "새 여정 시작")
-        XCTAssertEqual(try h.persistedCurrentStation().direction, 1)
+        XCTAssertEqual(try h.persistedCurrentStation().id, "ttukseom")
     }
 
     // MARK: AC-10
@@ -281,7 +281,7 @@ final class NewJourneyUITests: XCTestCase {
     // 깨짐: 진행 여정이 없는데 대화상자가 뜨거나 시간 선택으로 가지 않는다.
     func testAC12_여정이_없으면_대화상자_없이_시간_선택으로_간다() throws {
         let h = FocusMateUIHarness.launch(
-            seed: "v3InvalidMinutes", extraArguments: FocusMateUIHarness.manualClockArguments
+            seed: "invalidMinutesJourney", extraArguments: FocusMateUIHarness.manualClockArguments
         )
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         XCTAssertFalse(h.element("main.activeJourney").exists)
@@ -295,7 +295,7 @@ final class NewJourneyUITests: XCTestCase {
     // 깨짐: 여정이 없는 시작이 저장을 일으킨다.
     func testAC12_여정이_없으면_시작해도_저장_쓰기_0회다() throws {
         let h = FocusMateUIHarness.launch(
-            seed: "v3InvalidMinutes", extraArguments: FocusMateUIHarness.manualClockArguments
+            seed: "invalidMinutesJourney", extraArguments: FocusMateUIHarness.manualClockArguments
         )
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         let before = try h.writeAttempts()

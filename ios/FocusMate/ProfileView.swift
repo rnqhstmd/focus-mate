@@ -73,6 +73,8 @@ struct ProfileView: View {
                 Divider().padding(.top, 32)
                 ProfileMenuRow(systemImage: "slider.horizontal.3", title: Destination.settings.title,
                                identifier: "profile.settings") { model.openFromProfile(.settings) }
+                ProfileMenuRow(systemImage: "info.circle", title: Destination.dataSource.title,
+                               identifier: "profile.dataSource") { model.openFromProfile(.dataSource) }
             }
             .padding(.horizontal, ProfileLayout.horizontal)
             .padding(.vertical, 32)

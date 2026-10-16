@@ -11,6 +11,8 @@ struct BoardingPassContent: Equatable {
     let dateText: String
     let tagName: String
     let task: String
+    /// 낭독 라벨에 들어가는 버스 문구("유형 번호번 버스").
+    let busText: String
     /// 두 정류장 이름 중 긴 쪽 글자 수로 정하는 같은 크기(프로토타입 규칙: 4자 이하 28, 6자 이하 24, 9자 이하 20, 그 외 17).
     let stationFontSize: CGFloat
     let routeAccessibilityLabel: String
@@ -29,8 +31,7 @@ struct BoardingPassContent: Equatable {
         tagName = details.tag.name
         task = details.task
         stationFontSize = Self.fontSize(longest: max(originName.count, destinationName.count))
-        let bus = BusLine.all.first { $0.id == journey.busID }
-        let busText = bus.map { "\($0.kind) \($0.number)번 버스" } ?? "\(journey.busNumber)번 버스"
+        busText = "\(journey.busKind) \(journey.busNumber)번 버스"
         routeAccessibilityLabel = "\(originName)에서 \(destinationName)까지, \(busText), \(journey.minutes)분 여행"
     }
 

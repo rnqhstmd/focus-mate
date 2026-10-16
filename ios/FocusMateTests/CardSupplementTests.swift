@@ -5,12 +5,11 @@ import XCTest
 @MainActor
 final class CardSupplementTests: XCTestCase {
     private static let v1Issued = Data(
-        #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seongsu","name":"성수","direction":1}}}"#.utf8
+        #"{"version":1,"state":{"cardIssued":true,"initialStation":null,"currentStation":null}}"#.utf8
     )
     private static let v1NotIssued = Data(
         #"{"version":1,"state":{"cardIssued":false,"initialStation":null,"currentStation":null}}"#.utf8
     )
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
 
     private func decode(_ bytes: Data?) throws -> AppSnapshot {
         try SnapshotCodec.decode(try XCTUnwrap(bytes))
@@ -30,14 +29,14 @@ final class CardSupplementTests: XCTestCase {
 
         let saved = try decode(fake.bytes())
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(fake.bytes())) as? [String: Any])
-        XCTAssertEqual(root["version"] as? Int, 4)
+        XCTAssertEqual(root["version"] as? Int, 5)
         XCTAssertEqual(saved.cards.items.count, 1)
         assertCardID(saved.currentCard?.id)
-        XCTAssertEqual(saved.initialStation, Self.seongsu)
-        XCTAssertEqual(saved.currentStation, Self.seongsu)
+        XCTAssertNil(saved.initialStation)
+        XCTAssertNil(saved.currentStation)
         XCTAssertNil(saved.journey.active)
         XCTAssertEqual(saved.records.items.count, 0)
-        XCTAssertEqual(model.presentedRoute, .main)
+        XCTAssertEqual(model.presentedRoute, .initialStationEntry)
         XCTAssertEqual(model.snapshot, saved)
     }
 
@@ -55,7 +54,7 @@ final class CardSupplementTests: XCTestCase {
         XCTAssertEqual(try decode(fake.bytes()).currentCard?.id, firstID)
         XCTAssertEqual(fake.bytes(), firstBytes)
         XCTAssertEqual(fake.writeCount(), writesAfterFirst)
-        XCTAssertEqual(second.presentedRoute, .main)
+        XCTAssertEqual(second.presentedRoute, .initialStationEntry)
     }
 
     // 깨짐 명명: 보충 실패를 saveFailure로 노출하거나 화면을 막거나 supplementFailure를 기록하지 않으면 실패.
@@ -65,7 +64,7 @@ final class CardSupplementTests: XCTestCase {
 
         model.start()
 
-        XCTAssertEqual(model.presentedRoute, .main)
+        XCTAssertEqual(model.presentedRoute, .initialStationEntry)
         XCTAssertEqual(model.supplementFailure, .writeFailed)
         XCTAssertNil(model.saveFailure)
         XCTAssertEqual(fake.bytes(), Self.v1Issued)

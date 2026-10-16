@@ -85,14 +85,17 @@ final class LocalSnapshotStore {
         return backupURL
     }
 
-    func load() throws -> AppSnapshot? {
+    func load() throws -> AppSnapshot? { try loadReport()?.snapshot }
+
+    /// 읽기 결과와 옛 형식 이전 여부. 파일이 없으면 nil이다.
+    func loadReport() throws -> (snapshot: AppSnapshot, migration: SnapshotMigration?)? {
         let data: Data
         do { data = try readData(fileURL) }
         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
         catch { throw StorageIssue.unreadable }
-        let snapshot = try SnapshotCodec.decode(data)
-        try validatePhotos(in: snapshot)
-        return snapshot
+        let report = try SnapshotCodec.decodeReport(data)
+        try validatePhotos(in: report.snapshot)
+        return report
     }
 
     private func validatePhotos(in snapshot: AppSnapshot) throws {

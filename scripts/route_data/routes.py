@@ -12,6 +12,7 @@ REASON_COORDINATE = "좌표 이상"
 REASON_TOO_FEW = "정류장 부족"
 REASON_ID = "ID 오류"
 VIRTUAL_SUFFIX = "(가상)"
+MAX_INTEGER_DIGITS = 15
 LATITUDE_RANGE = (Decimal(33), Decimal(39))
 LONGITUDE_RANGE = (Decimal(124), Decimal(130))
 
@@ -58,7 +59,7 @@ def normalize_integer(text):
         number = Decimal(text.strip())
     except (InvalidOperation, AttributeError):
         raise ValueError(f"정수가 아닙니다: {text!r}") from None
-    if not number.is_finite() or number != number.to_integral_value():
+    if not number.is_finite() or number.adjusted() >= MAX_INTEGER_DIGITS or number != number.to_integral_value():
         raise ValueError(f"정수가 아닙니다: {text!r}")
     return format(int(number), "d")
 

@@ -44,29 +44,58 @@ struct LegacySnapshotV2: Decodable {
     let records: RecordSection
 }
 
+/// v3·v4 진행 여정은 예시 노선 기준이라 내용을 해석하지 않는다. 있었는지만 본다.
+struct LegacyJourneyPresence: Decodable {
+    let isPresent: Bool
+    private enum CodingKeys: String, CodingKey { case active }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        guard c.contains(.active) else {
+            throw DecodingError.keyNotFound(CodingKeys.active, .init(codingPath: c.codingPath, debugDescription: "journey.active is required"))
+        }
+        isPresent = try !c.decodeNil(forKey: .active)
+    }
+}
+
+/// v3·v4 저장 계약. 카드·기록 형식은 v5와 같다.
+struct LegacySnapshotV3V4: Decodable {
+    let cardIssued: Bool
+    let initialStation: StationSnapshot?
+    let currentStation: StationSnapshot?
+    let cards: CardSection
+    let journey: LegacyJourneyPresence
+    let records: RecordSection
+}
+
+/// 옛 형식(v1~v4)을 읽으며 예시 데이터 정류장·여정을 비웠다는 보고.
+enum SnapshotMigration: Equatable { case routeDataReset }
+
 /// 저장 파일 바이트와 `AppSnapshot` 사이의 변환. 판정 순서는 헤더 → 버전 → 구조 → 내용이다.
 enum SnapshotCodec {
-    static let currentVersion = 4
+    static let currentVersion = 5
 
     private struct VersionHeader: Decodable { let version: Int }
+    private struct EnvelopeV3V4: Decodable { let state: LegacySnapshotV3V4 }
     private struct EnvelopeV2: Decodable { let state: LegacySnapshotV2 }
     private struct EnvelopeV1: Decodable { let state: LegacySnapshotV1 }
     private struct Envelope: Codable { let version: Int; let state: AppSnapshot }
 
-    static func decode(_ data: Data) throws -> AppSnapshot {
+    static func decode(_ data: Data) throws -> AppSnapshot { try decodeReport(data).snapshot }
+
+    static func decodeReport(_ data: Data) throws -> (snapshot: AppSnapshot, migration: SnapshotMigration?) {
         let header: VersionHeader
         do { header = try JSONDecoder().decode(VersionHeader.self, from: data) }
         catch { throw StorageIssue.corrupt }
         let state: AppSnapshot
+        var legacyJourney = false
         do {
             switch header.version {
             case 1: state = migrateV1(try JSONDecoder().decode(EnvelopeV1.self, from: data).state)
             case 2: state = migrateV2(try JSONDecoder().decode(EnvelopeV2.self, from: data).state)
-            case 3:
-                // v3는 진행 여정의 paused 키만 다르다. 같은 Envelope를 v3 해석으로 읽는다.
-                let decoder = JSONDecoder()
-                decoder.userInfo[.journeyFormat] = JourneySnapshot.Format.v3
-                state = try decoder.decode(Envelope.self, from: data).state
+            case 3, 4:
+                let legacy = try JSONDecoder().decode(EnvelopeV3V4.self, from: data).state
+                legacyJourney = legacy.journey.isPresent
+                state = migrateV3V4(legacy)
             case currentVersion: state = try JSONDecoder().decode(Envelope.self, from: data).state
             default: throw StorageIssue.unsupportedVersion(header.version)
             }
@@ -75,7 +104,11 @@ enum SnapshotCodec {
         let readable = dropInvalidActiveJourney(state)
         do { try readable.validate() }
         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
-        return readable.updating(records: readable.records.sortedNewestFirst())
+        let sorted = readable.updating(records: readable.records.sortedNewestFirst())
+        guard header.version < currentVersion else { return (sorted, nil) }
+        // 손상 판정을 지킨 뒤(validate 먼저) 예시 데이터 정류장·여정을 비운다. 카드·기록은 그대로다.
+        let hadRouteData = sorted.initialStation != nil || sorted.currentStation != nil || legacyJourney
+        return (sorted.clearingStationsAndJourney(), hadRouteData ? .routeDataReset : nil)
     }
 
     /// 읽기 전용 완화: 검증을 통과하지 못하는 진행 여정만 버린다. 쓰기(`LocalSnapshotStore.save`)는 그대로 엄격하다.
@@ -89,6 +122,14 @@ enum SnapshotCodec {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(Envelope(version: currentVersion, state: snapshot))
+    }
+
+    static func migrateV3V4(_ legacy: LegacySnapshotV3V4) -> AppSnapshot {
+        AppSnapshot.empty.updatingStage(cardIssued: legacy.cardIssued,
+                                        initialStation: legacy.initialStation,
+                                        currentStation: legacy.currentStation)
+            .updating(cards: legacy.cards)
+            .updating(records: legacy.records)
     }
 
     static func migrateV2(_ legacy: LegacySnapshotV2) -> AppSnapshot {

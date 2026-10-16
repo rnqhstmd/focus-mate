@@ -136,7 +136,7 @@ final class JourneyMapUITests: XCTestCase {
         XCTAssertFalse(h.element("journey.map.theme.satellite").isSelected)
     }
 
-    // 깨짐: 정류장 토글이 마커만 지우지 않고 경로·버스·목적지까지 지우거나, 다시 켜도 9개로 복구되지 않는다.
+    // 깨짐: 정류장 토글이 마커만 지우지 않고 경로·버스·목적지까지 지우거나, 다시 켜도 코스 정류장 6개로 복구되지 않는다.
     func testAC21_정류장_표시를_끄면_마커만_사라지고_켜면_돌아온다() throws {
         let h = running()
         openSheet(h)
@@ -144,14 +144,14 @@ final class JourneyMapUITests: XCTestCase {
         XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))
         var render = try XCTUnwrap(try h.mapDiagnostic()["render"] as? [String: Any])
         XCTAssertEqual(render["stopMarkers"] as? Int, 0)
-        XCTAssertEqual(render["route"] as? Int, 10)
+        XCTAssertEqual(render["route"] as? Int, 6)  // 닫는 선 없음: 코스 정류장 수와 같다
         XCTAssertEqual(render["bus"] as? Bool, true)
         XCTAssertEqual(render["destination"] as? Bool, true)
 
         h.tap("journey.map.stops")
         XCTAssertTrue(h.waitForValue("journey.map.stops", "켜짐"))
         render = try XCTUnwrap(try h.mapDiagnostic()["render"] as? [String: Any])
-        XCTAssertEqual(render["stopMarkers"] as? Int, 9)
+        XCTAssertEqual(render["stopMarkers"] as? Int, 6)  // 시드 여정 코스 정류장: 2014-r 5구간 + 출발 = 6
     }
 
     // MARK: AC-22, 24, 25
@@ -203,12 +203,12 @@ final class JourneyMapUITests: XCTestCase {
         XCTAssertTrue(h.waitForValue("journey.map.follow", "자유 탐색 중"))
     }
 
-    // 깨짐: 지도 상태가 저장 파일에 들어가거나 저장 버전이 4가 아니다.
-    func testAC26_지도_조작_후에도_저장_파일에_지도_키가_없고_버전은_4다() throws {
+    // 깨짐: 지도 상태가 저장 파일에 들어가거나 저장 버전이 5가 아니다.
+    func testAC26_지도_조작_후에도_저장_파일에_지도_키가_없고_버전은_5다() throws {
         let h = running()
         changeMapState(h)
         let persisted = try h.persistedJourney()
-        XCTAssertEqual(persisted.version, 4)
+        XCTAssertEqual(persisted.version, 5)
         let text = try h.persistedText()
         for key in ["theme", "mapMode", "camera", "pitch", "showsStops"] {
             XCTAssertFalse(text.contains("\"\(key)\""), key)

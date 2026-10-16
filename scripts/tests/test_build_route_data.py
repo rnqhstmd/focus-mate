@@ -275,6 +275,64 @@ class BuildRouteDataTest(Base):
         self.assertEqual(stops["1001"][2], "01234")
 
 
+class InputGuardCliTest(Base):
+    def assert_clean_exit2(self, r, out):
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+        self.assertTrue(r.stderr.strip())
+        self.assertEqual(out.read_bytes(), b"OLD")
+
+    def test_성공_산출의_source에_출처_URL_두_개가_있다(self):
+        sp, ip = self.make()
+        out = self.dir / "o.json"
+        self.assertEqual(self.cli(sp, ip, out).returncode, 0)
+        src = self.load(out)["source"]
+        self.assertEqual(src["sourceURL"], "https://data.seoul.go.kr/dataList/OA-1095/F/1/datasetView.do")
+        self.assertEqual(src["routeInfoSourceURL"], "https://data.seoul.go.kr/dataList/OA-15066/F/1/datasetView.do")
+
+    def test_zip이_아닌_입력은_종료2이고_traceback_없이_기존_산출을_보존한다(self):
+        sp, ip = self.make()
+        sp.write_bytes(b"not a zip")
+        out = self.dir / "o.json"
+        out.write_bytes(b"OLD")
+        self.assert_clean_exit2(self.cli(sp, ip, out), out)
+
+    def test_존재하지_않는_입력_경로는_종료2이고_기존_산출을_보존한다(self):
+        _, ip = self.make()
+        out = self.dir / "o.json"
+        out.write_bytes(b"OLD")
+        r = self.cli(self.dir / "없음.xlsx", ip, out)
+        self.assert_clean_exit2(r, out)
+
+    def test_시트에_DOCTYPE이_든_입력은_종료2이고_기존_산출을_보존한다(self):
+        from tests.xlsx_fixture import write_xlsx_with_doctype
+        sp, ip = self.make()
+        write_xlsx_with_doctype(sp, [STOP_HEADER] + STOP_ROWS)
+        out = self.dir / "o.json"
+        out.write_bytes(b"OLD")
+        self.assert_clean_exit2(self.cli(sp, ip, out), out)
+
+    def test_압축_데이터가_손상된_입력은_종료2이고_traceback_없이_기존_산출을_보존한다(self):
+        from tests.xlsx_fixture import write_xlsx_corrupt_deflate
+        sp, ip = self.make()
+        write_xlsx_corrupt_deflate(sp, [STOP_HEADER] + STOP_ROWS)
+        out = self.dir / "o.json"
+        out.write_bytes(b"OLD")
+        self.assert_clean_exit2(self.cli(sp, ip, out), out)
+
+    def test_크기_초과_종료4_뒤_out_폴더에_임시_파일이_남지_않는다(self):
+        sp, ip = self.make()
+        outdir = self.dir / "outdir"
+        outdir.mkdir()
+        out = outdir / "o.json"
+        out.write_bytes(b"OLD")
+        before = sorted(os.listdir(outdir))
+        r = self.cli(sp, ip, out, "--max-bytes", "100")
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(sorted(os.listdir(outdir)), before)
+        self.assertEqual(out.read_bytes(), b"OLD")
+
+
 class LargeXlsxGuardTest(unittest.TestCase):
     def test_저장소에_1MB_이상_xlsx가_추적되거나_남아있지_않다(self):
         r = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=REPO,

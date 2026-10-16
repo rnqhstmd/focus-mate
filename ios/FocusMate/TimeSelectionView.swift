@@ -42,8 +42,8 @@ struct TimeSelectionView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(station.name).font(isLarge ? .headline : .title2.bold())
                     .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
-                if let position = model.journeyOrigin {
-                    Text(RouteStops.boundLabel(from: position)).foregroundStyle(.secondary)
+                if let bound = model.currentStationBound {
+                    Text(bound).foregroundStyle(.secondary).accessibilityIdentifier("time.bound")
                 }
             }
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -56,18 +56,18 @@ struct TimeSelectionView: View {
         Binding(get: { model.journeyPlan.minutes }, set: { model.journeyPlan.setMinutes($0) })
     }
 
-    private func candidateButton(_ candidate: JourneyCandidate) -> some View {
-        let isSelected = model.journeyPlan.selectedBusID == candidate.bus.id
+    private func candidateButton(_ candidate: RouteCandidate) -> some View {
+        let isSelected = model.journeyPlan.selectedRouteID == candidate.routeID
         return Button {
-            if let origin = model.journeyOrigin { _ = model.journeyPlan.choose(busID: candidate.bus.id, from: origin) }
+            model.chooseJourneyRoute(candidate.routeID)
         } label: {
             // 접근성 글자 크기에서는 버튼이 길어져 아래가 고정 영역에 가려지므로 같은 정보를 두 줄로 압축한다.
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     if isLarge {
-                        Text("\(candidate.bus.kind) \(candidate.bus.number) · \(candidate.destination)").font(.headline)
+                        Text("\(candidate.busKind) \(candidate.busNumber) · \(candidate.destination)").font(.headline)
                     } else {
-                        Text("\(candidate.bus.kind) \(candidate.bus.number)").font(.headline)
+                        Text("\(candidate.busKind) \(candidate.busNumber)").font(.headline)
                         Text(candidate.destination)
                     }
                     Text("\(candidate.minutes)분 · \(candidate.stops)정류장 · \(candidate.distanceText)")
@@ -83,6 +83,6 @@ struct TimeSelectionView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(candidate.accessibilityLabel)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityIdentifier("time.candidate.\(candidate.bus.id)")
+        .accessibilityIdentifier("time.candidate.\(candidate.routeID)")
     }
 }

@@ -10,31 +10,36 @@ final class FirstStationSearchUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testInitialSearchScreenShowsAllThreeResultsAndDisabledConfirm() throws {
+    // 깨짐(AC-6): 검색어가 비어 있는데 결과를 나열하거나 안내 문구가 사라진다.
+    func testInitialSearchScreenShowsPromptWithoutResultsAndDisabledConfirm() throws {
         let app = launch()
 
         XCTAssertTrue(element("screen.initialStationEntry", in: app).waitForExistence(timeout: timeout))
         XCTAssertTrue(element("search.query", in: app).waitForExistence(timeout: timeout))
-        XCTAssertTrue(element("search.result.seongsu:1", in: app).waitForExistence(timeout: timeout))
-        XCTAssertEqual(resultButtons(in: app).count, 3)
+        let prompt = element("search.prompt", in: app)
+        XCTAssertTrue(prompt.waitForExistence(timeout: timeout))
+        XCTAssertEqual(prompt.label, "정류장 이름이나 번호를 입력하세요")
+        XCTAssertEqual(resultButtons(in: app).count, 0)
+        XCTAssertFalse(element("search.resetNotice", in: app).exists)
         let confirm = element("search.confirm", in: app)
         XCTAssertTrue(confirm.exists)
         XCTAssertFalse(confirm.isEnabled)
     }
 
-    func testQueryNarrowsResultsByStationNameAndByDirectionName() throws {
+    // 깨짐: 이름 부분 일치 검색이 좁혀지지 않거나 같은 이름의 양방향 승강장이 하나로 합쳐진다.
+    // 픽스처: "성수"가 들어간 정류장 4곳 x 양방향 = 8건, "성수역"은 2건(seongsu, seongsu-r).
+    func testQueryNarrowsResultsFromPartialNameToFullName() throws {
         let app = launch()
         let query = try searchField(in: app)
 
         query.tap()
         query.typeText("성수")
-        XCTAssertTrue(element("search.result.seongsu:1", in: app).waitForExistence(timeout: timeout))
-        XCTAssertEqual(resultButtons(in: app).count, 3)
+        XCTAssertTrue(element("search.result.seongsu", in: app).waitForExistence(timeout: timeout))
+        XCTAssertEqual(resultButtons(in: app).count, 8)
 
-        query.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
-        query.typeText("건대")
-        XCTAssertTrue(element("search.result.seongsu:-1", in: app).waitForExistence(timeout: timeout))
-        XCTAssertEqual(resultButtons(in: app).count, 1)
+        query.typeText("역")
+        XCTAssertTrue(element("search.result.seongsu-r", in: app).waitForExistence(timeout: timeout))
+        XCTAssertEqual(resultButtons(in: app).count, 2)
     }
 
     func testQueryWithSurroundingWhitespaceStillMatchesTrimmedText() throws {
@@ -44,8 +49,8 @@ final class FirstStationSearchUITests: XCTestCase {
         query.tap()
         query.typeText("  성수사거리  ")
 
-        XCTAssertTrue(element("search.result.seongsu:-1", in: app).waitForExistence(timeout: timeout))
-        XCTAssertEqual(resultButtons(in: app).count, 1)
+        XCTAssertTrue(element("search.result.seongsuIntersection-r", in: app).waitForExistence(timeout: timeout))
+        XCTAssertEqual(resultButtons(in: app).count, 2)
     }
 
     func testNoMatchShowsEmptyMessageAndConfirmCannotSaveAnything() throws {
@@ -71,8 +76,12 @@ final class FirstStationSearchUITests: XCTestCase {
 
     func testSelectingResultShowsConfirmationMarksSelectedAndEnablesConfirm() throws {
         let app = launch()
-        let result = element("search.result.seongsu:-1", in: app)
+        let query = try searchField(in: app)
+        query.tap()
+        query.typeText("성수역")
+        let result = element("search.result.seongsu-r", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
+        XCTAssertEqual(result.label, "성수역, 성수사거리 방면")
         XCTAssertFalse(element("search.confirmation", in: app).exists)
 
         result.tap()
@@ -89,8 +98,8 @@ final class FirstStationSearchUITests: XCTestCase {
         let query = try searchField(in: app)
 
         query.tap()
-        query.typeText("건대")
-        let result = element("search.result.seongsu:-1", in: app)
+        query.typeText("성수역")
+        let result = element("search.result.seongsu-r", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
         result.tap()
         let confirm = element("search.confirm", in: app)
@@ -101,13 +110,16 @@ final class FirstStationSearchUITests: XCTestCase {
         XCTAssertEqual(try value("time.origin", in: app), "성수역")
         XCTAssertFalse(element("screen.initialStationEntry", in: app).exists)
         let snapshot = try snapshot(in: app)
-        try assertStation(snapshot["initialStation"], id: "seongsu", name: "성수역", direction: -1)
-        try assertStation(snapshot["currentStation"], id: "seongsu", name: "성수역", direction: -1)
+        try assertStation(snapshot["initialStation"], id: "seongsu-r", name: "성수역")
+        try assertStation(snapshot["currentStation"], id: "seongsu-r", name: "성수역")
     }
 
     func testBackFromTimeScreenReturnsToMain() throws {
         let app = launch()
-        let result = element("search.result.seongsu:-1", in: app)
+        let query = try searchField(in: app)
+        query.tap()
+        query.typeText("성수역")
+        let result = element("search.result.seongsu-r", in: app)
         XCTAssertTrue(result.waitForExistence(timeout: timeout))
         result.tap()
         element("search.confirm", in: app).tap()
@@ -118,6 +130,20 @@ final class FirstStationSearchUITests: XCTestCase {
         backButton.tap()
 
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
+    }
+
+    // 깨짐(AC-12): 번호가 없는 정류장 행에 빈 번호가 붙거나 낭독 문구가 "이름, 방면"이 아니게 된다.
+    func testStopWithoutNumberReadsOnlyNameAndBound() throws {
+        let app = launch()
+        let query = try searchField(in: app)
+
+        query.tap()
+        query.typeText("무번호")
+
+        let result = element("search.result.S11", in: app)
+        XCTAssertTrue(result.waitForExistence(timeout: timeout))
+        XCTAssertEqual(resultButtons(in: app).count, 1)
+        XCTAssertEqual(result.label, "무번호정류장, 델타 방면")
     }
 
     private func launch() -> XCUIApplication {
@@ -163,13 +189,12 @@ final class FirstStationSearchUITests: XCTestCase {
         _ rawStation: Any?,
         id: String,
         name: String,
-        direction: Int,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
         let station = try XCTUnwrap(rawStation as? [String: Any], file: file, line: line)
         XCTAssertEqual(station["id"] as? String, id, file: file, line: line)
         XCTAssertEqual(station["name"] as? String, name, file: file, line: line)
-        XCTAssertEqual(station["direction"] as? Int, direction, file: file, line: line)
+        XCTAssertNil(station["direction"], file: file, line: line)
     }
 }

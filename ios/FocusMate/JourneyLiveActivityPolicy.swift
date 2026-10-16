@@ -25,11 +25,10 @@ struct JourneyLaunchPlan: Equatable {
 
 /// 앱 밖 표시 규칙. 진도는 계산하지 않고 타이머가 준 남은 초만 쓴다(앱 시작 정리만 저장값에서 남은 초를 구한다).
 enum JourneyLiveActivityPolicy {
-    /// 도착지는 저장된 이름을 그대로 쓴다(지도 일관성 규칙과 무관, AC-31). 버스·도착지를 모르면 표시하지 않는다.
-    static func attributes(for journey: JourneySnapshot) -> JourneyActivityAttributes? {
-        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
-        return JourneyActivityAttributes(journeyID: journey.id, busNumber: bus.number, busKind: bus.kind,
-                                         destinationName: destination)
+    /// 버스·도착지는 저장된 이름을 그대로 쓴다(지도 일관성 규칙과 무관, AC-31).
+    static func attributes(for journey: JourneySnapshot) -> JourneyActivityAttributes {
+        JourneyActivityAttributes(journeyID: journey.id, busNumber: journey.busNumber, busKind: journey.busKind,
+                                  destinationName: journey.destinationName)
     }
 
     /// 운행 중은 종료 시각에 만료되고, 일시정지는 만료가 없다(BR-5). 도착은 종료 대상이라 요청이 없다.

@@ -27,7 +27,7 @@ final class BoardingModelTests: XCTestCase {
             }
         )
         let factory = ActiveJourneyFactory(makeID: { newID }, now: { Self.fixedBoardedAt })
-        let model = AppModel(store: store, journeyFactory: factory)
+        let model = AppModel(store: store, journeyFactory: factory, routeData: BoardingFixtures.readyRouteData())
         model.loadIfNeeded()
         XCTAssertEqual(model.launchState, .ready(.main))
         return model
@@ -38,7 +38,7 @@ final class BoardingModelTests: XCTestCase {
     private func fillPreparation(_ model: AppModel) {
         model.open(.time)
         model.journeyPlan.setMinutes(60)
-        _ = model.journeyPlan.choose(busID: "2014", from: StopPosition(index: 0, direction: 1))
+        BoardingFixtures.chooseRoute("2014", in: model)
         XCTAssertTrue(model.proceedToPreparation())
         XCTAssertTrue(model.preparation.chooseTag(id: "reading"))
         model.preparation.setTask("책 읽기")
@@ -96,7 +96,7 @@ final class BoardingModelTests: XCTestCase {
         let model = try makeModel(active: nil, probe: probe)
         model.open(.time)
         model.journeyPlan.setMinutes(60)
-        _ = model.journeyPlan.choose(busID: "2014", from: StopPosition(index: 0, direction: 1))
+        BoardingFixtures.chooseRoute("2014", in: model)
         XCTAssertTrue(model.proceedToPreparation())
         let before = model.path
 

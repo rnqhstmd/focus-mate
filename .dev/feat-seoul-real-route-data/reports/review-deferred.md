@@ -33,3 +33,11 @@
 - [Minor] 요약에 ARS "숫자 셀 건수" 줄 없음(design J절)
 - [Minor] test_build_route_data·test_routes 빈 줄·헬퍼 위치 정리
 - [Minor] (정리됨) ars_zero_filled 기본값
+
+## W16b phase-review 유예 (2026-10-16)
+- [security MEDIUM] 스크립트·로더의 이름/id 공백·500자 검증(현재는 실데이터 회귀 테스트로 감시) — 월별 갱신 전 처리 권고
+- [security MEDIUM] xlsx 합계 압축 해제 상한, sharedStrings iterparse, MemoryError → XlsxError
+- [security MEDIUM] OA-15066 라이선스 확인 근거 기록(decisions.md)
+- [security LOW] 공유 문자열 음수 인덱스, 입력 해시 TOCTOU, --base-date/--min-join-rate 검증, 같은 NODE_ID 이름·좌표 불일치 보고, StationSnapshot 이름 상한, v5 손상 여정 무알림 폐기(의도)
+- [reviewer Minor] retryLoad 복구 후 BR-16 재확인 없음, RouteCatalogStore 로드 오류 진단 로그, 오프라인 테스트 URLProtocol 한계, nameTooLong 중복 단언, AC-53 visits 중복 계수
+- [reviewer Minor] main.bound 빈 Text 낭독: AC-42 UI 테스트가 요소 존재를 보므로 유지

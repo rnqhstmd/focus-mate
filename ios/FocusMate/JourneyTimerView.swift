@@ -273,7 +273,7 @@ struct JourneyTimerView: View {
             "bus": ["lat": bus.point.latitude, "lon": bus.point.longitude, "from": bus.segmentFrom, "to": bus.segmentTo,
                     "fraction": bus.fraction, "arrived": bus.isArrived],
             "destination": ["index": destination.index, "lat": destination.point.latitude, "lon": destination.point.longitude],
-            "course": JourneyCourse.stops.map { [$0.point.latitude, $0.point.longitude] },
+            "course": map.journey.stops.map { [$0.point.latitude, $0.point.longitude] },
             "render": ["route": map.routePoints.count, "stopMarkers": map.visibleStops.count, "bus": true, "destination": true],
             "camera": ["lat": target.center.latitude, "lon": target.center.longitude, "heading": target.headingDegrees,
                        "pitch": target.pitchDegrees, "animated": target.animated, "revision": target.revision],

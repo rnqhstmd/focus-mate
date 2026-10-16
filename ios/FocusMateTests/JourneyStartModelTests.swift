@@ -11,7 +11,7 @@ final class JourneyStartModelTests: XCTestCase {
         var shouldFail = false
     }
 
-    private static let seongsuForward = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
+    private static let seongsuForward = StationSnapshot(id: "seongsu", name: "성수역")
 
     @MainActor
     private func makeModel(_ snapshot: AppSnapshot, probe: Probe) throws -> AppModel {
@@ -25,7 +25,7 @@ final class JourneyStartModelTests: XCTestCase {
                 probe.writes.append(data)
             }
         )
-        let model = AppModel(store: store)
+        let model = AppModel(store: store, routeData: BoardingFixtures.readyRouteData())
         model.loadIfNeeded()
         return model
     }
@@ -42,14 +42,18 @@ final class JourneyStartModelTests: XCTestCase {
     }
 
     @MainActor
-    private func reverseOption() throws -> StationOption {
-        try XCTUnwrap(StationCatalog.all.first { $0.snapshot.id == "seongsu" && $0.snapshot.direction == -1 })
+    private func reverseOption() throws -> StopSearchOption {
+        guard case let .results(options, _) = StationSearch.search("성수역", in: BoardingFixtures.uiCatalog()) else {
+            XCTFail("성수역 검색 결과가 없다")
+            throw ProbeError.expected
+        }
+        return try XCTUnwrap(options.first { $0.id == "seongsu-r" })
     }
 
     // MARK: confirmInitialStation
 
     @MainActor
-    func test카드만_발급된_상태에서_역방향_성수역을_확정하면_true와_함께_한번_저장한다() throws {
+    func test카드만_발급된_상태에서_성수역_역방향_정류장을_확정하면_true와_함께_한번_저장한다() throws {
         let probe = Probe()
         let model = try cardOnlyModel(probe)
 
@@ -57,7 +61,7 @@ final class JourneyStartModelTests: XCTestCase {
 
         XCTAssertEqual(probe.writes.count, 1)
         let saved = try SnapshotCodec.decode(try XCTUnwrap(probe.writes.first))
-        let expected = StationSnapshot(id: "seongsu", name: "성수역", direction: -1)
+        let expected = StationSnapshot(id: "seongsu-r", name: "성수역")
         XCTAssertEqual(saved.initialStation, expected)
         XCTAssertEqual(saved.currentStation, expected)
         XCTAssertTrue(saved.cardIssued)
@@ -125,7 +129,7 @@ final class JourneyStartModelTests: XCTestCase {
         let model = try readyModel(probe)
         model.open(.time)
         model.journeyPlan.setMinutes(60)
-        model.journeyPlan.choose(busID: "2014", from: StopPosition(index: 0, direction: 1))
+        BoardingFixtures.chooseRoute("2014", in: model)
         return model
     }
 
@@ -137,17 +141,17 @@ final class JourneyStartModelTests: XCTestCase {
         XCTAssertTrue(model.proceedToPreparation())
 
         XCTAssertEqual(model.path, [.time, .preparation])
-        XCTAssertEqual(
-            model.preparedJourney,
-            JourneySelection(
-                origin: StopPosition(index: 0, direction: 1),
-                minutes: 60,
-                busID: "2014",
-                busNumber: "2014",
-                destination: "성동구민체육센터",
-                stops: 12
-            )
-        )
+        let prepared = try XCTUnwrap(model.preparedJourney)
+        XCTAssertEqual(prepared.originStopID, "seongsu")
+        XCTAssertEqual(prepared.originName, "성수역")
+        XCTAssertEqual(prepared.boundLabel, "성수동 방면")
+        XCTAssertEqual(prepared.minutes, 60)
+        XCTAssertEqual(prepared.busID, "2014")
+        XCTAssertEqual(prepared.busNumber, "2014")
+        XCTAssertEqual(prepared.busKind, "지선")
+        XCTAssertEqual(prepared.destinationStopID, "seongdongSportsCenter")
+        XCTAssertEqual(prepared.destination, "성동구민체육센터")
+        XCTAssertEqual(prepared.stops, 12)
         XCTAssertEqual(probe.writes.count, 0)
     }
 
@@ -184,7 +188,7 @@ final class JourneyStartModelTests: XCTestCase {
 
         XCTAssertEqual(model.path, [.time])
         XCTAssertEqual(model.journeyPlan.minutes, 60)
-        XCTAssertEqual(model.journeyPlan.selectedBusID, "2014")
+        XCTAssertEqual(model.journeyPlan.selectedRouteID, "2014")
     }
 
     @MainActor
@@ -197,7 +201,7 @@ final class JourneyStartModelTests: XCTestCase {
         model.open(.time)
 
         XCTAssertEqual(model.journeyPlan.minutes, 60)
-        XCTAssertEqual(model.journeyPlan.selectedBusID, "2014")
+        XCTAssertEqual(model.journeyPlan.selectedRouteID, "2014")
     }
 
     @MainActor
@@ -205,23 +209,25 @@ final class JourneyStartModelTests: XCTestCase {
         let model = try readyModel(Probe())
 
         XCTAssertEqual(model.journeyPlan.minutes, 25)
-        XCTAssertNil(model.journeyPlan.selectedBusID)
+        XCTAssertNil(model.journeyPlan.selectedRouteID)
     }
 
     // MARK: 출발 위치
 
     @MainActor
-    func test현재_역이_성수역_정방향이면_출발_위치와_후보_버스가_정해진다() throws {
+    func test현재_정류장이_성수역_정방향이면_출발_위치와_후보_버스가_정해진다() throws {
         let model = try readyModel(Probe())
 
-        XCTAssertEqual(model.journeyOrigin, StopPosition(index: 0, direction: 1))
-        XCTAssertEqual(model.journeyCandidates.map { $0.bus.id }, ["2014"])
+        XCTAssertEqual(model.journeyOrigin?.stopID, "seongsu")
+        XCTAssertEqual(model.journeyOrigin?.name, "성수역")
+        XCTAssertEqual(model.journeyOrigin?.boundLabel, "성수동 방면")
+        XCTAssertEqual(model.journeyCandidates.map(\.routeID), ["2014"])
     }
 
     @MainActor
     func test현재_역을_카탈로그에서_못_찾으면_출발_위치가_없고_진행할_수_없다() throws {
         let probe = Probe()
-        let model = try readyModel(probe, station: StationSnapshot(id: "unknown", name: "어딘가", direction: 1))
+        let model = try readyModel(probe, station: StationSnapshot(id: "unknown", name: "어딘가"))
         model.open(.time)
 
         XCTAssertNil(model.journeyOrigin)

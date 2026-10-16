@@ -5,11 +5,14 @@ import XCTest
 final class StorageV2Tests: XCTestCase {
     private enum ProbeError: Error { case expected }
 
-    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
-    private static let seoulForest = StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1)
+    private static let seongsu = StationSnapshot(id: "seongsu", name: "성수")
+    private static let seoulForest = StationSnapshot(id: "seoulForest", name: "서울숲")
 
     private static let v1Seongsu = Data(
         #"{"version":1,"state":{"cardIssued":true,"initialStation":{"id":"seongsu","name":"성수","direction":1},"currentStation":{"id":"seongsu","name":"성수","direction":1}}}"#.utf8
+    )
+    private static let v5Seongsu = Data(
+        #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"id":"seongsu","name":"성수"},"initialStation":{"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":5}"#.utf8
     )
     private static let g2Seongsu = Data(
         #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":2}"#.utf8
@@ -21,18 +24,17 @@ final class StorageV2Tests: XCTestCase {
         #"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null}},"version":2}"#.utf8
     )
 
-    // 깨짐 명명: load가 v1을 v2 상태로 변환하지 않고 .corrupt/.unsupportedVersion(1)을 던지면 실패.
-    func testAC1_v1파일은_손실없이_v2상태로_읽히고_파일은_변하지_않는다() throws {
+    // 깨짐 명명: load가 v1을 읽지 못하고 .corrupt/.unsupportedVersion(1)을 던지거나 읽기 중 파일을 바꾸면 실패.
+    // (W16b: v1의 정류장은 비워지므로 정류장 값은 여기서 보지 않는다. 비움 동작은 별도 파일이 다룬다.)
+    func testAC1_v1파일은_카드_기록_여정_없이_읽히고_파일은_변하지_않는다() throws {
         try withTemporaryFile { fileURL in
             try seed(fileURL, Self.v1Seongsu)
 
             let loaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
 
-            XCTAssertEqual(loaded, Self.stage(true, Self.seongsu, Self.seongsu))
             XCTAssertEqual(loaded.cards.items.count, 0)
             XCTAssertNil(loaded.journey.active)
             XCTAssertEqual(loaded.records.items.count, 0)
-            XCTAssertEqual(try loaded.launchRoute(), .main)
             XCTAssertEqual(try Data(contentsOf: fileURL), Self.v1Seongsu)
         }
     }
@@ -56,14 +58,14 @@ final class StorageV2Tests: XCTestCase {
     }
 
     // 깨짐 명명: save가 version 1로 쓰거나 새 영역 키를 빠뜨리면 실패.
-    func testAC2a_파일없음에서_저장하면_v3형식이고_재로드와_재저장이_동일하다() throws {
+    func testAC2a_파일없음에서_저장하면_v5형식이고_재로드와_재저장이_동일하다() throws {
         try withTemporaryFile { fileURL in
             let snapshot = Self.stage(true, Self.seongsu, Self.seoulForest)
             try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
             let firstBytes = try Data(contentsOf: fileURL)
 
             let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: firstBytes) as? [String: Any])
-            XCTAssertEqual(root["version"] as? Int, 4)
+            XCTAssertEqual(root["version"] as? Int, 5)
             let state = try XCTUnwrap(root["state"] as? [String: Any])
             XCTAssertEqual(
                 Set(state.keys),
@@ -77,16 +79,16 @@ final class StorageV2Tests: XCTestCase {
         }
     }
 
-    // 깨짐 명명: v1 로드 실패 또는 저장 바이트가 v3 기대값과 다르면(키 누락·version 1/2·정류장 값 손실) 실패.
-    func testAC2b_v1에서_읽은_상태를_저장하면_정확한_v4바이트가_기록된다() throws {
+    // 깨짐 명명: v5 로드 실패 또는 저장 바이트가 v5 기대값과 다르면(키 누락·version 4/6·정류장 값 손실·direction 키 잔존) 실패.
+    func testAC2b_v5에서_읽은_상태를_저장하면_정확한_v5바이트가_기록된다() throws {
         try withTemporaryFile { fileURL in
-            try seed(fileURL, Self.v1Seongsu)
+            try seed(fileURL, Self.v5Seongsu)
             let store = LocalSnapshotStore(fileURL: fileURL)
             let loaded = try XCTUnwrap(try store.load())
 
             try store.save(loaded)
 
-            XCTAssertEqual(try Data(contentsOf: fileURL), Data(#"{"state":{"cardIssued":true,"cards":{"items":[]},"currentStation":{"direction":1,"id":"seongsu","name":"성수"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"},"journey":{"active":null},"records":{"items":[]}},"version":4}"#.utf8))
+            XCTAssertEqual(try Data(contentsOf: fileURL), Self.v5Seongsu)
             let reloaded = try XCTUnwrap(try LocalSnapshotStore(fileURL: fileURL).load())
             XCTAssertEqual(reloaded, Self.stage(true, Self.seongsu, Self.seongsu))
         }
@@ -164,7 +166,7 @@ final class StorageV2Tests: XCTestCase {
     }
 
     private static let protectedCases: [(name: String, bytes: Data, issue: StorageIssue)] = [
-        ("버전 5", Data(#"{"version":5,"state":null}"#.utf8), .unsupportedVersion(5)),
+        ("버전 6", Data(#"{"version":6,"state":null}"#.utf8), .unsupportedVersion(6)),
         ("버전 999", Data(#"{"version":999,"state":null}"#.utf8), .unsupportedVersion(999)),
         ("버전 0", Data(#"{"version":0,"state":null}"#.utf8), .unsupportedVersion(0)),
         ("빈 파일", Data(), .corrupt),

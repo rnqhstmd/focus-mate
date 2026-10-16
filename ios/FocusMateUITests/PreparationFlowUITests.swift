@@ -81,7 +81,7 @@ final class PreparationFlowUITests: XCTestCase {
         app.buttons["open.preparation"].tap()
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.origin", in: app), "서울숲")
-        try selectSixtyMinutesBus2014(in: app)
+        try selectSixtyMinutesBus2014(in: app, routeID: "2014-r")
         element("time.proceed", in: app).tap()
         XCTAssertTrue(element("screen.preparation", in: app).waitForExistence(timeout: timeout))
 
@@ -89,7 +89,7 @@ final class PreparationFlowUITests: XCTestCase {
 
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
-        XCTAssertTrue(element("time.candidate.2014", in: app).isSelected)
+        XCTAssertTrue(element("time.candidate.2014-r", in: app).isSelected)
 
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
@@ -97,8 +97,8 @@ final class PreparationFlowUITests: XCTestCase {
 
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
-        XCTAssertTrue(element("time.candidate.2014", in: app).waitForExistence(timeout: timeout))
-        XCTAssertTrue(element("time.candidate.2014", in: app).isSelected)
+        XCTAssertTrue(element("time.candidate.2014-r", in: app).waitForExistence(timeout: timeout))
+        XCTAssertTrue(element("time.candidate.2014-r", in: app).isSelected)
     }
 
     func testRelaunchAfterSavingStationOpensMainAndNeverShowsSearchAgain() throws {
@@ -180,19 +180,21 @@ final class PreparationFlowUITests: XCTestCase {
     }
 
     private func openTimeScreenFromSearch(in app: XCUIApplication) throws {
-        let origin = element("search.result.seongsu:1", in: app)
+        app.typeStationQuery("성수역")
+        let origin = element("search.result.seongsu", in: app)
         XCTAssertTrue(origin.waitForExistence(timeout: timeout))
         origin.tap()
         element("search.confirm", in: app).tap()
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
     }
 
-    private func selectSixtyMinutesBus2014(in app: XCUIApplication) throws {
+    /// 후보 식별자는 노선 id다. 서울숲역 역방향 승강장(ready 시드)에서는 2014-r이다.
+    private func selectSixtyMinutesBus2014(in app: XCUIApplication, routeID: String = "2014") throws {
         let wheel = app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: timeout), "분 휠이 없음")
         wheel.adjust(toPickerWheelValue: "60분")
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
-        let candidate = element("time.candidate.2014", in: app)
+        let candidate = element("time.candidate.\(routeID)", in: app)
         XCTAssertTrue(candidate.waitForExistence(timeout: timeout))
         candidate.tap()
         XCTAssertTrue(candidate.isSelected)

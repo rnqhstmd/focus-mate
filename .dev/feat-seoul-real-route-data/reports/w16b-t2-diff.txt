@@ -1,0 +1,616 @@
+diff --git a/ios/FocusMate/RouteCatalog+Fixture.swift b/ios/FocusMate/RouteCatalog+Fixture.swift
+new file mode 100644
+index 0000000..73c6e30
+--- /dev/null
++++ b/ios/FocusMate/RouteCatalog+Fixture.swift
+@@ -0,0 +1,88 @@
++#if DEBUG
++import Foundation
++
++/// 단위·UI 테스트 공용 카탈로그(PRD 수용 기준 표와 예시 데이터 재현). 앱 출시 빌드에는 들어가지 않는다.
++extension RouteCatalog {
++    static let fixtureMetadata = RouteDataMetadata(
++        baseDate: "2026-09-02", dataset: "서울시버스노선별정류소정보", datasetID: "OA-1095",
++        provider: "서울 열린데이터광장", copyright: "서울특별시", license: "공공누리 제1유형",
++        routeInfoDataset: "서울시버스노선기본정보", routeInfoDatasetID: "OA-15066",
++        stopsFile: "fixture-stops.xlsx", routeInfoFile: "fixture-routes.xlsx",
++        sourceURL: "https://data.seoul.go.kr/dataList/OA-1095/F/1/datasetView.do",
++        routeInfoSourceURL: "https://data.seoul.go.kr/dataList/OA-15066/F/1/datasetView.do")
++
++    /// PRD 수용 기준 픽스처(S1~S11, X·Y·Z=S6~S8, P1~P3 / 노선 1111·2222·3333·5555·7777·8888).
++    static func acceptanceFixture() throws -> RouteCatalog {
++        let stops = acceptanceStops
++        return try RouteCatalog(stops: stops, routes: acceptanceRoutes(in: stops), metadata: fixtureMetadata)
++    }
++
++    /// acceptance + 예시 데이터 9개 순환 정류장(정방향 id 그대로, 역방향은 "-r")과 노선 2014·2014-r·302·421.
++    static func uiTestFixture() throws -> RouteCatalog {
++        let forward = legacyStops.map { Stop(id: $0.id, name: $0.name, ars: nil, point: $0.point) }
++        let reverse = legacyStops.map { Stop(id: $0.id + "-r", name: $0.name, ars: nil, point: $0.point) }
++        let stops = acceptanceStops + forward + reverse
++        let forwardIDs = legacyStops.map(\.id)
++        let reverseIDs = ([forwardIDs[0]] + forwardIDs.dropFirst().reversed()).map { $0 + "-r" }
++        let routes = acceptanceRoutes(in: stops) + [
++            route("2014", number: "2014", kind: "지선", forwardIDs, seconds: 300, in: stops),
++            route("2014-r", number: "2014", kind: "지선", reverseIDs, seconds: 300, in: stops),
++            route("302", number: "강남02", kind: "마을", forwardIDs, seconds: 450, in: stops),
++            route("421", number: "343", kind: "간선", forwardIDs, seconds: 424, in: stops),
++        ]
++        return try RouteCatalog(stops: stops, routes: routes, metadata: fixtureMetadata)
++    }
++
++    private static var acceptanceStops: [Stop] {
++        let rows: [(String, String, String?)] = [
++            ("S1", "알파", "10001"), ("S1b", "알파", "10002"), ("S2", "베타", "10003"), ("S3", "감마", "10004"),
++            ("S4", "델타", "10005"), ("S5", "엡실론", "10006"), ("S9", "알파센터", "10007"),
++            ("S10", "Alpha Dong", "40001"), ("S11", "무번호정류장", nil),
++            ("S6", "X", "30001"), ("S7", "Y", "30002"), ("S8", "Z", "30003"),
++            ("P1", "파이1", "20001"), ("P2", "파이2", "20002"), ("P3", "파이3", "20003"),
++        ]
++        return rows.enumerated().map { order, row in
++            Stop(id: row.0, name: row.1, ars: row.2,
++                 point: CoursePoint(latitude: 37.5 + Double(order + 1) / 1_000, longitude: 127.0 + Double(order + 1) / 500))
++        }
++    }
++
++    private static func acceptanceRoutes(in stops: [Stop]) -> [Route] {
++        [
++            route("1111", kind: "지선", ["S1", "S2", "S3", "S4", "S5"], seconds: [300, 240, 420, 360, 120],
++                  meters: [800, 600, 1100, 900, 700], in: stops),
++            route("2222", kind: "간선", ["S1", "S3", "S5"], seconds: [660, 600, 60], in: stops),
++            route("3333", kind: "순환", ["S6", "S7", "S8"], seconds: [300, 300, 300], in: stops),
++            route("5555", kind: "지선", ["S1b", "S4"], seconds: [600, 60], in: stops),
++            route("7777", kind: "지선", ["P1", "P2", "P3"], seconds: [300, 120, 60], in: stops),
++            route("8888", kind: "지선", ["S11", "S4"], seconds: [600, 60], in: stops),
++        ]
++    }
++
++    /// 예시 데이터(W02)의 9개 순환 정류장과 W06 근사 좌표.
++    private static let legacyStops: [(id: String, name: String, point: CoursePoint)] = [
++        ("seongsu", "성수역", CoursePoint(latitude: 37.5446, longitude: 127.0559)),
++        ("seongsuDong", "성수동", CoursePoint(latitude: 37.5445, longitude: 127.0507)),
++        ("ttukseom", "뚝섬역", CoursePoint(latitude: 37.5474, longitude: 127.0474)),
++        ("seongdongSportsCenter", "성동구민체육센터", CoursePoint(latitude: 37.5466, longitude: 127.0429)),
++        ("seoulForest", "서울숲역", CoursePoint(latitude: 37.5437, longitude: 127.0447)),
++        ("seoulForestGate", "서울숲 입구", CoursePoint(latitude: 37.5432, longitude: 127.0396)),
++        ("seongsuBridgeNorth", "성수대교 북단", CoursePoint(latitude: 37.5403, longitude: 127.0355)),
++        ("ttukseomHangangPark", "뚝섬한강공원", CoursePoint(latitude: 37.5296, longitude: 127.0670)),
++        ("seongsuIntersection", "성수사거리", CoursePoint(latitude: 37.5410, longitude: 127.0573)),
++    ]
++
++    private static func route(_ id: String, number: String? = nil, kind: String, _ stopIDs: [String],
++                              seconds: Int, in stops: [Stop]) -> Route {
++        route(id, number: number, kind: kind, stopIDs, seconds: Array(repeating: seconds, count: stopIDs.count),
++              meters: Array(repeating: 550, count: stopIDs.count), in: stops)
++    }
++
++    private static func route(_ id: String, number: String? = nil, kind: String, _ stopIDs: [String], seconds: [Int],
++                              meters: [Int]? = nil, in stops: [Stop]) -> Route {
++        Route(id: id, number: number ?? id, kind: kind,
++              stops: stopIDs.map { stopID in stops.firstIndex { $0.id == stopID }! },
++              seconds: seconds, meters: meters ?? Array(repeating: 500, count: stopIDs.count))
++    }
++}
++#endif
+diff --git a/ios/FocusMate/RouteCatalog.swift b/ios/FocusMate/RouteCatalog.swift
+index 67049d7..dd78b31 100644
+--- a/ios/FocusMate/RouteCatalog.swift
++++ b/ios/FocusMate/RouteCatalog.swift
+@@ -12,6 +12,8 @@ struct RouteDataMetadata: Equatable, Sendable {
+     let routeInfoDatasetID: String
+     let stopsFile: String
+     let routeInfoFile: String
++    let sourceURL: String
++    let routeInfoSourceURL: String
+ }
+ 
+ /// 한 정류장을 지나는 노선과 그 노선 안의 첫 지점.
+@@ -24,6 +26,8 @@ enum RouteCatalogIssue: Error, Equatable {
+     case invalidRoute(String)
+     case unknownStop(String)
+     case malformed
++    case duplicateID(String)
++    case outOfRange(String)
+ }
+ 
+ /// 노선 번호 자연 정렬. 숫자 덩어리는 크기로, 글자 덩어리는 유니코드 순으로 비교한다(720 → 1111 → 강남02).
+@@ -61,7 +65,11 @@ enum RouteNumberOrder {
+ }
+ 
+ /// 서울 버스 정류장·노선 데이터. 모든 경로 규칙은 이 값을 주입받는다(전역 상수 대신).
+-struct RouteCatalog: Sendable {
++struct RouteCatalog: Equatable, Sendable {
++    static let maximumSegmentSeconds = 21_600
++    static let maximumSegmentMeters = 200_000
++    static let maximumRouteStops = 1_000
++
+     struct Stop: Equatable, Sendable {
+         let id: String
+         let name: String
+@@ -87,11 +95,17 @@ struct RouteCatalog: Sendable {
+     private let visitsByStop: [[RouteVisit]]
+ 
+     init(stops: [Stop], routes: [Route], metadata: RouteDataMetadata) throws {
++        if let duplicate = Self.firstDuplicate(stops.map(\.id)) ?? Self.firstDuplicate(routes.map(\.id)) {
++            throw RouteCatalogIssue.duplicateID(duplicate)
++        }
+         for route in routes {
+             let count = route.stops.count
+             guard count >= 2, route.seconds.count == count, route.meters.count == count,
+                   route.seconds.allSatisfy({ $0 >= 1 }), route.stops.allSatisfy(stops.indices.contains)
+             else { throw RouteCatalogIssue.invalidRoute(route.id) }
++            guard count <= Self.maximumRouteStops, route.seconds.allSatisfy({ $0 <= Self.maximumSegmentSeconds }),
++                  route.meters.allSatisfy({ (0...Self.maximumSegmentMeters).contains($0) })
++            else { throw RouteCatalogIssue.outOfRange(route.id) }
+         }
+         let ordered = routes.sorted {
+             $0.number == $1.number ? $0.id < $1.id : RouteNumberOrder.areInIncreasingOrder($0.number, $1.number)
+@@ -113,6 +127,11 @@ struct RouteCatalog: Sendable {
+ 
+     func stopIndex(id: String) -> Int? { stopIndexByID[id] }
+ 
++    private static func firstDuplicate(_ ids: [String]) -> String? {
++        var seen = Set<String>()
++        return ids.first { !seen.insert($0).inserted }
++    }
++
+     func routeIndex(id: String) -> Int? { routeIndexByID[id] }
+ 
+     func visits(stopIndex: Int) -> [RouteVisit] { visitsByStop[stopIndex] }
+diff --git a/ios/FocusMate/RouteCatalogLoader.swift b/ios/FocusMate/RouteCatalogLoader.swift
+index 9c51433..355c0ea 100644
+--- a/ios/FocusMate/RouteCatalogLoader.swift
++++ b/ios/FocusMate/RouteCatalogLoader.swift
+@@ -2,9 +2,23 @@ import Foundation
+ 
+ /// 변환 스크립트(scripts/build_route_data.py)가 만든 JSON을 카탈로그로 읽는다.
+ enum RouteCatalogLoader {
++    static let resourceName = "seoul-route-data"
++    /// 마이크로도 좌표 허용 범위(스크립트 BR-11과 같다).
++    static let latitudeRange = 33_000_000...39_000_000
++    static let longitudeRange = 124_000_000...130_000_000
++
++    static func bundledURL(_ bundle: Bundle = .main) -> URL? {
++        bundle.url(forResource: resourceName, withExtension: "json")
++    }
++
++    static func bundled(_ bundle: Bundle = .main) throws -> RouteCatalog {
++        guard let url = bundledURL(bundle) else { throw RouteCatalogIssue.malformed }
++        return try load(data: Data(contentsOf: url))
++    }
++
+     static func load(data: Data) throws -> RouteCatalog {
+         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+-              root["format"] as? Int == 1,
++              integer(root["format"]) == 1,
+               let source = root["source"] as? [String: String],
+               let rawStops = root["stops"] as? [[Any]],
+               let rawRoutes = root["routes"] as? [[Any]]
+@@ -16,10 +30,25 @@ enum RouteCatalogLoader {
+         return try RouteCatalog(stops: stops, routes: routes, metadata: metadata(source))
+     }
+ 
++    /// JSONSerialization은 true/false도 NSNumber로 주므로 불리언을 숫자로 받지 않도록 걸러 낸다.
++    private static func integer(_ value: Any?) -> Int? {
++        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
++        return value as? Int
++    }
++
++    private static func integers(_ value: Any) -> [Int]? {
++        guard let array = value as? [Any] else { return nil }
++        let numbers = array.compactMap(integer)
++        return numbers.count == array.count ? numbers : nil
++    }
++
+     private static func stop(_ row: [Any]) throws -> RouteCatalog.Stop {
+         guard row.count == 5, let id = row[0] as? String, let name = row[1] as? String, let ars = row[2] as? String,
+-              let latitude = row[3] as? Int, let longitude = row[4] as? Int
++              let latitude = integer(row[3]), let longitude = integer(row[4])
+         else { throw RouteCatalogIssue.malformed }
++        guard latitudeRange.contains(latitude), longitudeRange.contains(longitude) else {
++            throw RouteCatalogIssue.outOfRange(id)
++        }
+         return RouteCatalog.Stop(id: id, name: name, ars: ars.isEmpty ? nil : ars,
+                                  point: CoursePoint(latitude: Double(latitude) / 1_000_000,
+                                                     longitude: Double(longitude) / 1_000_000))
+@@ -27,7 +56,7 @@ enum RouteCatalogLoader {
+ 
+     private static func route(_ row: [Any], indexByID: [String: Int]) throws -> RouteCatalog.Route {
+         guard row.count == 6, let id = row[0] as? String, let number = row[1] as? String, let kind = row[2] as? String,
+-              let stopIDs = row[3] as? [String], let seconds = row[4] as? [Int], let meters = row[5] as? [Int]
++              let stopIDs = row[3] as? [String], let seconds = integers(row[4]), let meters = integers(row[5])
+         else { throw RouteCatalogIssue.malformed }
+         let stops = try stopIDs.map { stopID in
+             guard let index = indexByID[stopID] else { throw RouteCatalogIssue.unknownStop(stopID) }
+@@ -45,6 +74,7 @@ enum RouteCatalogLoader {
+             baseDate: try value("baseDate"), dataset: try value("dataset"), datasetID: try value("datasetID"),
+             provider: try value("provider"), copyright: try value("copyright"), license: try value("license"),
+             routeInfoDataset: try value("routeInfoDataset"), routeInfoDatasetID: try value("routeInfoDatasetID"),
+-            stopsFile: try value("stopsFile"), routeInfoFile: try value("routeInfoFile"))
++            stopsFile: try value("stopsFile"), routeInfoFile: try value("routeInfoFile"),
++            sourceURL: try value("sourceURL"), routeInfoSourceURL: try value("routeInfoSourceURL"))
+     }
+ }
+diff --git a/ios/FocusMate/RouteCatalogStore.swift b/ios/FocusMate/RouteCatalogStore.swift
+new file mode 100644
+index 0000000..1e75b20
+--- /dev/null
++++ b/ios/FocusMate/RouteCatalogStore.swift
+@@ -0,0 +1,55 @@
++import Foundation
++import Observation
++
++/// 번들 정류장 데이터를 읽는 중인지, 읽었는지, 읽지 못했는지(번들 결함 — 재시도하지 않는다).
++enum RouteDataAvailability: Equatable {
++    case loading
++    case ready(RouteCatalog)
++    case failed
++}
++
++/// 앱 시작 직후 백그라운드에서 카탈로그를 한 번 읽는다. 첫 화면은 이 결과를 기다리지 않는다.
++@MainActor
++@Observable
++final class RouteCatalogStore {
++    private(set) var availability: RouteDataAvailability
++    private let load: @Sendable () throws -> RouteCatalog
++    private var task: Task<Void, Never>?
++
++    init(load: @escaping @Sendable () throws -> RouteCatalog) {
++        self.load = load
++        availability = .loading
++    }
++
++    convenience init(ready catalog: RouteCatalog) {
++        self.init(load: { catalog })
++        availability = .ready(catalog)
++    }
++
++    var catalog: RouteCatalog? {
++        if case let .ready(catalog) = availability { return catalog }
++        return nil
++    }
++
++    @discardableResult
++    func startLoading() -> Task<Void, Never> {
++        if let task { return task }
++        guard availability == .loading else {
++            let done = Task {}
++            task = done
++            return done
++        }
++        let load = load
++        let started = Task { [weak self] in
++            let result = await Task.detached(priority: .userInitiated) { () -> RouteCatalog? in try? load() }.value
++            self?.availability = result.map(RouteDataAvailability.ready) ?? .failed
++        }
++        task = started
++        return started
++    }
++
++    func loaded() async -> RouteDataAvailability {
++        await startLoading().value
++        return availability
++    }
++}
+diff --git a/ios/FocusMate/RouteLeg.swift b/ios/FocusMate/RouteLeg.swift
+index d4a11c4..f45a35e 100644
+--- a/ios/FocusMate/RouteLeg.swift
++++ b/ios/FocusMate/RouteLeg.swift
+@@ -17,7 +17,8 @@ enum RouteLegFinder {
+     static let toleranceSeconds = 60
+ 
+     static func leg(route routeIndex: Int, originStop: Int, minutes: Int, in catalog: RouteCatalog) -> RouteLeg? {
+-        guard let visit = catalog.visits(stopIndex: originStop).first(where: { $0.route == routeIndex }) else { return nil }
++        guard (1...JourneySnapshot.maximumMinutes).contains(minutes),
++              let visit = catalog.visits(stopIndex: originStop).first(where: { $0.route == routeIndex }) else { return nil }
+         let route = catalog.routes[routeIndex]
+         let count = route.stops.count
+         let target = minutes * 60
+diff --git a/ios/FocusMateTests/RouteCatalogStoreTests.swift b/ios/FocusMateTests/RouteCatalogStoreTests.swift
+new file mode 100644
+index 0000000..7407b38
+--- /dev/null
++++ b/ios/FocusMateTests/RouteCatalogStoreTests.swift
+@@ -0,0 +1,75 @@
++import Foundation
++import XCTest
++@testable import FocusMate
++
++private final class CallCounter: @unchecked Sendable {
++    private let lock = NSLock()
++    private var value = 0
++    func increment() { lock.lock(); value += 1; lock.unlock() }
++    var count: Int { lock.lock(); defer { lock.unlock() }; return value }
++}
++
++private struct LoadFailure: Error {}
++
++@MainActor
++final class RouteCatalogStoreTests: XCTestCase {
++    private func catalog() throws -> RouteCatalog { try RouteCatalogFixture.acceptance() }
++
++    // 깨짐: ready init이 .loading으로 시작하면 실패한다.
++    func testReadyInitIsReadyWithCatalog() throws {
++        let c = try catalog()
++        let store = RouteCatalogStore(ready: c)
++        XCTAssertEqual(store.availability, .ready(c))
++        XCTAssertEqual(store.catalog, c)
++    }
++
++    func testAvailabilityIsLoadingBeforeStart() throws {
++        let c = try catalog()
++        let store = RouteCatalogStore(load: { c })
++        XCTAssertEqual(store.availability, .loading)
++        XCTAssertNil(store.catalog)
++    }
++
++    // 깨짐: 성공 결과를 상태에 반영하지 않으면 실패한다.
++    func testSuccessfulLoadBecomesReady() async throws {
++        let c = try catalog()
++        let store = RouteCatalogStore(load: { c })
++        await store.startLoading().value
++        XCTAssertEqual(store.availability, .ready(c))
++        XCTAssertNotNil(store.catalog)
++    }
++
++    // 깨짐: 에러를 삼키고 .loading에 머물면 실패한다.
++    func testThrowingLoadBecomesFailed() async {
++        let store = RouteCatalogStore(load: { throw LoadFailure() })
++        await store.startLoading().value
++        XCTAssertEqual(store.availability, .failed)
++        XCTAssertNil(store.catalog)
++    }
++
++    // 깨짐: 호출마다 새로 로딩하면 카운터가 2가 되어 실패한다.
++    func testStartLoadingTwiceLoadsOnce() async throws {
++        let c = try catalog()
++        let counter = CallCounter()
++        let store = RouteCatalogStore(load: { counter.increment(); return c })
++        let first = store.startLoading()
++        let second = store.startLoading()
++        await first.value
++        await second.value
++        XCTAssertEqual(counter.count, 1)
++    }
++
++    // 깨짐: 시작 전 호출 시 영원히 대기하거나 .loading을 돌려주면 실패한다.
++    func testLoadedStartsAndReturnsResult() async throws {
++        let c = try catalog()
++        let store = RouteCatalogStore(load: { c })
++        let result = await store.loaded()
++        XCTAssertEqual(result, .ready(c))
++    }
++
++    func testLoadedReturnsFailedOnError() async {
++        let store = RouteCatalogStore(load: { throw LoadFailure() })
++        let result = await store.loaded()
++        XCTAssertEqual(result, .failed)
++    }
++}
+diff --git a/ios/FocusMateTests/RouteCatalogTestFixtures.swift b/ios/FocusMateTests/RouteCatalogTestFixtures.swift
+index 5c5250b..ca8dcf9 100644
+--- a/ios/FocusMateTests/RouteCatalogTestFixtures.swift
++++ b/ios/FocusMateTests/RouteCatalogTestFixtures.swift
+@@ -7,7 +7,8 @@ enum RouteCatalogFixture {
+         baseDate: "2026-09-02", dataset: "서울시버스노선별정류소정보", datasetID: "OA-1095",
+         provider: "서울 열린데이터광장", copyright: "서울특별시", license: "공공누리 제1유형",
+         routeInfoDataset: "서울시버스노선기본정보", routeInfoDatasetID: "OA-15066",
+-        stopsFile: "stops.csv", routeInfoFile: "routes.csv"
++        stopsFile: "stops.csv", routeInfoFile: "routes.csv",
++        sourceURL: "https://example.test/stops", routeInfoSourceURL: "https://example.test/routes"
+     )
+ 
+     static func stop(_ id: String, _ name: String, ars: String? = nil, _ order: Int = 0) -> RouteCatalog.Stop {
+@@ -35,24 +36,6 @@ enum RouteCatalogFixture {
+     }
+ 
+     static func acceptance() throws -> RouteCatalog {
+-        let stops = [
+-            stop("S1", "알파", ars: "10001", 1), stop("S1b", "알파", ars: "10002", 2),
+-            stop("S2", "베타", ars: "10003", 3), stop("S3", "감마", ars: "10004", 4),
+-            stop("S4", "델타", ars: "10005", 5), stop("S5", "엡실론", ars: "10006", 6),
+-            stop("S9", "알파센터", ars: "10007", 7), stop("S10", "Alpha Dong", ars: "40001", 8),
+-            stop("S11", "무번호정류장", ars: nil, 9),
+-            stop("S6", "X", ars: "30001", 10), stop("S7", "Y", ars: "30002", 11), stop("S8", "Z", ars: "30003", 12),
+-            stop("P1", "파이1", ars: "20001", 13), stop("P2", "파이2", ars: "20002", 14), stop("P3", "파이3", ars: "20003", 15),
+-        ]
+-        let routes = [
+-            route("1111", kind: "지선", stops: ["S1", "S2", "S3", "S4", "S5"], in: stops,
+-                  seconds: [300, 240, 420, 360, 120], meters: [800, 600, 1100, 900, 700]),
+-            route("2222", kind: "간선", stops: ["S1", "S3", "S5"], in: stops, seconds: [660, 600, 60]),
+-            route("3333", kind: "순환", stops: ["S6", "S7", "S8"], in: stops, seconds: [300, 300, 300]),
+-            route("5555", kind: "지선", stops: ["S1b", "S4"], in: stops, seconds: [600, 60]),
+-            route("7777", kind: "지선", stops: ["P1", "P2", "P3"], in: stops, seconds: [300, 120, 60]),
+-            route("8888", kind: "지선", stops: ["S11", "S4"], in: stops, seconds: [600, 60]),
+-        ]
+-        return try make(stops: stops, routes: routes)
++        try RouteCatalog.acceptanceFixture()
+     }
+ }
+diff --git a/ios/FocusMateTests/RouteCatalogTests.swift b/ios/FocusMateTests/RouteCatalogTests.swift
+index 4b55a33..c86999c 100644
+--- a/ios/FocusMateTests/RouteCatalogTests.swift
++++ b/ios/FocusMateTests/RouteCatalogTests.swift
+@@ -104,7 +104,7 @@ final class RouteCatalogTests: XCTestCase {
+     // MARK: 로더
+ 
+     private static let source = """
+-    "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"서울시버스노선별정류소정보","datasetID":"OA-1095","license":"공공누리 제1유형","provider":"서울 열린데이터광장","routeInfoDataset":"서울시버스노선기본정보","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","stopsFile":"s.csv"}
++    "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"서울시버스노선별정류소정보","datasetID":"OA-1095","license":"공공누리 제1유형","provider":"서울 열린데이터광장","routeInfoDataset":"서울시버스노선기본정보","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","routeInfoSourceURL":"https://example.test/r","sourceURL":"https://example.test/s","stopsFile":"s.csv"}
+     """
+ 
+     private func json(routeNodes: String) -> Data {
+@@ -143,4 +143,157 @@ final class RouteCatalogTests: XCTestCase {
+             XCTAssertEqual($0 as? RouteCatalogIssue, .malformed)
+         }
+     }
++
++    // MARK: 검증 (W16b)
++
++    private func assertIssue(
++        _ expected: RouteCatalogIssue, stops: [RouteCatalog.Stop], routes: [RouteCatalog.Route],
++        file: StaticString = #filePath, line: UInt = #line
++    ) {
++        XCTAssertThrowsError(try F.make(stops: stops, routes: routes), file: file, line: line) {
++            XCTAssertEqual($0 as? RouteCatalogIssue, expected, file: file, line: line)
++        }
++    }
++
++    // 깨짐: 정류장 id 중복 검사를 빼면 throw하지 않아 실패한다.
++    func testDuplicateStopIDIsRejected() {
++        let stops = [F.stop("A", "에이", 1), F.stop("A", "에이2", 2), F.stop("B", "비", 3)]
++        assertIssue(.duplicateID("A"), stops: stops, routes: [F.route("1", stops: ["B", "B"], in: stops)])
++    }
++
++    // 깨짐: 노선 id 중복 검사를 빼면 실패한다.
++    func testDuplicateRouteIDIsRejected() {
++        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
++        let routes = [F.route("1", stops: ["A", "B"], in: stops), F.route("1", number: "2", stops: ["A", "B"], in: stops)]
++        assertIssue(.duplicateID("1"), stops: stops, routes: routes)
++    }
++
++    // 깨짐: 상한 비교를 >= 로 쓰거나 검사를 빼면 실패한다.
++    func testSegmentSeconds21601IsOutOfRange() {
++        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
++        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, seconds: [21_601, 60])])
++    }
++
++    func testSegmentSeconds21600IsAllowed() throws {
++        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
++        XCTAssertNoThrow(try F.make(stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, seconds: [21_600, 60])]))
++    }
++
++    func testNegativeSegmentMetersIsOutOfRange() {
++        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
++        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, meters: [-1, 500])])
++    }
++
++    func testSegmentMeters200001IsOutOfRange() {
++        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
++        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ["A", "B"], in: stops, meters: [200_001, 500])])
++    }
++
++    func testRouteWith1001StopsIsOutOfRange() {
++        let stops = [F.stop("A", "에이", 1), F.stop("B", "비", 2)]
++        let ids = (0..<1_001).map { $0 % 2 == 0 ? "A" : "B" }
++        assertIssue(.outOfRange("1"), stops: stops, routes: [F.route("1", stops: ids, in: stops)])
++    }
++
++    // MARK: 로더 검증 (W16b)
++
++    private func loaderJSON(
++        stop1: String = "[\"N1\",\"시작\",\"\",37500000,127000000]", sourceExtra: String? = nil
++    ) -> Data {
++        var source = Self.source
++        if let sourceExtra { source = sourceExtra }
++        return Data("""
++        {"format":1,\(source),"stops":[\(stop1),["N2","끝","12345",37510000,127010000]],"routes":[["R1","100","지선",["N1","N2"],[60,120],[500,700]]]}
++        """.utf8)
++    }
++
++    private func assertLoadIssue(_ expected: RouteCatalogIssue, _ data: Data, line: UInt = #line) {
++        XCTAssertThrowsError(try RouteCatalogLoader.load(data: data), line: line) {
++            XCTAssertEqual($0 as? RouteCatalogIssue, expected, line: line)
++        }
++    }
++
++    // 깨짐: 위도 범위 검사를 빼면 실패한다.
++    func testLoaderRejectsLatitudeOutOfKoreaRange() {
++        assertLoadIssue(.outOfRange("N1"), loaderJSON(stop1: "[\"N1\",\"시작\",\"\",40000000,127000000]"))
++    }
++
++    func testLoaderRejectsLongitudeOutOfKoreaRange() {
++        assertLoadIssue(.outOfRange("N1"), loaderJSON(stop1: "[\"N1\",\"시작\",\"\",37500000,123999999]"))
++    }
++
++    // 깨짐: JSON true를 숫자 1로 받아들이면 실패한다.
++    func testLoaderRejectsBooleanInNumericSlot() {
++        assertLoadIssue(.malformed, loaderJSON(stop1: "[\"N1\",\"시작\",\"\",true,127000000]"))
++    }
++
++    func testLoaderRejectsMissingSourceURL() {
++        let source = """
++        "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"d","datasetID":"OA-1095","license":"l","provider":"p","routeInfoDataset":"r","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","routeInfoSourceURL":"https://example.test/r","stopsFile":"s.csv"}
++        """
++        assertLoadIssue(.malformed, loaderJSON(sourceExtra: source))
++    }
++
++    func testLoaderRejectsMissingRouteInfoSourceURL() {
++        let source = """
++        "source":{"baseDate":"2026-09-02","copyright":"서울특별시","dataset":"d","datasetID":"OA-1095","license":"l","provider":"p","routeInfoDataset":"r","routeInfoDatasetID":"OA-15066","routeInfoFile":"r.csv","sourceURL":"https://example.test/s","stopsFile":"s.csv"}
++        """
++        assertLoadIssue(.malformed, loaderJSON(sourceExtra: source))
++    }
++
++    // 깨짐: URL 필드를 다른 키에서 읽거나 서로 바꾸면 실패한다.
++    func testLoaderReadsSourceURLs() throws {
++        let catalog = try RouteCatalogLoader.load(data: loaderJSON())
++        XCTAssertEqual(catalog.metadata.sourceURL, "https://example.test/s")
++        XCTAssertEqual(catalog.metadata.routeInfoSourceURL, "https://example.test/r")
++    }
++
++    // 깨짐: 번들 조회가 없거나 다른 파일명을 찾으면 nil이어서 실패한다.
++    func testBundledURLFindsRouteDataInAppBundle() throws {
++        let url = try XCTUnwrap(RouteCatalogLoader.bundledURL())
++        XCTAssertTrue(url.isFileURL)
++        XCTAssertEqual(url.lastPathComponent, "seoul-route-data.json")
++    }
++
++    // MARK: uiTestFixture (W16b)
++
++    private func candidateSummary(minutes: Int) throws -> [RouteCandidate] {
++        let catalog = try RouteCatalog.uiTestFixture()
++        let origin = try XCTUnwrap(catalog.stopIndex(id: "seongsu"))
++        return RouteCandidates.candidates(minutes: minutes, originStop: origin, in: catalog)
++    }
++
++    // 깨짐: 구간 초를 바꾸면 17분에 후보가 생겨 실패한다.
++    func testUITestFixture_17분은_후보가_없다() throws {
++        XCTAssertEqual(try candidateSummary(minutes: 17).map(\.id), [])
++    }
++
++    func testUITestFixture_25분은_2014_서울숲_입구다() throws {
++        let result = try candidateSummary(minutes: 25)
++        XCTAssertEqual(result.map(\.id), ["2014"])
++        XCTAssertEqual(result.first?.destination, "서울숲 입구")
++        XCTAssertEqual(result.first?.stops, 5)
++    }
++
++    func testUITestFixture_60분은_2014와_302다() throws {
++        let result = try candidateSummary(minutes: 60)
++        XCTAssertEqual(result.map(\.id), ["2014", "302"])
++        XCTAssertEqual(result[0].destination, "성동구민체육센터")
++        XCTAssertEqual(result[0].stops, 12)
++        XCTAssertEqual(result[1].stops, 8)
++    }
++
++    func testUITestFixture_120분은_세_노선이며_차이_순이다() throws {
++        let result = try candidateSummary(minutes: 120)
++        XCTAssertEqual(result.map(\.id), ["2014", "302", "421"])
++    }
++
++    // 깨짐: 정/역방향 id 접미나 방면 계산이 달라지면 실패한다.
++    func testUITestFixture_방면_라벨() throws {
++        let catalog = try RouteCatalog.uiTestFixture()
++        let fwd = try XCTUnwrap(catalog.stopIndex(id: "seongsu"))
++        let rev = try XCTUnwrap(catalog.stopIndex(id: "seongsu-r"))
++        XCTAssertEqual(catalog.boundLabel(stopIndex: fwd), "성수동 방면")
++        XCTAssertEqual(catalog.boundLabel(stopIndex: rev), "성수사거리 방면")
++    }
+ }
+diff --git a/ios/FocusMateTests/RouteLegTests.swift b/ios/FocusMateTests/RouteLegTests.swift
+index 8a8d6ec..0b78a28 100644
+--- a/ios/FocusMateTests/RouteLegTests.swift
++++ b/ios/FocusMateTests/RouteLegTests.swift
+@@ -144,4 +144,11 @@ final class RouteLegTests: XCTestCase {
+         )
+         XCTAssertNil(try leg("9", from: "A", minutes: 2, in: catalog))
+     }
++
++    // 깨짐: 분 범위 검사를 빼면 0분·361분에서 값이 나와 실패한다.
++    func testMinutesOutsideOneTo360IsNil() throws {
++        let catalog = try F.acceptance()
++        XCTAssertNil(try leg("1111", from: "S1", minutes: 0, in: catalog))
++        XCTAssertNil(try leg("1111", from: "S1", minutes: 361, in: catalog))
++    }
+ }

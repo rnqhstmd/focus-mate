@@ -3,59 +3,80 @@ import XCTest
 @testable import FocusMate
 
 final class StationSearchStateTests: XCTestCase {
-    private func reverseOptionID(_ state: StationSearchState) throws -> String {
-        try XCTUnwrap(state.results.first { $0.position == StopPosition(index: 0, direction: -1) }).id
-    }
+    private func catalog() throws -> RouteCatalog { try RouteCatalogFixture.acceptance() }
 
-    func test_초기_상태는_3건_결과이고_선택_확정이_없다() {
+    // 깨짐: 빈 입력에서 결과를 내거나 선택·확정이 가능하면 실패한다.
+    func test_초기_상태는_안내_상태이고_선택_확정이_없다() throws {
+        let catalog = try catalog()
         let state = StationSearchState()
-        XCTAssertEqual(state.results.count, 3)
-        XCTAssertNil(state.selectedOption)
-        XCTAssertFalse(state.canConfirm)
-        XCTAssertNil(state.confirmationText)
+
+        XCTAssertEqual(state.result(in: catalog), .prompt)
+        XCTAssertNil(state.selectedOption(in: catalog))
+        XCTAssertFalse(state.canConfirm(in: catalog))
+        XCTAssertNil(state.confirmationText(in: catalog))
     }
 
-    func test_없는역_검색은_결과_0건이다() {
+    // 깨짐: 결과가 없을 때 카탈로그 id 선택을 허용하면 실패한다.
+    func test_없는이름_검색은_빈결과이고_카탈로그_id_선택은_거부된다() throws {
+        let catalog = try catalog()
         var state = StationSearchState()
-        state.query = "없는역"
-        XCTAssertEqual(state.results.count, 0)
-        XCTAssertFalse(state.canConfirm)
-    }
+        state.query = "없는이름"
 
-    func test_결과가_없을_때_카탈로그_id_선택은_거부되고_확정할_수_없다() {
-        var state = StationSearchState()
-        state.query = "없는역"
-        for option in StationCatalog.all {
-            XCTAssertFalse(state.select(option.id))
+        XCTAssertEqual(state.result(in: catalog), .empty)
+        for id in ["S1", "S1b", "S2", "S9"] {
+            XCTAssertFalse(state.select(id, in: catalog))
         }
-        XCTAssertNil(state.selectedOption)
-        XCTAssertFalse(state.canConfirm)
+        XCTAssertNil(state.selectedOption(in: catalog))
+        XCTAssertFalse(state.canConfirm(in: catalog))
     }
 
-    func test_성수역_역방향_선택은_성공하고_확인_문구를_만든다() throws {
+    // 깨짐: 방면을 확인 문구에 넣지 않거나 구분자가 다르면 실패한다.
+    func test_방면이_있는_정류장을_선택하면_확인_문구에_방면이_붙는다() throws {
+        let catalog = try catalog()
         var state = StationSearchState()
-        let id = try reverseOptionID(state)
-        XCTAssertTrue(state.select(id))
-        XCTAssertEqual(state.confirmationText, "성수역 · 성수사거리 방면에서 출발")
-        XCTAssertTrue(state.canConfirm)
-        XCTAssertEqual(state.selectedOption?.position, StopPosition(index: 0, direction: -1))
+        state.query = "알파"
+
+        XCTAssertTrue(state.select("S1", in: catalog))
+
+        XCTAssertEqual(state.confirmationText(in: catalog), "알파 · 베타 방면에서 출발")
+        XCTAssertTrue(state.canConfirm(in: catalog))
+        XCTAssertEqual(state.selectedOption(in: catalog)?.id, "S1")
     }
 
+    // 깨짐: 방면이 없는데 구분자나 빈 방면 문구가 남으면 실패한다.
+    func test_방면이_없는_정류장의_확인_문구는_이름만_쓴다() throws {
+        let catalog = try catalog()
+        var state = StationSearchState()
+        state.query = "알파센터"
+
+        XCTAssertTrue(state.select("S9", in: catalog))
+
+        XCTAssertEqual(state.confirmationText(in: catalog), "알파센터에서 출발")
+    }
+
+    // 깨짐: 검색어가 바뀌어 결과에서 빠진 선택을 유지하면 실패한다.
     func test_선택한_옵션이_검색_결과에서_빠지면_선택이_사라진다() throws {
+        let catalog = try catalog()
         var state = StationSearchState()
-        XCTAssertTrue(state.select(try reverseOptionID(state)))
-        state.query = "서울숲"
-        XCTAssertNil(state.selectedOption)
-        XCTAssertFalse(state.canConfirm)
+        state.query = "알파"
+        XCTAssertTrue(state.select("S1", in: catalog))
+
+        state.query = "베타"
+
+        XCTAssertNil(state.selectedOption(in: catalog))
+        XCTAssertFalse(state.canConfirm(in: catalog))
+        XCTAssertNil(state.confirmationText(in: catalog))
     }
 
+    // 깨짐: 현재 결과 밖 id 선택을 받아들이거나 기존 선택을 지우면 실패한다.
     func test_현재_결과에_없는_옵션_선택은_거부되고_기존_선택을_유지한다() throws {
+        let catalog = try catalog()
         var state = StationSearchState()
-        state.query = "서울숲"
-        let forestID = try XCTUnwrap(state.results.first { $0.position == StopPosition(index: 4, direction: 1) }).id
-        XCTAssertTrue(state.select(forestID))
-        let reverseID = try XCTUnwrap(StationCatalog.all.first { $0.position == StopPosition(index: 0, direction: -1) }).id
-        XCTAssertFalse(state.select(reverseID))
-        XCTAssertEqual(state.selectedOption?.position, StopPosition(index: 4, direction: 1))
+        state.query = "베타"
+        XCTAssertTrue(state.select("S2", in: catalog))
+
+        XCTAssertFalse(state.select("S1", in: catalog))
+
+        XCTAssertEqual(state.selectedOption(in: catalog)?.id, "S2")
     }
 }

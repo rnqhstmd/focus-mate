@@ -27,9 +27,11 @@ final class JourneyMapController {
         remainingDistanceTenthsKm = JourneyCourseProgress.remainingDistanceTenthsKm(of: journey, elapsedSeconds: elapsedSeconds)
     }
 
-    var routePoints: [CoursePoint] { JourneyCourse.closedPath }
-    var visibleStops: [CourseStop] { state.showsStops ? JourneyCourse.stops : [] }
-    var destinationStop: CourseStop { JourneyCourse.stops[journey.destinationIndex] }
+    /// 출발 → 도착 실제 노선 구간. 닫는 선이 없다.
+    var routePoints: [CoursePoint] { journey.stops.map(\.point) }
+    var visibleStops: [CourseStop] { state.showsStops ? journey.stops : [] }
+    var destinationStop: CourseStop { journey.stops.last! }
+    var nextStop: CourseStop { journey.stops[nextStopIndex] }
 
     func sync(status: JourneyTimerController.Status, elapsedSeconds: Int) {
         if status != state.status { state.timerStatusChanged(status) }

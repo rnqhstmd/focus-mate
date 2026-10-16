@@ -9,8 +9,7 @@ final class LifecycleSeedTests: XCTestCase {
         "lifePaused90", "lifePaused600", "lifePaused0", "lifePaused299", "lifePaused300",
         "lifePaused1499", "lifeReverse300", "lifeWrap900", "lifeArrived", "lifeAwaiting",
     ]
-    /// PRD BR-1: 2014번 정류장 간격 5분. 모든 life* 시드는 2014번이다.
-    private static let minutesPerStop2014 = 5
+    private let catalog = BoardingFixtures.uiCatalog()
 
     private func seed(_ name: String) throws -> AppSnapshot {
         try XCTUnwrap(UITestBootstrap.lifecycleSnapshot(name), "시드 없음: \(name)")
@@ -48,26 +47,40 @@ final class LifecycleSeedTests: XCTestCase {
         }
     }
 
-    // 깨짐: 도착지가 승차 식(wrap(출발 + 방향 × 분/간격))과 다르면 실패한다.
-    func test_도착지는_승차_식과_일치한다() throws {
+    // 깨짐: 도착지가 카탈로그 노선에서 다시 계산한 도착 정류장과 다르면 실패한다.
+    func test_도착지는_카탈로그_노선_계산과_일치한다() throws {
         for name in Self.names {
             let journey = try active(name)
-            let stops = journey.minutes / Self.minutesPerStop2014
-            let expected = JourneyReach.station(
-                originStopID: journey.originStopID, direction: journey.direction, stops: stops
-            )?.id
-            XCTAssertNotNil(expected, name)
+            let route = try XCTUnwrap(catalog.routeIndex(id: journey.busID), name)
+            let origin = try XCTUnwrap(catalog.stopIndex(id: journey.originStopID), name)
+            let leg = try XCTUnwrap(
+                RouteLegFinder.leg(route: route, originStop: origin, minutes: journey.minutes, in: catalog), name
+            )
+            let expected = catalog.stops[try XCTUnwrap(leg.stopIndices.last)].id
             XCTAssertEqual(journey.destinationStopID, expected, name)
         }
     }
 
-    // 깨짐: 현재 정류장이 출발지(id·방향)와 다르면 실패한다(AC-8·16이 현재 정류장 변화를 증명하려면 같아야 한다).
+    // 깨짐: 저장된 이름 4종이 카탈로그 이름·노선 정보와 다르면 실패한다.
+    func test_시드의_저장_이름은_카탈로그_값을_복사한다() throws {
+        for name in Self.names {
+            let journey = try active(name)
+            let origin = catalog.stops[try XCTUnwrap(catalog.stopIndex(id: journey.originStopID), name)]
+            let destination = catalog.stops[try XCTUnwrap(catalog.stopIndex(id: journey.destinationStopID), name)]
+            let route = catalog.routes[try XCTUnwrap(catalog.routeIndex(id: journey.busID), name)]
+            XCTAssertEqual(journey.originName, origin.name, name)
+            XCTAssertEqual(journey.destinationName, destination.name, name)
+            XCTAssertEqual(journey.busNumber, route.number, name)
+            XCTAssertEqual(journey.busKind, route.kind, name)
+        }
+    }
+
+    // 깨짐: 현재 정류장이 출발지(id)와 다르면 실패한다(AC-8·16이 현재 정류장 변화를 증명하려면 같아야 한다).
     func test_현재_정류장은_출발_정류장이다() throws {
         for name in Self.names {
             let snapshot = try seed(name)
             let journey = try active(name)
             XCTAssertEqual(snapshot.currentStation?.id, journey.originStopID, name)
-            XCTAssertEqual(snapshot.currentStation?.direction, journey.direction, name)
         }
     }
 
@@ -91,23 +104,22 @@ final class LifecycleSeedTests: XCTestCase {
 
     // 깨짐: 시드의 경과 초·방향·출발지가 표(설계 F-12)와 다르면 실패한다.
     func test_시드_값은_설계_표와_같다() throws {
-        let table: [(name: String, origin: String, direction: Int, elapsed: Int)] = [
-            ("lifePaused90", "seongsu", 1, 90),
-            ("lifePaused600", "seongsu", 1, 600),
-            ("lifePaused0", "seongsu", 1, 0),
-            ("lifePaused299", "seongsu", 1, 299),
-            ("lifePaused300", "seongsu", 1, 300),
-            ("lifePaused1499", "seongsu", 1, 1499),
-            ("lifeReverse300", "seongsu", -1, 300),
-            ("lifeWrap900", "seongsuBridgeNorth", 1, 900),
-            ("lifeArrived", "seongsu", 1, 1500),
+        let table: [(name: String, origin: String, route: String, elapsed: Int)] = [
+            ("lifePaused90", "seongsu", "2014", 90),
+            ("lifePaused600", "seongsu", "2014", 600),
+            ("lifePaused0", "seongsu", "2014", 0),
+            ("lifePaused299", "seongsu", "2014", 299),
+            ("lifePaused300", "seongsu", "2014", 300),
+            ("lifePaused1499", "seongsu", "2014", 1499),
+            ("lifeReverse300", "seongsu-r", "2014-r", 300),
+            ("lifeWrap900", "seongsuBridgeNorth", "2014", 900),
+            ("lifeArrived", "seongsu", "2014", 1500),
         ]
         for row in table {
             let journey = try active(row.name)
             XCTAssertEqual(journey.originStopID, row.origin, row.name)
-            XCTAssertEqual(journey.direction, row.direction, row.name)
-            XCTAssertEqual(journey.progress.elapsedSeconds, row.elapsed, row.name)
-            XCTAssertEqual(journey.busID, "2014", row.name)
+                        XCTAssertEqual(journey.progress.elapsedSeconds, row.elapsed, row.name)
+            XCTAssertEqual(journey.busID, row.route, row.name)
             XCTAssertEqual(journey.minutes, 25, row.name)
         }
     }
@@ -132,7 +144,7 @@ final class LifecycleSeedTests: XCTestCase {
         }
     }
 
-    // 깨짐: 기본 값(2014번 25분 성수역 정방향 독서 출발 후 일시정지, 현재 정류장 성수역)이 다르면 실패한다.
+    // 깨짐: 기본 값(2014번 25분 성수역 독서 출발 후 일시정지, 현재 정류장 성수역)이 다르면 실패한다.
     func test_alight_시드의_기본_값은_설계와_같다() throws {
         for name in Self.alightNames {
             let snapshot = try seed(name)
@@ -140,7 +152,6 @@ final class LifecycleSeedTests: XCTestCase {
             XCTAssertEqual(journey.busID, "2014", name)
             XCTAssertEqual(journey.minutes, 25, name)
             XCTAssertEqual(journey.originStopID, "seongsu", name)
-            XCTAssertEqual(journey.direction, 1, name)
             XCTAssertEqual(journey.phase, .departed, name)
             XCTAssertTrue(journey.paused, name)
             XCTAssertEqual(snapshot.currentStation?.id, "seongsu", name)
@@ -159,12 +170,13 @@ final class LifecycleSeedTests: XCTestCase {
         XCTAssertEqual(try active("alightPaused1499").destinationStopID, "seoulForestGate")
         XCTAssertEqual(try active("alightArrived").destinationStopID, "seoulForestGate")
         XCTAssertEqual(try active("alightMismatchArrived").destinationStopID, "ttukseom")
+        XCTAssertEqual(try active("alightMismatchArrived").destinationName, "뚝섬역")
     }
 
     // 깨짐: 정상 도착지 시드가 코스 여정으로 변환되지 않거나, 불일치 시드가 변환되면(지도가 그려지면) 실패한다.
     func test_alight_코스_여정_변환은_정상만_성공한다() throws {
-        XCTAssertNotNil(CourseJourney(journey: try active("alightArrived")))
-        XCTAssertNil(CourseJourney(journey: try active("alightMismatchArrived")))
+        XCTAssertNotNil(CourseJourney(journey: try active("alightArrived"), catalog: catalog))
+        XCTAssertNil(CourseJourney(journey: try active("alightMismatchArrived"), catalog: catalog))
     }
 
     // MARK: 기록 화면 records* 시드

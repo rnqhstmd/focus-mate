@@ -42,8 +42,9 @@ final class ArrivalBriefingControllerTests: XCTestCase {
 
     private func content() -> ArrivalBriefingContent {
         let journey = BoardingFixtures.journey(
-            minutes: 25, busID: "2014", destinationStopID: "seoulForestGate", phase: .departed, elapsedSeconds: 1500)
-        return ArrivalBriefingContent(journey: journey)!
+            minutes: 25, busID: "2014", destinationStopID: "seoulForestGate", destinationName: "서울숲 입구",
+            phase: .departed, elapsedSeconds: 1500)
+        return ArrivalBriefingContent(journey: journey)
     }
 
     private func rig(results: [LifecycleActionResult] = [.done]) -> Rig {
@@ -72,16 +73,14 @@ final class ArrivalBriefingControllerTests: XCTestCase {
         XCTAssertEqual(c.sentences, ["곧 서울숲 입구에 도착합니다", "버스가 멈추면 일어나주세요", "카드를 찍고 내려주세요"])
     }
 
-    // 깨짐: 카탈로그 밖 버스를 nil 대신 내용으로 만들면 실패.
-    func test카탈로그_밖_버스면_내용이_만들어지지_않는다() {
-        let journey = BoardingFixtures.journey(busID: "no-such-bus", destinationStopID: "seoulForestGate", phase: .departed)
-        XCTAssertNil(ArrivalBriefingContent(journey: journey))
-    }
-
-    // 깨짐: 카탈로그 밖 도착지를 nil 대신 내용으로 만들면 실패.
-    func test카탈로그_밖_도착지면_내용이_만들어지지_않는다() {
-        let journey = BoardingFixtures.journey(busID: "2014", destinationStopID: "no-such-stop", phase: .departed)
-        XCTAssertNil(ArrivalBriefingContent(journey: journey))
+    // 깨짐: 번호·도착지 이름을 카탈로그가 아니라 저장된 여정 값에서 가져오지 않으면 실패(카탈로그 밖 id여도 만들어진다).
+    func test카탈로그_밖_id여도_저장된_값으로_내용이_만들어진다() {
+        let journey = BoardingFixtures.journey(
+            busID: "no-such-bus", busNumber: "N37", destinationStopID: "no-such-stop", destinationName: "저장된 도착지",
+            phase: .departed)
+        let c = ArrivalBriefingContent(journey: journey)
+        XCTAssertEqual(c.routeText, "N37 · 저장된 도착지 도착")
+        XCTAssertEqual(c.sentences.first, "곧 저장된 도착지에 도착합니다")
     }
 
     // 깨짐: 간격이 1700ms가 아니거나 순서가 틀리거나 중간에 확인 버튼이 먼저 켜지면 실패.

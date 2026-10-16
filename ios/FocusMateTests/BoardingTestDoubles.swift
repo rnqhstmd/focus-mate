@@ -9,11 +9,32 @@ enum BoardingFixtures {
 
     static var details: PreparedJourneyDetails {
         let journey = JourneySelection(
-            origin: StopPosition(index: 0, direction: 1), minutes: 60,
-            busID: "2014", busNumber: "2014", destination: "성동구민체육센터", stops: 12
+            originStopID: "seongsu", originName: "성수역", boundLabel: "성수동 방면", minutes: 60,
+            busID: "2014", busNumber: "2014", busKind: "지선",
+            destinationStopID: "seongdongSportsCenter", destination: "성동구민체육센터",
+            stops: 12, distanceMeters: 6_600
         )
         let tag = PreparationTag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand)
         return PreparedJourneyDetails(journey: journey, tag: tag, task: "책 읽기", sound: .bus)
+    }
+
+    /// uiTestFixture 카탈로그가 준비된 RouteCatalogStore. AppModel(routeData:)에 주입한다.
+    @MainActor
+    static func readyRouteData() -> RouteCatalogStore {
+        RouteCatalogStore(ready: uiCatalog())
+    }
+
+    static func uiCatalog() -> RouteCatalog {
+        // 고정 픽스처이므로 로딩 실패는 테스트 설정 오류다.
+        do { return try RouteCatalog.uiTestFixture() } catch { fatalError("uiTestFixture 실패: \(error)") }
+    }
+
+    /// 모델의 현재 정류장 기준으로 노선을 고른다. 출발 정류장·카탈로그가 없으면 false.
+    @MainActor
+    @discardableResult
+    static func chooseRoute(_ routeID: String, in model: AppModel) -> Bool {
+        guard let origin = model.journeyOrigin, let catalog = model.routeCatalog else { return false }
+        return model.journeyPlan.choose(routeID: routeID, origin: origin, catalog: catalog)
     }
 
     static func awaiting() -> JourneySnapshot {
@@ -25,10 +46,13 @@ enum BoardingFixtures {
         id: String = "journey-1",
         cardID: String = BoardingFixtures.cardID,
         originStopID: String = "seongsu",
-        direction: Int = 1,
+        originName: String = "성수역",
         minutes: Int = 60,
         busID: String = "2014",
+        busNumber: String = "2014",
+        busKind: String = "지선",
         destinationStopID: String = "seongdongSportsCenter",
+        destinationName: String = "성동구민체육센터",
         tag: JourneySnapshot.Tag = JourneySnapshot.Tag(id: "reading-fixture", name: "독서", icon: .reading, color: .sand),
         task: String = "책 읽기",
         phase: JourneySnapshot.Phase = .awaitingDeparture,
@@ -36,14 +60,16 @@ enum BoardingFixtures {
         paused: Bool = false
     ) -> JourneySnapshot {
         JourneySnapshot(
-            id: id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
-            busID: busID, destinationStopID: destinationStopID, tag: tag, task: task, sound: .bus,
+            id: id, cardID: cardID, originStopID: originStopID, originName: originName, minutes: minutes,
+            busID: busID, busNumber: busNumber, busKind: busKind,
+            destinationStopID: destinationStopID, destinationName: destinationName,
+            tag: tag, task: task, sound: .bus,
             boardedAt: boardedAt, phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsedSeconds), paused: paused
         )
     }
 
     static func snapshot(active: JourneySnapshot?) -> AppSnapshot {
-        let station = StationSnapshot(id: "seongsu", name: "성수", direction: 1)
+        let station = StationSnapshot(id: "seongsu", name: "성수")
         return XCTestCase.stage(true, station, station)
             .issuingCard(CardSnapshot(id: cardID, issuedAt: boardedAt))
             .updating(journey: JourneySection(active: active))

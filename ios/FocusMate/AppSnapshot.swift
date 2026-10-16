@@ -1,14 +1,14 @@
 import Foundation
 
+/// 저장된 정류장. 옛 파일(v1~v4)의 `direction` 키는 읽을 때 무시한다.
 struct StationSnapshot: Codable, Equatable {
     let id: String
     let name: String
-    let direction: Int
 }
 
 enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
 enum SnapshotValidationIssue: Error, Equatable {
-    case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
+    case inconsistentStage, emptyStationID, emptyStationName
     case multipleCards(Int), cardWithoutIssuance, invalidCardID
     case invalidRecords(RecordValidationIssue)
     case invalidCardStyle(CardStyleValidationIssue), invalidCardPhoto
@@ -68,7 +68,6 @@ struct AppSnapshot: Codable, Equatable {
         for station in [initialStation, currentStation].compactMap({ $0 }) {
             guard !station.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationID }
             guard !station.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationName }
-            guard station.direction == 1 || station.direction == -1 else { throw SnapshotValidationIssue.invalidDirection(station.direction) }
         }
         guard cards.items.count <= 1 else { throw SnapshotValidationIssue.multipleCards(cards.items.count) }
         guard cards.items.isEmpty || cardIssued else { throw SnapshotValidationIssue.cardWithoutIssuance }

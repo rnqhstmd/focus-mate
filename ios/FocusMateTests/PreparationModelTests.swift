@@ -8,11 +8,22 @@ final class PreparationModelTests: XCTestCase {
         var writes = 0
         var shouldFail = false
     }
-    private static let station = StationSnapshot(id: "seongsu", name: "성수역", direction: 1)
-    private static let expectedJourney = JourneySelection(
-        origin: StopPosition(index: 0, direction: 1), minutes: 60,
-        busID: "2014", busNumber: "2014", destination: "성동구민체육센터", stops: 12
-    )
+    private static let station = StationSnapshot(id: "seongsu", name: "성수역")
+
+    /// 성수역 정방향 60분 2014 선택의 손으로 적은 기대값. 거리는 카탈로그 값이라 양수만 본다.
+    private func assertSelection(_ journey: JourneySelection?, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(journey?.originStopID, "seongsu", file: file, line: line)
+        XCTAssertEqual(journey?.originName, "성수역", file: file, line: line)
+        XCTAssertEqual(journey?.boundLabel, "성수동 방면", file: file, line: line)
+        XCTAssertEqual(journey?.minutes, 60, file: file, line: line)
+        XCTAssertEqual(journey?.busID, "2014", file: file, line: line)
+        XCTAssertEqual(journey?.busNumber, "2014", file: file, line: line)
+        XCTAssertEqual(journey?.busKind, "지선", file: file, line: line)
+        XCTAssertEqual(journey?.destinationStopID, "seongdongSportsCenter", file: file, line: line)
+        XCTAssertEqual(journey?.destination, "성동구민체육센터", file: file, line: line)
+        XCTAssertEqual(journey?.stops, 12, file: file, line: line)
+        XCTAssertGreaterThan(journey?.distanceMeters ?? 0, 0, file: file, line: line)
+    }
 
     // Break: a fresh model inherits preparation values or enables an incomplete preparation.
     @MainActor
@@ -80,7 +91,7 @@ final class PreparationModelTests: XCTestCase {
             XCTAssertEqual(model.preparation.selectedTag, tag)
             XCTAssertEqual(tag.name, "개발 메모")
             XCTAssertEqual(model.preparation.task, "책 읽기")
-            XCTAssertEqual(model.preparedJourney, Self.expectedJourney)
+            assertSelection(model.preparedJourney)
             XCTAssertTrue(model.canConfirmPreparation)
             XCTAssertEqual(probe.writes, 0)
         }
@@ -98,7 +109,7 @@ final class PreparationModelTests: XCTestCase {
             XCTAssertEqual(model.path, [.time])
             XCTAssertTrue(model.proceedToPreparation())
             XCTAssertEqual(model.preparation, before)
-            XCTAssertEqual(model.preparedJourney, Self.expectedJourney)
+            assertSelection(model.preparedJourney)
             XCTAssertTrue(model.canConfirmPreparation)
             XCTAssertEqual(probe.writes, 0)
         }
@@ -112,7 +123,7 @@ final class PreparationModelTests: XCTestCase {
             XCTAssertTrue(model.confirmPreparation())
             model.goBack()
             model.journeyPlan.setMinutes(25)
-            XCTAssertNil(model.journeyPlan.selectedBusID)
+            XCTAssertNil(model.journeyPlan.selectedRouteID)
             XCTAssertFalse(model.canConfirmPreparation)
             XCTAssertNil(model.confirmedPreparation)
             XCTAssertNil(model.preparationRequest)
@@ -130,7 +141,7 @@ final class PreparationModelTests: XCTestCase {
             let tag = try model.preparation.saveTag(TagEditorDraft(name: " \nMy Focus \t", icon: .writing, color: .pink)).get()
             model.preparation.setTask("  책 읽기  ")
             model.preparation.setSound(.subway)
-            let expected = PreparedJourneyDetails(journey: Self.expectedJourney, tag: tag, task: "책 읽기", sound: .subway)
+            let expected = PreparedJourneyDetails(journey: try XCTUnwrap(model.preparedJourney), tag: tag, task: "책 읽기", sound: .subway)
             XCTAssertTrue(model.canConfirmPreparation)
             XCTAssertTrue(model.confirmPreparation())
             XCTAssertEqual(model.confirmedPreparation, expected)
@@ -296,9 +307,9 @@ final class PreparationModelTests: XCTestCase {
     private func enterPreparation(_ model: AppModel) throws {
         model.open(.time)
         model.journeyPlan.setMinutes(60)
-        _ = model.journeyPlan.choose(busID: "2014", from: StopPosition(index: 0, direction: 1))
+        BoardingFixtures.chooseRoute("2014", in: model)
         XCTAssertTrue(model.proceedToPreparation())
-        XCTAssertEqual(model.preparedJourney, Self.expectedJourney)
+        assertSelection(model.preparedJourney)
     }
 
     @MainActor
@@ -396,7 +407,7 @@ final class PreparationModelTests: XCTestCase {
                 try data.write(to: url, options: .atomic)
             }
         )
-        let model = AppModel(store: store)
+        let model = AppModel(store: store, routeData: BoardingFixtures.readyRouteData())
         model.loadIfNeeded()
         return model
     }

@@ -18,8 +18,8 @@ final class AlightingSnapshotTests: XCTestCase {
 
     private func journey(elapsed: Int, id: String = "journey-1") -> JourneySnapshot {
         F.journey(
-            id: id, originStopID: "seongsu", direction: 1, minutes: 25, busID: "2014",
-            destinationStopID: "seoulForestGate", task: "논문", phase: .departed, elapsedSeconds: elapsed, paused: true
+            id: id, originStopID: "seongsu", originName: "성수역", minutes: 25, busID: "2014",
+            destinationStopID: "seoulForestGate", destinationName: "서울숲 입구", task: "논문", phase: .departed, elapsedSeconds: elapsed, paused: true
         )
     }
 
@@ -54,7 +54,7 @@ final class AlightingSnapshotTests: XCTestCase {
 
         let after = try before.alightingActiveJourney(completedAt: completedAt, timeZone: Self.seoul).snapshot
 
-        XCTAssertEqual(after.currentStation, StationSnapshot(id: "seoulForestGate", name: "서울숲 입구", direction: 1))
+        XCTAssertEqual(after.currentStation, StationSnapshot(id: "seoulForestGate", name: "서울숲 입구"))
         XCTAssertNil(after.journey.active)
     }
 

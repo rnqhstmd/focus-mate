@@ -255,5 +255,25 @@ class BuildRoutesTest(unittest.TestCase):
         self.assertEqual(result.ars_zero_filled, 1)
 
 
+
+class NormalizeIntegerDigitLimitTest(unittest.TestCase):
+    def test_지수가_거대한_값은_빠르게_ValueError(self):
+        import time
+        from route_data.routes import normalize_integer
+        start = time.monotonic()
+        with self.assertRaises(ValueError):
+            normalize_integer("1E999999999")
+        self.assertLess(time.monotonic() - start, 1.0)
+
+    def test_16자리_정수는_ValueError(self):
+        from route_data.routes import normalize_integer
+        with self.assertRaises(ValueError):
+            normalize_integer("1234567890123456")
+
+    def test_15자리_정수는_그대로_통과(self):
+        from route_data.routes import normalize_integer
+        self.assertEqual(normalize_integer("123456789012345"), "123456789012345")
+
+
 if __name__ == "__main__":
     unittest.main()

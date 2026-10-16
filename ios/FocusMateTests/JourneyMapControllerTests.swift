@@ -7,15 +7,20 @@ import XCTest
 final class JourneyMapControllerTests: XCTestCase {
     private let accuracy = 1e-9
 
-    /// 성수 정방향 25분 2014(5분/정류장) — 도착 정류장은 인덱스 5.
-    private var forwardJourney: CourseJourney {
-        CourseJourney(originIndex: 0, direction: 1, minutesPerStop: 5, totalMinutes: 25)
+    private let catalog = BoardingFixtures.uiCatalog()
+
+    private func course(route routeID: String, origin: String, minutes: Int = 25) -> CourseJourney {
+        let route = catalog.routeIndex(id: routeID)!
+        let stop = catalog.stopIndex(id: origin)!
+        let leg = RouteLegFinder.leg(route: route, originStop: stop, minutes: minutes, in: catalog)!
+        return CourseJourney(leg: leg, catalog: catalog)
     }
 
-    /// 서울숲 역방향 25분 2014 — 도착 정류장은 인덱스 8.
-    private var reverseJourney: CourseJourney {
-        CourseJourney(originIndex: 4, direction: -1, minutesPerStop: 5, totalMinutes: 25)
-    }
+    /// 성수 정방향 25분 2014(구간 300초) — 코스 위치 0...5, 도착 정류장은 코스 위치 5.
+    private var forwardJourney: CourseJourney { course(route: "2014", origin: "seongsu") }
+
+    /// 서울숲 역방향 25분 2014-r — 코스 위치 0...5, 도착 정류장은 성수사거리 역방향.
+    private var reverseJourney: CourseJourney { course(route: "2014-r", origin: "seoulForest-r") }
 
     private func makeMap(
         _ journey: CourseJourney? = nil,
@@ -38,7 +43,8 @@ final class JourneyMapControllerTests: XCTestCase {
         let clock = ManualJourneyClock()
         let saver = FakeProgressSaver()
         let snapshot = BoardingFixtures.journey(
-            minutes: 25, destinationStopID: "seoulForestGate", phase: .departed, elapsedSeconds: 0, paused: false
+            minutes: 25, destinationStopID: "seoulForestGate", destinationName: "서울숲 입구",
+            phase: .departed, elapsedSeconds: 0, paused: false
         )
         let timer = JourneyTimerController(
             journey: snapshot, autoStart: true, saver: saver, clock: clock, ticker: clock, announcer: RecordingAnnouncer()
@@ -64,17 +70,17 @@ final class JourneyMapControllerTests: XCTestCase {
 
         rig.clock.advance(by: .seconds(600))
         map.sync(status: rig.timer.status, elapsedSeconds: rig.timer.elapsedSeconds)
-        assertPoint(map.bus.point, equals: JourneyCourse.stops[2].point)
+        assertPoint(map.bus.point, equals: forwardJourney.stops[2].point)
 
         rig.timer.pause()
         rig.clock.advance(by: .seconds(300))
         map.sync(status: rig.timer.status, elapsedSeconds: rig.timer.elapsedSeconds)
-        assertPoint(map.bus.point, equals: JourneyCourse.stops[2].point)
+        assertPoint(map.bus.point, equals: forwardJourney.stops[2].point)
 
         rig.timer.resume()
         rig.clock.advance(by: .seconds(300))
         map.sync(status: rig.timer.status, elapsedSeconds: rig.timer.elapsedSeconds)
-        assertPoint(map.bus.point, equals: JourneyCourse.stops[3].point)
+        assertPoint(map.bus.point, equals: forwardJourney.stops[3].point)
     }
 
     // MARK: AC-11 도착
@@ -85,7 +91,7 @@ final class JourneyMapControllerTests: XCTestCase {
 
         map.sync(status: .arrived, elapsedSeconds: 1500)
 
-        assertPoint(map.bus.point, equals: JourneyCourse.stops[5].point)
+        assertPoint(map.bus.point, equals: forwardJourney.stops[5].point)
         XCTAssertTrue(map.bus.isArrived)
     }
 
@@ -94,13 +100,14 @@ final class JourneyMapControllerTests: XCTestCase {
     // 깨짐: 정류장 표시를 끄면 도착 정류장 좌표까지 사라지거나, 표시 개수·경로 점 수가 어긋나면 실패한다.
     func test3_AC12_정류장_표시를_꺼도_도착_정류장_좌표와_경로는_유지된다() {
         let map = makeMap()
-        XCTAssertEqual(map.visibleStops.count, 9)
+        XCTAssertEqual(map.visibleStops.count, 6)
 
         map.setShowsStops(false)
 
         XCTAssertEqual(map.visibleStops.count, 0)
-        XCTAssertEqual(map.routePoints.count, 10)
-        assertPoint(map.destinationStop.point, equals: JourneyCourse.stops[5].point)
+        XCTAssertEqual(map.routePoints.count, 6)
+        XCTAssertNotEqual(map.routePoints.last, map.routePoints.first)
+        assertPoint(map.destinationStop.point, equals: forwardJourney.stops[5].point)
     }
 
     // MARK: AC-13 초기 카메라
@@ -140,7 +147,7 @@ final class JourneyMapControllerTests: XCTestCase {
         map.followTapped()
 
         XCTAssertEqual(map.state.camera, .follow)
-        assertPoint(map.cameraTarget.center, equals: JourneyCourse.stops[2].point)
+        assertPoint(map.cameraTarget.center, equals: forwardJourney.stops[2].point)
         XCTAssertGreaterThan(map.cameraTarget.revision, revisionBefore)
     }
 
@@ -156,7 +163,7 @@ final class JourneyMapControllerTests: XCTestCase {
         map.sync(status: .running, elapsedSeconds: 300)
 
         XCTAssertNotEqual(map.bus.point, busBefore)
-        assertPoint(map.bus.point, equals: JourneyCourse.stops[1].point)
+        assertPoint(map.bus.point, equals: forwardJourney.stops[1].point)
         XCTAssertEqual(map.cameraTarget.revision, targetBefore.revision)
         XCTAssertEqual(map.cameraTarget.center, targetBefore.center)
     }
@@ -270,59 +277,61 @@ final class JourneyMapControllerTests: XCTestCase {
 
     // MARK: 남은 값
 
-    // 깨짐: 남은 정류장 수·거리·다음 정류장 계산이 틀리면(방향 부호 포함) 실패한다.
-    func test14_남은값_서울숲_역방향_90초_경과는_남은_5정류장_2점6km_다음_3번이다() {
+    // 깨짐: 남은 정류장 수·다음 정류장 계산이 틀리면 실패한다. (역방향 노선도 코스 위치로 센다)
+    func test14_남은값_서울숲_역방향_90초_경과는_남은_5정류장_다음_1번이다() {
         let map = makeMap(reverseJourney, elapsed: 90)
 
         XCTAssertEqual(map.remainingStops, 5)
-        XCTAssertEqual(map.remainingDistanceTenthsKm, 26)
-        XCTAssertEqual(map.nextStopIndex, 3)
+        XCTAssertEqual(map.nextStopIndex, 1)
     }
 
-    // MARK: init?(journey:)
+    // 깨짐: 역방향 코스의 정류장 id·마지막 정류장이 카탈로그 노선 순서가 아니면 실패한다.
+    func test14b_역방향_코스는_서울숲_역방향에서_성수사거리_역방향으로_끝난다() {
+        let stops = reverseJourney.stops
+        XCTAssertEqual(stops.first?.id, "seoulForest-r")
+        XCTAssertEqual(stops.last?.id, "seongsuIntersection-r")
+        assertPoint(makeMap(reverseJourney).destinationStop.point, equals: stops[5].point)
+    }
 
-    // 깨짐: 카탈로그 값에서 출발 인덱스·방향·분당 정류장·총 시간을 잘못 채우면 실패한다.
+    // MARK: init?(journey:catalog:)
+
+    private func snapshot(
+        origin: String = "seoulForest-r", busID: String = "2014-r", minutes: Int = 25,
+        destination: String = "seongsuIntersection-r"
+    ) -> JourneySnapshot {
+        BoardingFixtures.journey(
+            originStopID: origin, originName: "서울숲역", minutes: minutes, busID: busID,
+            destinationStopID: destination, destinationName: "성수사거리", phase: .departed
+        )
+    }
+
+    // 깨짐: 저장 값에서 노선·출발·분으로 코스를 다시 만들지 못하면 실패한다.
     func test15_init_정상_스냅샷은_코스_여정으로_변환된다() throws {
-        let snapshot = BoardingFixtures.journey(
-            originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
-            destinationStopID: "seongsuIntersection", phase: .departed
-        )
+        let journey = try XCTUnwrap(CourseJourney(journey: snapshot(), catalog: catalog))
 
-        let journey = try XCTUnwrap(CourseJourney(journey: snapshot))
-
-        XCTAssertEqual(journey.originIndex, 4)
-        XCTAssertEqual(journey.direction, -1)
-        XCTAssertEqual(journey.minutesPerStop, 5)
-        XCTAssertEqual(journey.totalMinutes, 25)
+        XCTAssertEqual(journey.stops.count, 6)
+        XCTAssertEqual(journey.stops.first?.id, "seoulForest-r")
+        XCTAssertEqual(journey.stops.last?.id, "seongsuIntersection-r")
+        XCTAssertEqual(journey.totalSeconds, 1500)
     }
 
-    // 깨짐: 저장된 도착 정류장이 계산값과 달라도 변환이 성공하면 실패한다.
+    // 깨짐: 저장된 도착 정류장이 계산값과 달라도 변환이 성공하면 실패한다. (BR-12)
     func test16_init_저장된_도착_정류장이_계산값과_다르면_nil이다() {
-        let snapshot = BoardingFixtures.journey(
-            originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
-            destinationStopID: "seongdongSportsCenter", phase: .departed
-        )
-
-        XCTAssertNil(CourseJourney(journey: snapshot))
+        XCTAssertNil(CourseJourney(journey: snapshot(destination: "seongdongSportsCenter"), catalog: catalog))
     }
 
-    // 깨짐: 분당 정류장 시간으로 나누어떨어지지 않는 minutes를 허용하면 실패한다.
-    func test17_init_분이_정류장_간격으로_나누어떨어지지_않으면_nil이다() {
-        let snapshot = BoardingFixtures.journey(
-            originStopID: "seoulForest", direction: -1, minutes: 27, busID: "2014",
-            destinationStopID: "seongsuIntersection", phase: .departed
-        )
-
-        XCTAssertNil(CourseJourney(journey: snapshot))
+    // 깨짐: 구간 시간으로 맞는 정류장 수가 없는 분을 허용하면 실패한다.
+    func test17_init_맞는_도착_정류장이_없는_분이면_nil이다() {
+        XCTAssertNil(CourseJourney(journey: snapshot(minutes: 27), catalog: catalog))
     }
 
-    // 깨짐: 카탈로그에 없는 버스를 허용하면 실패한다.
-    func test18_init_알_수_없는_버스는_nil이다() {
-        let snapshot = BoardingFixtures.journey(
-            originStopID: "seoulForest", direction: -1, minutes: 25, busID: "unknown-bus",
-            destinationStopID: "seongsuIntersection", phase: .departed
-        )
+    // 깨짐: 카탈로그에 없는 노선을 허용하면 실패한다.
+    func test18_init_알_수_없는_노선은_nil이다() {
+        XCTAssertNil(CourseJourney(journey: snapshot(busID: "unknown-bus"), catalog: catalog))
+    }
 
-        XCTAssertNil(CourseJourney(journey: snapshot))
+    // 깨짐: 카탈로그에 없는 출발 정류장을 허용하면 실패한다.
+    func test19_init_알_수_없는_출발_정류장은_nil이다() {
+        XCTAssertNil(CourseJourney(journey: snapshot(origin: "gone-stop"), catalog: catalog))
     }
 }

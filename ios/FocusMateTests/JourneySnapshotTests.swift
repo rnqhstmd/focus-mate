@@ -7,27 +7,23 @@ final class JourneySnapshotTests: XCTestCase {
 
     // MARK: - 생성 (AC-11 저장 내용, AC-19)
 
-    // 깨짐: boarding이 위치·방향·시간·할 일·소리 중 하나라도 빠뜨리거나 잘못 복사하면 실패.
-    func testAC11_승차값은_위치_방향_시간_할일_소리를_담는다() {
+    // 깨짐: boarding이 위치·이름·버스·도착지·시간·할 일·소리 중 하나라도 빠뜨리거나 잘못 복사하면 실패.
+    func testAC11_승차값은_출발_버스_도착_시간_할일_소리를_담는다() {
         let journey = F.awaiting()
 
         XCTAssertEqual(journey.id, "journey-1")
         XCTAssertEqual(journey.cardID, "FM-01234567")
         XCTAssertEqual(journey.originStopID, "seongsu")
-        XCTAssertEqual(journey.direction, 1)
+        XCTAssertEqual(journey.originName, "성수역")
         XCTAssertEqual(journey.minutes, 60)
         XCTAssertEqual(journey.busID, "2014")
+        XCTAssertEqual(journey.busNumber, "2014")
+        XCTAssertEqual(journey.busKind, "지선")
+        XCTAssertEqual(journey.destinationStopID, "seongdongSportsCenter")
+        XCTAssertEqual(journey.destinationName, "성동구민체육센터")
         XCTAssertEqual(journey.task, "책 읽기")
         XCTAssertEqual(journey.sound, .bus)
         XCTAssertEqual(journey.boardedAt, F.boardedAt)
-    }
-
-    // 깨짐: 도착 정류장 id를 계산하지 않거나(빈 값) 출발 정류장과 같게 두면 실패.
-    func testAC11_도착정류장은_출발에서_12정류장_이동한_정류장으로_확정된다() {
-        let journey = F.awaiting()
-
-        XCTAssertEqual(journey.destinationStopID, RouteStops.all[12 % RouteStops.all.count].id)
-        XCTAssertNotEqual(journey.destinationStopID, journey.originStopID)
     }
 
     // 깨짐: 태그 정의(id·이름·아이콘·색) 중 하나라도 복사하지 않으면 실패.
@@ -59,41 +55,7 @@ final class JourneySnapshotTests: XCTestCase {
         let after = before.confirmingDeparture()
 
         XCTAssertEqual(after.progress.elapsedSeconds, 0)
-        XCTAssertEqual(after, F.journey(phase: .departed, elapsedSeconds: 0).withDestination(before.destinationStopID))
-    }
-
-    // MARK: - 표시 조회
-
-    // 깨짐: 카탈로그 조회가 이름을 못 돌려주면 실패.
-    func testAC11_카탈로그_안의_id는_표시_이름과_버스를_조회한다() {
-        let journey = F.awaiting()
-
-        XCTAssertEqual(journey.originName, "성수역")
-        XCTAssertEqual(journey.bus?.id, "2014")
-    }
-
-    // 깨짐: 카탈로그 밖 id를 검증이 통과시키거나 조회가 nil이 아니면 실패. (BR-3)
-    func testAC22_카탈로그_밖_id는_조회가_nil이다() {
-        let journey = F.journey(originStopID: "gone-stop", busID: "gone-bus", destinationStopID: "gone-dest")
-
-        XCTAssertNil(journey.originName)
-        XCTAssertNil(journey.destinationName)
-        XCTAssertNil(journey.bus)
-    }
-
-    // 깨짐: 출발 정류장 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
-    func testAC22_카탈로그_밖_출발_id는_unknownStop으로_거절된다() {
-        assertIssue(.unknownStop("gone-stop"), F.journey(originStopID: "gone-stop"))
-    }
-
-    // 깨짐: 도착 정류장 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
-    func testAC22_카탈로그_밖_도착_id는_unknownStop으로_거절된다() {
-        assertIssue(.unknownStop("gone-dest"), F.journey(destinationStopID: "gone-dest"))
-    }
-
-    // 깨짐: 버스 id를 카탈로그와 대조하지 않으면 실패. (AC-22)
-    func testAC22_카탈로그_밖_버스_id는_unknownBus로_거절된다() {
-        assertIssue(.unknownBus("gone-bus"), F.journey(busID: "gone-bus"))
+        XCTAssertEqual(after, F.journey(phase: .departed, elapsedSeconds: 0))
     }
 
     // MARK: - 구조 검증 (설계 A-1)
@@ -110,8 +72,12 @@ final class JourneySnapshotTests: XCTestCase {
             F.journey(id: ""),
             F.journey(cardID: ""),
             F.journey(originStopID: ""),
+            F.journey(originName: " "),
             F.journey(busID: ""),
+            F.journey(busNumber: ""),
+            F.journey(busKind: "\n"),
             F.journey(destinationStopID: ""),
+            F.journey(destinationName: ""),
             F.journey(tag: JourneySnapshot.Tag(id: "", name: "독서", icon: .reading, color: .sand)),
         ]
         for (index, candidate) in candidates.enumerated() {
@@ -125,11 +91,28 @@ final class JourneySnapshotTests: XCTestCase {
         }
     }
 
-    // 깨짐: direction이 ±1 외일 때 거절하지 않으면 실패.
-    func testA1_방향이_1이나_음수1이_아니면_거절된다() {
-        assertIssue(.invalidDirection(0), F.journey(direction: 0))
-        assertIssue(.invalidDirection(2), F.journey(direction: 2))
-        XCTAssertNoThrow(try F.journey(direction: -1).validate(currentCardID: F.cardID))
+    // 깨짐: 빈 값 필드의 이름을 emptyField에 담지 않으면 실패.
+    func testA1_빈_도착지_이름은_필드명과_함께_거절된다() {
+        assertIssue(.emptyField("destinationName"), F.journey(destinationName: "  "))
+        assertIssue(.emptyField("busNumber"), F.journey(busNumber: ""))
+    }
+
+    // 깨짐: 이름류 길이 상한(UTF-16 500)을 검사하지 않거나 500을 거절하면 실패.
+    func testA1_이름류가_500초과면_nameTooLong으로_거절된다() {
+        let long = String(repeating: "가", count: 501)
+        assertIssue(.nameTooLong("originName"), F.journey(originName: long))
+        assertIssue(.nameTooLong("destinationName"), F.journey(destinationName: long))
+        assertIssue(.nameTooLong("busNumber"), F.journey(busNumber: long))
+        assertIssue(.nameTooLong("busKind"), F.journey(busKind: long))
+        XCTAssertNoThrow(try F.journey(originName: String(repeating: "가", count: 500)).validate(currentCardID: F.cardID))
+    }
+
+    // 깨짐: 카탈로그에 없는 id를 검증이 거절하면 실패(카탈로그 검사 없음).
+    func testA1_카탈로그_밖_id도_구조가_맞으면_통과한다() {
+        XCTAssertNoThrow(
+            try F.journey(originStopID: "gone-stop", busID: "gone-bus", destinationStopID: "gone-dest")
+                .validate(currentCardID: F.cardID)
+        )
     }
 
     // 깨짐: minutes <= 0을 통과시키면 실패.
@@ -226,16 +209,5 @@ final class JourneySnapshotTests: XCTestCase {
         XCTAssertThrowsError(try journey.validate(currentCardID: journey.cardID), file: file, line: line) {
             XCTAssertEqual($0 as? ActiveJourneyValidationIssue, expected, file: file, line: line)
         }
-    }
-}
-
-private extension JourneySnapshot {
-    /// 도착 정류장 id만 다른 값으로 바꾼 사본(기대값 구성용).
-    func withDestination(_ id: String) -> JourneySnapshot {
-        BoardingFixtures.journey(
-            id: self.id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
-            busID: busID, destinationStopID: id, tag: tag, task: task, phase: phase,
-            elapsedSeconds: progress.elapsedSeconds, paused: paused
-        )
     }
 }

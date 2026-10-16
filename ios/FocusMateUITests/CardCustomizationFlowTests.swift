@@ -466,7 +466,11 @@ final class CardCustomizationFlowTests: XCTestCase {
     }
     private func open(_ h: FocusMateUIHarness) throws {
         let entry = h.element("open.cardCustomization")
-        XCTAssertTrue(entry.waitForExistence(timeout: timeout)); entry.tap()
+        XCTAssertTrue(entry.waitForExistence(timeout: timeout))
+        // 큰 글자에서는 메인 방면 줄이 길어져 버튼이 화면 아래로 밀린다. 메인은 스크롤된다.
+        var swipes = 0
+        while (!entry.isHittable || entry.frame.maxY > h.app.frame.maxY - 120) && swipes < 4 { h.app.swipeUp(); swipes += 1 }
+        entry.tap()
         XCTAssertTrue(h.element("screen.cardCustomization").waitForExistence(timeout: timeout))
     }
     private func tap(_ h: FocusMateUIHarness, _ suffix: String) throws {

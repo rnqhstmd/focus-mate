@@ -1,0 +1,1972 @@
+diff --git a/ios/FocusMate/ActiveJourneyCardContent.swift b/ios/FocusMate/ActiveJourneyCardContent.swift
+index c5f9fdc..ecda7ba 100644
+--- a/ios/FocusMate/ActiveJourneyCardContent.swift
++++ b/ios/FocusMate/ActiveJourneyCardContent.swift
+@@ -19,13 +19,12 @@ struct ActiveJourneyCardContent: Equatable {
+         [title, task, busText, remainingText, routeText].compactMap { $0 }.joined(separator: ", ")
+     }
+ 
+-    init?(journey: JourneySnapshot) {
+-        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
++    init(journey: JourneySnapshot) {
+         kind = journey.isArrived ? .arrived : .resumable
+         title = kind == .arrived ? JourneyLifecycleText.arrivedTitle : JourneyLifecycleText.resumableTitle
+         task = journey.task
+-        busText = "\(bus.kind) \(bus.number)"
+-        routeText = JourneyLifecycleText.route(tag: journey.tag.name, destination: destination)
++        busText = "\(journey.busKind) \(journey.busNumber)"
++        routeText = JourneyLifecycleText.route(tag: journey.tag.name, destination: journey.destinationName)
+         remainingText = kind == .arrived ? nil : JourneyLifecycleText.remaining(
+             minutes: JourneyTimerDisplay.remainingMinutes(totalSeconds: journey.totalSeconds,
+                                                           elapsedSeconds: journey.progress.elapsedSeconds))
+diff --git a/ios/FocusMate/AppModel+JourneyLifecycle.swift b/ios/FocusMate/AppModel+JourneyLifecycle.swift
+index 58528c5..f32d875 100644
+--- a/ios/FocusMate/AppModel+JourneyLifecycle.swift
++++ b/ios/FocusMate/AppModel+JourneyLifecycle.swift
+@@ -3,7 +3,7 @@ import Foundation
+ /// W07 이어가기·새 여정·포기. 각 동작은 한 번만 저장하고, 실패하면 아무것도 바꾸지 않은 채 `.saveFailed`를 돌려준다(BR-4, BR-7).
+ /// 연타는 시간이 아니라 상태(path·active)로 막는다(BR-8).
+ extension AppModel: JourneyAbandoning {
+-    var activeJourneyCard: ActiveJourneyCardContent? { activeJourney.flatMap(ActiveJourneyCardContent.init(journey:)) }
++    var activeJourneyCard: ActiveJourneyCardContent? { activeJourney.map(ActiveJourneyCardContent.init(journey:)) }
+ 
+     var mainStartTitle: String {
+         activeJourney == nil ? Destination.preparation.mainMenuTitle : JourneyLifecycleText.newJourneyButton
+@@ -30,15 +30,23 @@ extension AppModel: JourneyAbandoning {
+         return true
+     }
+ 
++    /// 정류장 데이터를 읽는 중에는 도달 정류장을 정할 수 없어 포기·새 여정을 막는다(AC-43, AC-44).
++    var canEndActiveJourney: Bool { routeAvailability != .loading }
++
+     /// 메인 '새 여정 시작' 확정. 도달 정류장을 현재 정류장으로 두고 여정을 지운 뒤 시간 선택으로 간다.
+     /// 도착한 여정은 하차로만 끝낸다(W09 FR-8).
+     @discardableResult
+     func confirmNewJourney() -> LifecycleActionResult {
+         guard launchState == .ready(.main), path.isEmpty, let snapshot, let active = snapshot.journey.active,
+-              !active.isArrived, let station = active.reachedStation
++              !active.isArrived, case let .resolved(resolution) = active.reachedStation(in: routeAvailability)
+         else { return .rejected }
++        guard let station = resolution.station else {
++            // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.
++            guard restartStationSelection(reason: .stationRemoved) else { return .saveFailed }
++            discardConfirmedPreparation()
++            return .done
++        }
+         guard saveHandlingFailure(snapshot.endingActiveJourney(at: station)) else { return .saveFailed }
+-        // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.
+         discardConfirmedPreparation()
+         open(Destination.preparation.mainMenuTarget)
+         return .done
+@@ -49,7 +57,12 @@ extension AppModel: JourneyAbandoning {
+     func abandonJourney(timerPaused: Bool) -> LifecycleActionResult {
+         guard timerPaused, launchState == .ready(.main), path.last == .journey, let snapshot,
+               let active = snapshot.journey.active, active.phase == .departed, !active.isArrived,
+-              let station = active.reachedStation else { return .rejected }
++              case let .resolved(resolution) = active.reachedStation(in: routeAvailability) else { return .rejected }
++        guard let station = resolution.station else {
++            guard restartStationSelection(reason: .stationRemoved) else { return .saveFailed }
++            abandonNotice = nil
++            return .done
++        }
+         guard saveHandlingFailure(snapshot.endingActiveJourney(at: station)) else { return .saveFailed }
+         path = []
+         abandonNotice = station.name
+diff --git a/ios/FocusMate/AppModel+JourneyStart.swift b/ios/FocusMate/AppModel+JourneyStart.swift
+index e3b72b1..2e3da5d 100644
+--- a/ios/FocusMate/AppModel+JourneyStart.swift
++++ b/ios/FocusMate/AppModel+JourneyStart.swift
+@@ -1,17 +1,78 @@
+ import Foundation
+ 
++/// 출발 정류장을 다시 골라야 하는 이유(BR-13, BR-16, 옛 형식 이전).
++enum StationResetReason: Equatable {
++    case routeDataReplaced, stationRemoved
++
++    var text: String {
++        switch self {
++        case .routeDataReplaced: "정류장 데이터가 서울 전체로 바뀌어 출발 정류장을 다시 골라 주세요"
++        case .stationRemoved: "저장된 출발 정류장이 서울 버스 데이터에서 사라져 다시 골라 주세요"
++        }
++    }
++}
++
+ /// 첫 출발지 저장과 시간·버스·도착지 선택. 저장은 최신 `snapshot`에서 `updating…`으로 후보를 만들어 `save`로 한다.
+ extension AppModel {
+-    var journeyOrigin: StopPosition? {
+-        snapshot?.currentStation.flatMap(RouteStops.position(of:))
++    var routeAvailability: RouteDataAvailability { routeData.availability }
++    var routeCatalog: RouteCatalog? { routeData.catalog }
++
++    /// 정류장 데이터를 백그라운드에서 읽는다. 끝나면 저장된 현재 정류장이 데이터에 없는지 한 번 확인한다(BR-16).
++    @discardableResult
++    func startRouteData() -> Task<Void, Never> {
++        let loading = routeData.startLoading()
++        return Task { [weak self] in
++            await loading.value
++            self?.resolveStationAfterRouteDataReady()
++        }
++    }
++
++    /// 진행 여정이 없을 때만 본다. 진행 여정은 포기·새 여정에서 따로 정한다(BR-13).
++    private func resolveStationAfterRouteDataReady() {
++        guard let catalog = routeCatalog, let snapshot, snapshot.journey.active == nil,
++              let station = snapshot.currentStation, catalog.stopIndex(id: station.id) == nil else { return }
++        restartStationSelection(reason: .stationRemoved)
++    }
++
++    /// 정류장·여정을 비워 저장하고 최초 정류장 설정으로 보낸다. 카드·기록은 그대로다.
++    @discardableResult
++    func restartStationSelection(reason: StationResetReason) -> Bool {
++        guard case .ready = launchState, let snapshot else { return false }
++        guard saveHandlingFailure(snapshot.clearingStationsAndJourney()) else { return false }
++        stationResetNotice = reason
++        return true
+     }
+ 
+-    var journeyCandidates: [JourneyCandidate] {
+-        journeyOrigin.map(journeyPlan.candidates(from:)) ?? []
++    /// 카탈로그가 준비됐고 현재 정류장이 그 안에 있을 때의 출발점.
++    var journeyOrigin: RouteOrigin? {
++        guard let catalog = routeCatalog, let station = snapshot?.currentStation,
++              let index = catalog.stopIndex(id: station.id) else { return nil }
++        return RouteOrigin(stopIndex: index, stopID: station.id, name: catalog.stops[index].name,
++                           boundLabel: catalog.boundLabel(stopIndex: index))
++    }
++
++    /// 메인에 보이는 현재 정류장 방면. 로딩·실패·데이터에 없는 정류장이면 nil이다.
++    var currentStationBound: String? { journeyOrigin?.boundLabel }
++
++    var journeyCandidates: [RouteCandidate] {
++        guard let catalog = routeCatalog, let origin = journeyOrigin else { return [] }
++        return journeyPlan.candidates(origin: origin, catalog: catalog)
+     }
+ 
+     var journeyProceedState: ProceedState {
+-        journeyOrigin.map(journeyPlan.proceedState(from:)) ?? .originUnavailable
++        switch routeAvailability {
++        case .loading: return .routeDataLoading
++        case .failed: return .routeDataFailed
++        case let .ready(catalog):
++            guard let origin = journeyOrigin else { return .originUnavailable }
++            return journeyPlan.proceedState(origin: origin, catalog: catalog)
++        }
++    }
++
++    @discardableResult
++    func chooseJourneyRoute(_ routeID: String) -> Bool {
++        guard let catalog = routeCatalog, let origin = journeyOrigin else { return false }
++        return journeyPlan.choose(routeID: routeID, origin: origin, catalog: catalog)
+     }
+ 
+     var preparedJourney: JourneySelection? {
+@@ -21,11 +82,12 @@ extension AppModel {
+ 
+     /// 최초 정류장 설정 화면에서만 한 번 저장한다. 성공하면 메인 위에 시간 선택을 연다.
+     @discardableResult
+-    func confirmInitialStation(_ option: StationOption) -> Bool {
++    func confirmInitialStation(_ option: StopSearchOption) -> Bool {
+         guard launchState == .ready(.initialStationEntry), let current = snapshot else { return false }
+         let station = option.snapshot
+         guard save(current.updatingStage(cardIssued: current.cardIssued,
+                                          initialStation: station, currentStation: station)) else { return false }
++        stationResetNotice = nil
+         path = [.time]
+         return true
+     }
+diff --git a/ios/FocusMate/AppModel.swift b/ios/FocusMate/AppModel.swift
+index 1d9e618..f613666 100644
+--- a/ios/FocusMate/AppModel.swift
++++ b/ios/FocusMate/AppModel.swift
+@@ -96,12 +96,21 @@ final class AppModel {
+     let soundPreview: SoundPreviewController
+     /// 하차 시각·로컬 날짜, 기록 화면의 '오늘'.
+     let recordClock: RecordClock
++    /// 서울 버스 정류장 데이터. 첫 화면은 로딩을 기다리지 않는다.
++    let routeData: RouteCatalogStore
++    /// 출발 정류장을 다시 골라야 하는 이유. 메모리 안내이며 최초 정류장 저장에 성공하면 지운다.
++    var stationResetNotice: StationResetReason?
++    /// 옛 형식을 읽어 정류장·여정을 비운 경우. 시작 단계에서 v5로 한 번 저장한다.
++    @ObservationIgnored private var pendingMigration: SnapshotMigration?
+     @ObservationIgnored private var hasLoaded = false
+     @ObservationIgnored private var hasAttemptedSupplement = false
+     init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
+          soundPreview: SoundPreviewController? = nil, journeyFactory: ActiveJourneyFactory = .init(),
+-         recordClock: RecordClock = .live) {
++         recordClock: RecordClock = .live,
++         routeData: RouteCatalogStore? = nil) {
+         self.store = store
++        // 기본 인자는 메인 액터 밖에서 평가되므로 저장소는 여기서 만든다(soundPreview와 같은 이유).
++        self.routeData = routeData ?? RouteCatalogStore(load: { try RouteCatalogLoader.bundled() })
+         self.recordClock = recordClock
+         self.cardFactory = cardFactory
+         self.journeyFactory = journeyFactory
+@@ -116,11 +125,21 @@ final class AppModel {
+     }
+ 
+     /// 읽기(`loadIfNeeded`)와 보충 쓰기를 분리해 둔다 — 읽기는 쓰지 않는다.
++    /// 정류장 데이터 로딩은 시작하지 않는다(`startRouteData`, AC-55).
+     func start() {
+         loadIfNeeded()
++        persistMigrationIfNeeded()
+         supplementCardIfNeeded()
+     }
+ 
++    /// 옛 형식에서 비운 정류장·여정을 v5로 한 번 저장하고 다시 고르기 안내를 띄운다.
++    private func persistMigrationIfNeeded() {
++        guard pendingMigration == .routeDataReset, case .ready = launchState, let snapshot else { return }
++        pendingMigration = nil
++        stationResetNotice = .routeDataReplaced
++        save(snapshot)
++    }
++
+     func supplementCardIfNeeded() {
+         guard !hasAttemptedSupplement, case .ready = launchState,
+               let snapshot, snapshot.needsCardSupplement else { return }
+@@ -149,6 +168,7 @@ final class AppModel {
+         isRecovering = true
+         defer { isRecovering = false }
+         loadSnapshot()
++        persistMigrationIfNeeded()
+     }
+ 
+     func requestCleanup() {
+@@ -191,11 +211,13 @@ final class AppModel {
+ 
+     private func loadSnapshot() {
+         do {
+-            let loaded = try store.load() ?? .empty
++            let report = try store.loadReport()
++            let loaded = report?.snapshot ?? .empty
+             // 앱 종료는 여정이 끊긴 것으로 본다. 진행 중이던 여정은 메모리에서만 일시정지로 두고 파일은 다음 저장 때 바뀐다.
+             let restored = loaded.journey.active.map { loaded.updating(journey: JourneySection(active: $0.restingForLaunch())) } ?? loaded
+             let route = try restored.launchRoute()
+             snapshot = restored
++            pendingMigration = report?.migration
+             launchState = .ready(route)
+             path = []
+             saveFailure = nil
+diff --git a/ios/FocusMate/AppSnapshot.swift b/ios/FocusMate/AppSnapshot.swift
+index 1def3e3..d6b6cb9 100644
+--- a/ios/FocusMate/AppSnapshot.swift
++++ b/ios/FocusMate/AppSnapshot.swift
+@@ -1,14 +1,14 @@
+ import Foundation
+ 
++/// 저장된 정류장. 옛 파일(v1~v4)의 `direction` 키는 읽을 때 무시한다.
+ struct StationSnapshot: Codable, Equatable {
+     let id: String
+     let name: String
+-    let direction: Int
+ }
+ 
+ enum LaunchRoute: Equatable { case cardEntry, initialStationEntry, main }
+ enum SnapshotValidationIssue: Error, Equatable {
+-    case inconsistentStage, emptyStationID, emptyStationName, invalidDirection(Int)
++    case inconsistentStage, emptyStationID, emptyStationName
+     case multipleCards(Int), cardWithoutIssuance, invalidCardID
+     case invalidRecords(RecordValidationIssue)
+     case invalidCardStyle(CardStyleValidationIssue), invalidCardPhoto
+@@ -68,7 +68,6 @@ struct AppSnapshot: Codable, Equatable {
+         for station in [initialStation, currentStation].compactMap({ $0 }) {
+             guard !station.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationID }
+             guard !station.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SnapshotValidationIssue.emptyStationName }
+-            guard station.direction == 1 || station.direction == -1 else { throw SnapshotValidationIssue.invalidDirection(station.direction) }
+         }
+         guard cards.items.count <= 1 else { throw SnapshotValidationIssue.multipleCards(cards.items.count) }
+         guard cards.items.isEmpty || cardIssued else { throw SnapshotValidationIssue.cardWithoutIssuance }
+diff --git a/ios/FocusMate/ArrivalBriefingController.swift b/ios/FocusMate/ArrivalBriefingController.swift
+index eebd308..82363bd 100644
+--- a/ios/FocusMate/ArrivalBriefingController.swift
++++ b/ios/FocusMate/ArrivalBriefingController.swift
+@@ -19,9 +19,10 @@ struct ArrivalBriefingContent: Equatable {
+     let routeText: String
+     let sentences: [String]
+ 
+-    init?(journey: JourneySnapshot) {
+-        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
+-        routeText = "\(bus.number) · \(destination) 도착"
++    /// 저장된 이름만 쓰므로 지도 일관성(BR-12)과 무관하게 늘 만든다.
++    init(journey: JourneySnapshot) {
++        let destination = journey.destinationName
++        routeText = "\(journey.busNumber) · \(destination) 도착"
+         sentences = ["곧 \(destination)에 도착합니다", "버스가 멈추면 일어나주세요", "카드를 찍고 내려주세요"]
+     }
+ }
+diff --git a/ios/FocusMate/BoardingPassContent.swift b/ios/FocusMate/BoardingPassContent.swift
+index a58809d..731c1f9 100644
+--- a/ios/FocusMate/BoardingPassContent.swift
++++ b/ios/FocusMate/BoardingPassContent.swift
+@@ -11,6 +11,8 @@ struct BoardingPassContent: Equatable {
+     let dateText: String
+     let tagName: String
+     let task: String
++    /// 낭독 라벨에 들어가는 버스 문구("유형 번호번 버스").
++    let busText: String
+     /// 두 정류장 이름 중 긴 쪽 글자 수로 정하는 같은 크기(프로토타입 규칙: 4자 이하 28, 6자 이하 24, 9자 이하 20, 그 외 17).
+     let stationFontSize: CGFloat
+     let routeAccessibilityLabel: String
+@@ -29,8 +31,7 @@ struct BoardingPassContent: Equatable {
+         tagName = details.tag.name
+         task = details.task
+         stationFontSize = Self.fontSize(longest: max(originName.count, destinationName.count))
+-        let bus = BusLine.all.first { $0.id == journey.busID }
+-        let busText = bus.map { "\($0.kind) \($0.number)번 버스" } ?? "\(journey.busNumber)번 버스"
++        busText = "\(journey.busKind) \(journey.busNumber)번 버스"
+         routeAccessibilityLabel = "\(originName)에서 \(destinationName)까지, \(busText), \(journey.minutes)분 여행"
+     }
+ 
+diff --git a/ios/FocusMate/FocusMateApp.swift b/ios/FocusMate/FocusMateApp.swift
+index 2231d58..478986a 100644
+--- a/ios/FocusMate/FocusMateApp.swift
++++ b/ios/FocusMate/FocusMateApp.swift
+@@ -23,8 +23,9 @@ struct FocusMateApp: App {
+             #if DEBUG
+             let bootstrap = try UITestBootstrap(arguments: ProcessInfo.processInfo.arguments, applicationSupport: support)
+             testBootstrap = bootstrap
+-            let model = AppModel(store: bootstrap?.modelStore ?? LocalSnapshotStore(fileURL: operationalURL),
+-                                 soundPreview: bootstrap?.makeSoundPreview())
++            let model = bootstrap.map {
++                AppModel(store: $0.modelStore, soundPreview: $0.makeSoundPreview(), routeData: $0.makeRouteCatalogStore())
++            } ?? AppModel(store: LocalSnapshotStore(fileURL: operationalURL))
+             _model = State(initialValue: model)
+             if let bootstrap {
+                 let recorder = bootstrap.makeFeedbackRecorder()
+@@ -99,6 +100,11 @@ struct FocusMateApp: App {
+         #endif
+         model.start()
+         #if DEBUG
++        if testBootstrap?.startsRouteData != false { model.startRouteData() }
++        #else
++        model.startRouteData()
++        #endif
++        #if DEBUG
+         do {
+             try testBootstrap?.applySaveScenario(to: model)
+             try testBootstrap?.applyRoute(to: model)
+diff --git a/ios/FocusMate/InitialStationSearchView.swift b/ios/FocusMate/InitialStationSearchView.swift
+index d198224..c24dc64 100644
+--- a/ios/FocusMate/InitialStationSearchView.swift
++++ b/ios/FocusMate/InitialStationSearchView.swift
+@@ -9,20 +9,16 @@ struct InitialStationSearchView: View {
+     var body: some View {
+         VStack(alignment: .leading, spacing: 16) {
+             Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
++            if let notice = model.stationResetNotice {
++                Text(notice.text).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
++                    .accessibilityIdentifier("search.resetNotice")
++            }
+             ScrollView {
+                 VStack(alignment: .leading, spacing: 12) {
+-                    TextField("정류장 검색", text: $search.query)
++                    TextField("정류장 이름 또는 번호", text: $search.query)
+                         .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                         .accessibilityLabel("정류장 검색").accessibilityIdentifier("search.query")
+-                    if search.results.isEmpty {
+-                        Text("결과가 없어요").foregroundStyle(.secondary).accessibilityIdentifier("search.empty")
+-                    }
+-                    ForEach(search.results) { option in
+-                        resultButton(option)
+-                    }
+-                    if let confirmation = search.confirmationText {
+-                        Text(confirmation).accessibilityIdentifier("search.confirmation")
+-                    }
++                    results
+                 }
+             }
+             if model.saveFailure != nil {
+@@ -30,23 +26,51 @@ struct InitialStationSearchView: View {
+                     .foregroundStyle(.secondary).accessibilityIdentifier("search.saveFailure")
+             }
+             Button("확인") {
+-                if let option = search.selectedOption { model.confirmInitialStation(option) }
++                if let catalog = model.routeCatalog, let option = search.selectedOption(in: catalog) {
++                    model.confirmInitialStation(option)
++                }
+             }
+             .buttonStyle(.borderedProminent).frame(maxWidth: .infinity)
+-            .disabled(!search.canConfirm)
++            .disabled(!(model.routeCatalog.map(search.canConfirm(in:)) ?? false))
+             .accessibilityHint("고른 정류장에서 출발해요").accessibilityIdentifier("search.confirm")
+         }
+     }
+ 
+-    private func resultButton(_ option: StationOption) -> some View {
+-        let isSelected = search.selectedOption == option
++    @ViewBuilder private var results: some View {
++        switch model.routeAvailability {
++        case .loading:
++            Text(ProceedState.routeDataLoading.title).foregroundStyle(.secondary).accessibilityIdentifier("search.loading")
++        case .failed:
++            Text(ProceedState.routeDataFailed.title).foregroundStyle(.secondary).accessibilityIdentifier("search.loadFailed")
++        case let .ready(catalog):
++            switch search.result(in: catalog) {
++            case .prompt:
++                Text("정류장 이름이나 번호를 입력하세요").foregroundStyle(.secondary).accessibilityIdentifier("search.prompt")
++            case .empty:
++                Text("결과가 없어요").foregroundStyle(.secondary).accessibilityIdentifier("search.empty")
++            case let .results(options, overflow):
++                ForEach(options) { option in resultButton(option, catalog: catalog) }
++                if overflow {
++                    Text("결과가 많아요. 더 자세히 입력해 주세요").foregroundStyle(.secondary)
++                        .accessibilityIdentifier("search.overflow")
++                }
++                if let confirmation = search.confirmationText(in: catalog) {
++                    Text(confirmation).accessibilityIdentifier("search.confirmation")
++                }
++            }
++        }
++    }
++
++    private func resultButton(_ option: StopSearchOption, catalog: RouteCatalog) -> some View {
++        let isSelected = search.selectedID == option.id
+         return Button {
+-            _ = search.select(option.id)
++            _ = search.select(option.id, in: catalog)
+         } label: {
+             HStack {
+                 VStack(alignment: .leading, spacing: 4) {
+                     Text(option.name).font(.headline)
+-                    Text(option.boundLabel).foregroundStyle(.secondary)
++                    if let ars = option.ars { Text(ars).foregroundStyle(.secondary) }
++                    if let bound = option.boundLabel { Text(bound).foregroundStyle(.secondary) }
+                 }
+                 Spacer(minLength: 0)
+                 if isSelected { Image(systemName: "checkmark.circle.fill") }
+@@ -55,7 +79,7 @@ struct InitialStationSearchView: View {
+         }
+         .buttonStyle(.bordered)
+         .accessibilityElement(children: .ignore)
+-        .accessibilityLabel("\(option.name), \(option.boundLabel)")
++        .accessibilityLabel(option.accessibilityLabel)
+         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+         .accessibilityIdentifier("search.result.\(option.id)")
+     }
+diff --git a/ios/FocusMate/JourneyAbandonBar.swift b/ios/FocusMate/JourneyAbandonBar.swift
+index df647d4..7e0603f 100644
+--- a/ios/FocusMate/JourneyAbandonBar.swift
++++ b/ios/FocusMate/JourneyAbandonBar.swift
+@@ -5,11 +5,13 @@ import SwiftUI
+ @MainActor
+ struct JourneyAbandonBar: View {
+     let timer: JourneyTimerController
++    private let abandoner: JourneyAbandoning
+     @State private var flow: JourneyAbandonController
+     @AccessibilityFocusState private var abandonFocused: Bool
+ 
+     init(abandoner: JourneyAbandoning, timer: JourneyTimerController) {
+         self.timer = timer
++        self.abandoner = abandoner
+         _flow = State(initialValue: JourneyAbandonController(abandoner: abandoner))
+     }
+ 
+@@ -24,6 +26,8 @@ struct JourneyAbandonBar: View {
+                         .overlay(Capsule().stroke(Color(white: 0.6), lineWidth: 1))
+                 }
+                 .buttonStyle(.plain)
++                // 정류장 데이터를 읽는 중에는 도달 정류장을 정할 수 없다(AC-43).
++                .disabled(!abandoner.canEndActiveJourney)
+                 .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+                 .accessibilityLabel(JourneyLifecycleText.abandonButton)
+                 .accessibilityIdentifier("journey.abandon")
+@@ -61,7 +65,7 @@ struct JourneyAbandonBar: View {
+ 
+     #if DEBUG
+     private var diagnostics: some View {
+-        let object: [String: Any] = ["visible": isPaused, "confirming": flow.isConfirming,
++        let object: [String: Any] = ["visible": isPaused, "enabled": abandoner.canEndActiveJourney, "confirming": flow.isConfirming,
+                                      "showsFailure": flow.showsFailure,
+                                      "focus": flow.focusTarget == .abandonButton ? "abandon" : "none"]
+         let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
+diff --git a/ios/FocusMate/JourneyAbandonController.swift b/ios/FocusMate/JourneyAbandonController.swift
+index a0c7a7e..abd88bd 100644
+--- a/ios/FocusMate/JourneyAbandonController.swift
++++ b/ios/FocusMate/JourneyAbandonController.swift
+@@ -8,6 +8,8 @@ enum LifecycleActionResult: Equatable { case done, rejected, saveFailed }
+ @MainActor
+ protocol JourneyAbandoning: AnyObject {
+     func abandonJourney(timerPaused: Bool) -> LifecycleActionResult
++    /// 정류장 데이터를 읽는 중이면 false. 포기 버튼을 잠근다(AC-44).
++    var canEndActiveJourney: Bool { get }
+ }
+ 
+ /// 포기 확인 흐름. 확정은 `isConfirming`에 의존하지 않는다 — alert 바인딩 해제와 버튼 동작의 호출 순서가 보장되지 않기 때문이다.
+diff --git a/ios/FocusMate/JourneyAlighting.swift b/ios/FocusMate/JourneyAlighting.swift
+index bb2d003..050dee9 100644
+--- a/ios/FocusMate/JourneyAlighting.swift
++++ b/ios/FocusMate/JourneyAlighting.swift
+@@ -1,7 +1,7 @@
+ import Foundation
+ 
+ /// 하차 저장을 만들 수 없는 이유. 화면은 실패 안내만 하고 저장본을 바꾸지 않는다.
+-enum AlightingIssue: Error, Equatable { case noActiveJourney, notArrived, unknownCatalog }
++enum AlightingIssue: Error, Equatable { case noActiveJourney, notArrived }
+ 
+ /// 하차 시각과 로컬 날짜의 출처(BR-5). 테스트는 고정 시각·시간대를 주입한다.
+ struct RecordClock {
+@@ -24,15 +24,14 @@ extension PreparationTagColor {
+ }
+ 
+ extension RecordCompletionInput {
+-    /// 하차한 여정의 완료 기록 입력. 카탈로그 밖 여정이면 nil이다.
+-    init?(alighting journey: JourneySnapshot, completedAt: Date) {
+-        guard let bus = journey.bus, let from = journey.originName, let to = journey.destinationName else { return nil }
++    /// 하차한 여정의 완료 기록 입력. 버스·정류장 이름은 승차 때 저장한 값이다.
++    init(alighting journey: JourneySnapshot, completedAt: Date) {
+         let formatter = ISO8601DateFormatter()
+         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+         formatter.timeZone = TimeZone(secondsFromGMT: 0)
+-        self.init(id: journey.id, completedAt: formatter.string(from: completedAt), bus: bus.number,
++        self.init(id: journey.id, completedAt: formatter.string(from: completedAt), bus: journey.busNumber,
+                   tag: journey.tag.name, tagColor: journey.tag.color.recordHex, task: journey.task,
+-                  minutes: journey.minutes, sound: journey.sound.title, from: from, to: to)
++                  minutes: journey.minutes, sound: journey.sound.title, from: journey.originName, to: journey.destinationName)
+     }
+ }
+ 
+@@ -40,11 +39,8 @@ extension AppSnapshot {
+     /// 기록 생성·도착지 반영·진행 여정 제거를 한 후보로 만든다(BR-3). 이미 기록된 여정이면 기록은 그대로다(BR-2).
+     func alightingActiveJourney(completedAt: Date, timeZone: TimeZone) throws -> (snapshot: AppSnapshot, record: RecordCompletionInput) {
+         guard let active = journey.active else { throw AlightingIssue.noActiveJourney }
+-        guard active.isArrived else { throw AlightingIssue.notArrived }
+-        guard let station = active.reachedStation,
+-              let record = RecordCompletionInput(alighting: active, completedAt: completedAt) else {
+-            throw AlightingIssue.unknownCatalog
+-        }
++        guard let station = active.arrivedStation else { throw AlightingIssue.notArrived }
++        let record = RecordCompletionInput(alighting: active, completedAt: completedAt)
+         let records = try self.records.recordingCompletion(record, outcome: .alighted, timeZone: timeZone)
+         return (endingActiveJourney(at: station).updating(records: records), record)
+     }
+diff --git a/ios/FocusMate/JourneyCourse.swift b/ios/FocusMate/JourneyCourse.swift
+index 75c8f5e..d1ff727 100644
+--- a/ios/FocusMate/JourneyCourse.swift
++++ b/ios/FocusMate/JourneyCourse.swift
+@@ -6,39 +6,10 @@ struct CoursePoint: Equatable, Hashable {
+     let longitude: Double
+ }
+ 
++/// 코스 위의 정류장. `index`는 코스 위치(출발 0), 나머지는 카탈로그 정류장 값이다.
+ struct CourseStop: Equatable {
+     let index: Int
+     let id: String
+     let name: String
+     let point: CoursePoint
+ }
+-
+-/// 앱 내 가상 코스(BR-1). 실제 버스 노선이 아니며 정류장 사이를 직선으로 잇는다.
+-/// 좌표는 정류장 id에 묶어 두어, 카탈로그가 서울 전역으로 늘어도 이 표에 항목만 추가하면 된다.
+-enum JourneyCourse {
+-    static let seoulBounds: (latitude: ClosedRange<Double>, longitude: ClosedRange<Double>) =
+-        (37.41...37.72, 126.76...127.19)
+-
+-    /// 각 정류장의 실제 위치 근사(소수 4자리).
+-    static let coordinates: [String: CoursePoint] = [
+-        "seongsu": CoursePoint(latitude: 37.5446, longitude: 127.0559),
+-        "seongsuDong": CoursePoint(latitude: 37.5445, longitude: 127.0507),
+-        "ttukseom": CoursePoint(latitude: 37.5474, longitude: 127.0474),
+-        "seongdongSportsCenter": CoursePoint(latitude: 37.5466, longitude: 127.0429),
+-        "seoulForest": CoursePoint(latitude: 37.5437, longitude: 127.0447),
+-        "seoulForestGate": CoursePoint(latitude: 37.5432, longitude: 127.0396),
+-        "seongsuBridgeNorth": CoursePoint(latitude: 37.5403, longitude: 127.0355),
+-        "ttukseomHangangPark": CoursePoint(latitude: 37.5296, longitude: 127.0670),
+-        "seongsuIntersection": CoursePoint(latitude: 37.5410, longitude: 127.0573),
+-    ]
+-
+-    static let stops: [CourseStop] = RouteStops.all.enumerated().map { index, stop in
+-        guard let point = coordinates[stop.id] else { preconditionFailure("좌표 없는 정류장: \(stop.id)") }
+-        return CourseStop(index: index, id: stop.id, name: stop.name, point: point)
+-    }
+-
+-    static func point(at index: Int) -> CoursePoint { stops[RouteStops.wrap(index)].point }
+-
+-    /// 마지막 정류장에서 첫 정류장으로 돌아오는 닫힌 선.
+-    static var closedPath: [CoursePoint] { stops.map(\.point) + [stops[0].point] }
+-}
+diff --git a/ios/FocusMate/JourneyCourseProgress.swift b/ios/FocusMate/JourneyCourseProgress.swift
+index 69e71c6..55a4906 100644
+--- a/ios/FocusMate/JourneyCourseProgress.swift
++++ b/ios/FocusMate/JourneyCourseProgress.swift
+@@ -1,32 +1,35 @@
+ import Foundation
+ 
+-/// 지도 계산에 필요한 여정 입력. 진도 계산은 정수 초로 해서 경계 값이 정확히 맞게 한다.
++/// 지도 계산에 필요한 여정 구간(실제 노선의 출발 → 도착). 진도 계산은 정수 초로 해서 경계 값이 정확히 맞게 한다.
+ struct CourseJourney: Equatable {
+-    let originIndex: Int
+-    let direction: Int
+-    let minutesPerStop: Int
+-    let totalMinutes: Int
++    /// 코스 위치 0…k(출발 포함).
++    let stops: [CourseStop]
++    let segmentSeconds: [Int]
++    let segmentMeters: [Int]
++    /// 0을 포함한 k+1개.
++    let cumulativeSeconds: [Int]
+ 
+-    var totalStops: Int { totalMinutes / minutesPerStop }
+-    var totalSeconds: Int { totalMinutes * 60 }
+-    var destinationIndex: Int { RouteStops.wrap(originIndex + direction * totalStops) }
++    var totalSeconds: Int { cumulativeSeconds.last! }
++    var totalStops: Int { segmentSeconds.count }
+ 
+-    init(originIndex: Int, direction: Int, minutesPerStop: Int, totalMinutes: Int) {
+-        self.originIndex = originIndex
+-        self.direction = direction
+-        self.minutesPerStop = minutesPerStop
+-        self.totalMinutes = totalMinutes
++    init(leg: RouteLeg, catalog: RouteCatalog) {
++        stops = leg.stopIndices.enumerated().map { position, index in
++            let stop = catalog.stops[index]
++            return CourseStop(index: position, id: stop.id, name: stop.name, point: stop.point)
++        }
++        segmentSeconds = leg.segmentSeconds
++        segmentMeters = leg.segmentMeters
++        cumulativeSeconds = leg.cumulativeSeconds
+     }
+ 
+-    /// 저장된 여정에서 지도 입력을 만든다. 카탈로그 밖 값이거나 저장된 도착지가 계산값과 다르면 nil이다.
+-    /// nil이면 여행 화면은 지도 없이 W05 배치로 보인다(W09 도착 안내도 같은 일관성 규칙을 따른다).
+-    init?(journey: JourneySnapshot) {
+-        guard let origin = RouteStops.all.firstIndex(where: { $0.id == journey.originStopID }),
+-              let bus = journey.bus, bus.minutesPerStop > 0, journey.minutes % bus.minutesPerStop == 0
++    /// 저장된 여정에서 구간을 다시 만든다. 노선·출발 정류장이 없거나, 구간이 없거나, 다시 계산한 도착지가 저장값과 다르면 nil이다(BR-12).
++    /// nil이면 여행 화면은 지도 없이 W05 배치로 보인다.
++    init?(journey: JourneySnapshot, catalog: RouteCatalog) {
++        guard let route = catalog.routeIndex(id: journey.busID), let origin = catalog.stopIndex(id: journey.originStopID),
++              let leg = RouteLegFinder.leg(route: route, originStop: origin, minutes: journey.minutes, in: catalog),
++              catalog.stops[leg.stopIndices[leg.stopIndices.count - 1]].id == journey.destinationStopID
+         else { return nil }
+-        self.init(originIndex: origin, direction: journey.direction, minutesPerStop: bus.minutesPerStop,
+-                  totalMinutes: journey.minutes)
+-        guard RouteStops.all[destinationIndex].id == journey.destinationStopID else { return nil }
++        self.init(leg: leg, catalog: catalog)
+     }
+ }
+ 
+@@ -42,60 +45,63 @@ struct CourseBusPosition: Equatable {
+ 
+ /// 진도 → 버스 위치·남은 값(BR-2, BR-7). 진도 자체는 타이머가 소유하고 여기서는 읽기만 한다.
+ enum JourneyCourseProgress {
+-    private static let hundredthsKmPerStop = 55
+-
+     static func position(of journey: CourseJourney, elapsedSeconds: Int) -> CourseBusPosition {
+-        let (k, remainder) = travelled(journey, elapsedSeconds)
+-        if k >= journey.totalStops {
+-            let to = journey.destinationIndex
+-            let from = RouteStops.wrap(to - journey.direction)
+-            return CourseBusPosition(point: JourneyCourse.point(at: to), headingDegrees: heading(from: from, to: to),
+-                                     segmentFrom: to, segmentTo: to, fraction: 0, isArrived: true)
++        let e = clamped(journey, elapsedSeconds)
++        let j = reachedIndex(journey, e)
++        let k = journey.totalStops
++        if j >= k {
++            return CourseBusPosition(point: journey.stops[k].point, headingDegrees: heading(journey, segment: k - 1),
++                                     segmentFrom: k, segmentTo: k, fraction: 0, isArrived: true)
+         }
+-        let from = RouteStops.wrap(journey.originIndex + journey.direction * k)
+-        let to = RouteStops.wrap(from + journey.direction)
+-        let fraction = Double(remainder) / Double(secondsPerStop(journey))
+-        let a = JourneyCourse.point(at: from), b = JourneyCourse.point(at: to)
++        let fraction = Double(e - journey.cumulativeSeconds[j]) / Double(journey.segmentSeconds[j])
++        let a = journey.stops[j].point, b = journey.stops[j + 1].point
+         let point = CoursePoint(latitude: a.latitude + (b.latitude - a.latitude) * fraction,
+                                 longitude: a.longitude + (b.longitude - a.longitude) * fraction)
+-        return CourseBusPosition(point: point, headingDegrees: heading(from: from, to: to),
+-                                 segmentFrom: from, segmentTo: to, fraction: fraction, isArrived: false)
++        return CourseBusPosition(point: point, headingDegrees: heading(journey, segment: j),
++                                 segmentFrom: j, segmentTo: j + 1, fraction: fraction, isArrived: false)
+     }
+ 
+     static func nextStopIndex(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
+-        let k = travelled(journey, elapsedSeconds).stops
+-        return RouteStops.wrap(journey.originIndex + journey.direction * min(journey.totalStops, k + 1))
++        min(journey.totalStops, reachedIndex(journey, clamped(journey, elapsedSeconds)) + 1)
+     }
+ 
+     static func remainingStops(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
+-        journey.totalStops - min(journey.totalStops, travelled(journey, elapsedSeconds).stops)
++        journey.totalStops - reachedIndex(journey, clamped(journey, elapsedSeconds))
+     }
+ 
+-    /// 0.1km 단위 정수. 소수 첫째 자리 반올림(half-up)을 정수 산술로 한다.
++    /// 남은 거리(m)를 0.1km 단위 정수로 반올림(half-up)한다. 지나는 중인 구간은 남은 시간 비율만큼 센다.
+     static func remainingDistanceTenthsKm(of journey: CourseJourney, elapsedSeconds: Int) -> Int {
+-        let total = journey.totalSeconds
+-        guard total > 0 else { return 0 }
+-        let elapsed = clamped(journey, elapsedSeconds)
+-        let scaled = journey.totalStops * hundredthsKmPerStop * (total - elapsed)
+-        return (2 * scaled + 10 * total) / (20 * total)
++        let e = clamped(journey, elapsedSeconds)
++        let j = reachedIndex(journey, e)
++        guard j < journey.totalStops else { return 0 }
++        let seconds = journey.segmentSeconds[j]
++        let ahead = journey.segmentMeters[(j + 1)...].reduce(0, +)
++        // 남은 m × 구간 초. 나눗셈을 한 번만 해서 반올림 오차를 없앤다.
++        let scaled = ahead * seconds + journey.segmentMeters[j] * (journey.cumulativeSeconds[j + 1] - e)
++        return (2 * scaled + 100 * seconds) / (200 * seconds)
+     }
+ 
+-    private static func secondsPerStop(_ journey: CourseJourney) -> Int { journey.minutesPerStop * 60 }
+-
+     private static func clamped(_ journey: CourseJourney, _ elapsed: Int) -> Int {
+         min(max(elapsed, 0), journey.totalSeconds)
+     }
+ 
+-    private static func travelled(_ journey: CourseJourney, _ elapsed: Int) -> (stops: Int, remainder: Int) {
+-        let e = clamped(journey, elapsed), sps = secondsPerStop(journey)
+-        return (e / sps, e % sps)
++    /// j = max{i | cum[i] ≤ e}.
++    private static func reachedIndex(_ journey: CourseJourney, _ elapsed: Int) -> Int {
++        journey.cumulativeSeconds.lastIndex { $0 <= elapsed } ?? 0
+     }
+ 
+-    /// 국지 평면 근사 방위(북쪽 0°, 시계 방향). 같은 구간을 반대로 가면 정확히 180° 차이가 난다.
+-    private static func heading(from: Int, to: Int) -> Double {
+-        let a = JourneyCourse.point(at: from), b = JourneyCourse.point(at: to)
+-        let meanLatitude = (a.latitude + b.latitude) / 2 * .pi / 180
+-        let degrees = atan2((b.longitude - a.longitude) * cos(meanLatitude), b.latitude - a.latitude) * 180 / .pi
+-        return degrees < 0 ? degrees + 360 : degrees
++    /// 국지 평면 근사 방위(북쪽 0°, 시계 방향). 좌표가 같은 구간은 직전 구간 방위를 쓴다(첫 구간이면 0).
++    private static func heading(_ journey: CourseJourney, segment: Int) -> Double {
++        var i = segment
++        while i >= 0 {
++            let a = journey.stops[i].point, b = journey.stops[i + 1].point
++            if a != b {
++                let meanLatitude = (a.latitude + b.latitude) / 2 * .pi / 180
++                let degrees = atan2((b.longitude - a.longitude) * cos(meanLatitude), b.latitude - a.latitude) * 180 / .pi
++                return degrees < 0 ? degrees + 360 : degrees
++            }
++            i -= 1
++        }
++        return 0
+     }
+ }
+diff --git a/ios/FocusMate/JourneyLiveActivityPolicy.swift b/ios/FocusMate/JourneyLiveActivityPolicy.swift
+index f8f7fec..495506c 100644
+--- a/ios/FocusMate/JourneyLiveActivityPolicy.swift
++++ b/ios/FocusMate/JourneyLiveActivityPolicy.swift
+@@ -25,11 +25,10 @@ struct JourneyLaunchPlan: Equatable {
+ 
+ /// 앱 밖 표시 규칙. 진도는 계산하지 않고 타이머가 준 남은 초만 쓴다(앱 시작 정리만 저장값에서 남은 초를 구한다).
+ enum JourneyLiveActivityPolicy {
+-    /// 도착지는 저장된 이름을 그대로 쓴다(지도 일관성 규칙과 무관, AC-31). 버스·도착지를 모르면 표시하지 않는다.
+-    static func attributes(for journey: JourneySnapshot) -> JourneyActivityAttributes? {
+-        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
+-        return JourneyActivityAttributes(journeyID: journey.id, busNumber: bus.number, busKind: bus.kind,
+-                                         destinationName: destination)
++    /// 버스·도착지는 저장된 이름을 그대로 쓴다(지도 일관성 규칙과 무관, AC-31).
++    static func attributes(for journey: JourneySnapshot) -> JourneyActivityAttributes {
++        JourneyActivityAttributes(journeyID: journey.id, busNumber: journey.busNumber, busKind: journey.busKind,
++                                  destinationName: journey.destinationName)
+     }
+ 
+     /// 운행 중은 종료 시각에 만료되고, 일시정지는 만료가 없다(BR-5). 도착은 종료 대상이라 요청이 없다.
+diff --git a/ios/FocusMate/JourneyLiveActivitySync.swift b/ios/FocusMate/JourneyLiveActivitySync.swift
+index 7099586..754be65 100644
+--- a/ios/FocusMate/JourneyLiveActivitySync.swift
++++ b/ios/FocusMate/JourneyLiveActivitySync.swift
+@@ -19,10 +19,8 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
+     private var startFailed = false
+     private var lastSent: SentKey?
+ 
+-    /// 버스·도착지를 모르는 여행은 표시하지 않는다.
+-    init?(journey: JourneySnapshot, gateway: LiveActivityGateway, now: @escaping @MainActor () -> Date = { Date() }) {
+-        guard let attributes = JourneyLiveActivityPolicy.attributes(for: journey) else { return nil }
+-        self.attributes = attributes
++    init(journey: JourneySnapshot, gateway: LiveActivityGateway, now: @escaping @MainActor () -> Date = { Date() }) {
++        attributes = JourneyLiveActivityPolicy.attributes(for: journey)
+         self.gateway = gateway
+         self.now = now
+     }
+diff --git a/ios/FocusMate/JourneyMapController.swift b/ios/FocusMate/JourneyMapController.swift
+index 983b306..d5640c3 100644
+--- a/ios/FocusMate/JourneyMapController.swift
++++ b/ios/FocusMate/JourneyMapController.swift
+@@ -27,9 +27,11 @@ final class JourneyMapController {
+         remainingDistanceTenthsKm = JourneyCourseProgress.remainingDistanceTenthsKm(of: journey, elapsedSeconds: elapsedSeconds)
+     }
+ 
+-    var routePoints: [CoursePoint] { JourneyCourse.closedPath }
+-    var visibleStops: [CourseStop] { state.showsStops ? JourneyCourse.stops : [] }
+-    var destinationStop: CourseStop { JourneyCourse.stops[journey.destinationIndex] }
++    /// 출발 → 도착 실제 노선 구간. 닫는 선이 없다.
++    var routePoints: [CoursePoint] { journey.stops.map(\.point) }
++    var visibleStops: [CourseStop] { state.showsStops ? journey.stops : [] }
++    var destinationStop: CourseStop { journey.stops[journey.stops.count - 1] }
++    var nextStop: CourseStop { journey.stops[nextStopIndex] }
+ 
+     func sync(status: JourneyTimerController.Status, elapsedSeconds: Int) {
+         if status != state.status { state.timerStatusChanged(status) }
+diff --git a/ios/FocusMate/JourneyMapView.swift b/ios/FocusMate/JourneyMapView.swift
+index 637cc0c..6025c4c 100644
+--- a/ios/FocusMate/JourneyMapView.swift
++++ b/ios/FocusMate/JourneyMapView.swift
+@@ -64,7 +64,7 @@ struct JourneyMapView: View {
+                 .allowsHitTesting(false)
+                 .accessibilityElement()
+                 .accessibilityLabel(JourneyMapDisplay.mapLabel)
+-                .accessibilityValue(JourneyMapDisplay.mapValue(next: JourneyCourse.stops[map.nextStopIndex].name,
++                .accessibilityValue(JourneyMapDisplay.mapValue(next: map.nextStop.name,
+                                                                destination: map.destinationStop.name))
+                 .accessibilityIdentifier("journey.map")
+         }
+diff --git a/ios/FocusMate/JourneyPlanDraft.swift b/ios/FocusMate/JourneyPlanDraft.swift
+index a4b57e8..474d109 100644
+--- a/ios/FocusMate/JourneyPlanDraft.swift
++++ b/ios/FocusMate/JourneyPlanDraft.swift
+@@ -1,22 +1,38 @@
+ import Foundation
+ 
++/// 시간 선택의 출발점. 카탈로그 정류장 색인과 승차 시점 이름을 함께 둔다.
++struct RouteOrigin: Equatable {
++    let stopIndex: Int
++    let stopID: String
++    let name: String
++    let boundLabel: String?
++}
++
+ /// 준비 진입점에 넘기는 여정 선택(용어 사전의 "여정 선택"). 저장하지 않는다.
+ struct JourneySelection: Equatable {
+-    let origin: StopPosition
++    let originStopID: String
++    let originName: String
++    let boundLabel: String?
+     let minutes: Int
++    /// 노선 id(`RouteCandidate.routeID`).
+     let busID: String
+     let busNumber: String
++    let busKind: String
++    let destinationStopID: String
+     let destination: String
+     let stops: Int
++    let distanceMeters: Int
+ }
+ 
+ enum ProceedState: Equatable {
+-    case originUnavailable, noCandidates, needsSelection, ready(JourneySelection)
++    case routeDataLoading, routeDataFailed, originUnavailable, noCandidates, needsSelection, ready(JourneySelection)
+ 
+     var title: String {
+         switch self {
++        case .routeDataLoading: "정류장 정보를 불러오는 중이에요"
++        case .routeDataFailed: "정류장 정보를 불러오지 못했어요. 앱을 다시 실행해 주세요"
+         case .originUnavailable: "출발 정류장을 확인할 수 없어요"
+-        case .noCandidates: "이 시간의 도착 후보가 없어요"
++        case .noCandidates: "이 시간에 맞는 버스가 없어요"
+         case .needsSelection: "버스와 도착지를 선택하세요"
+         case .ready: "이 여정 준비하기"
+         }
+@@ -31,36 +47,39 @@ enum ProceedState: Equatable {
+ /// 시간 선택 화면의 상태. 앱 실행 중 메모리에만 둔다.
+ struct JourneyPlanDraft: Equatable {
+     private(set) var minutes: Int = JourneyPlanner.initialMinutes
+-    private(set) var selectedBusID: String?
++    private(set) var selectedRouteID: String?
+ 
+-    /// 범위 안으로 맞춘 값이 실제로 바뀌면 같은 버스가 새 시간에도 후보여도 선택을 해제한다.
++    /// 범위 안으로 맞춘 값이 실제로 바뀌면 같은 노선이 새 시간에도 후보여도 선택을 해제한다.
+     mutating func setMinutes(_ value: Int) {
+         let clamped = JourneyPlanner.clamp(value)
+         guard clamped != minutes else { return }
+         minutes = clamped
+-        selectedBusID = nil
++        selectedRouteID = nil
+     }
+ 
+-    mutating func choose(busID: String, from origin: StopPosition) -> Bool {
+-        guard candidates(from: origin).contains(where: { $0.bus.id == busID }) else { return false }
+-        selectedBusID = busID
++    mutating func choose(routeID: String, origin: RouteOrigin, catalog: RouteCatalog) -> Bool {
++        guard candidates(origin: origin, catalog: catalog).contains(where: { $0.routeID == routeID }) else { return false }
++        selectedRouteID = routeID
+         return true
+     }
+ 
+-    func candidates(from origin: StopPosition) -> [JourneyCandidate] {
+-        JourneyPlanner.candidates(minutes: minutes, from: origin)
++    func candidates(origin: RouteOrigin, catalog: RouteCatalog) -> [RouteCandidate] {
++        RouteCandidates.candidates(minutes: minutes, originStop: origin.stopIndex, in: catalog)
+     }
+ 
+-    func selectedCandidate(from origin: StopPosition) -> JourneyCandidate? {
+-        candidates(from: origin).first { $0.bus.id == selectedBusID }
++    func selectedCandidate(origin: RouteOrigin, catalog: RouteCatalog) -> RouteCandidate? {
++        candidates(origin: origin, catalog: catalog).first { $0.routeID == selectedRouteID }
+     }
+ 
+-    func proceedState(from origin: StopPosition) -> ProceedState {
+-        if let candidate = selectedCandidate(from: origin) {
+-            return .ready(JourneySelection(origin: origin, minutes: minutes, busID: candidate.bus.id,
+-                                           busNumber: candidate.bus.number, destination: candidate.destination,
+-                                           stops: candidate.stops))
++    func proceedState(origin: RouteOrigin, catalog: RouteCatalog) -> ProceedState {
++        let candidates = candidates(origin: origin, catalog: catalog)
++        if let candidate = candidates.first(where: { $0.routeID == selectedRouteID }) {
++            return .ready(JourneySelection(
++                originStopID: origin.stopID, originName: origin.name, boundLabel: origin.boundLabel,
++                minutes: minutes, busID: candidate.routeID, busNumber: candidate.busNumber, busKind: candidate.busKind,
++                destinationStopID: candidate.destinationStopID, destination: candidate.destination,
++                stops: candidate.stops, distanceMeters: candidate.leg.distanceMeters))
+         }
+-        return candidates(from: origin).isEmpty ? .noCandidates : .needsSelection
++        return candidates.isEmpty ? .noCandidates : .needsSelection
+     }
+ }
+diff --git a/ios/FocusMate/JourneyPlanner.swift b/ios/FocusMate/JourneyPlanner.swift
+index 48fd2d5..99375a5 100644
+--- a/ios/FocusMate/JourneyPlanner.swift
++++ b/ios/FocusMate/JourneyPlanner.swift
+@@ -1,41 +1,11 @@
+ import Foundation
+ 
+-/// 고른 시간에 정확히 맞는 버스 한 대와 그 도착지.
+-struct JourneyCandidate: Identifiable, Equatable {
+-    let bus: BusLine
+-    let minutes: Int
+-    let stops: Int
+-    let destination: String
+-
+-    var id: String { bus.id }
+-    var distanceText: String { JourneyPlanner.distanceText(stops: stops) }
+-    var accessibilityLabel: String { "\(bus.kind) \(bus.number)번, \(destination), \(minutes)분, \(stops)정류장" }
+-}
+-
++/// 시간 선택 휠의 범위. 후보 계산은 `RouteCandidates`가 한다.
+ enum JourneyPlanner {
+     static let minuteRange: ClosedRange<Int> = 15...360
+     static let initialMinutes = 25
+-    /// 정류장 하나의 거리(0.55km)를 0.01km 단위 정수로 둔다. 부동소수점 표기 오차를 피하기 위해서다.
+-    private static let hundredthsKmPerStop = 55
+ 
+     static func clamp(_ minutes: Int) -> Int {
+         min(max(minutes, minuteRange.lowerBound), minuteRange.upperBound)
+     }
+-
+-    static func candidates(minutes: Int, from origin: StopPosition) -> [JourneyCandidate] {
+-        guard minuteRange.contains(minutes) else { return [] }
+-        return BusLine.all.filter { minutes % $0.minutesPerStop == 0 }.map { bus in
+-            let stops = minutes / bus.minutesPerStop
+-            return JourneyCandidate(bus: bus, minutes: minutes, stops: stops,
+-                                    destination: RouteStops.name(at: origin.index + origin.direction * stops))
+-        }
+-    }
+-
+-    static func distanceText(stops: Int) -> String {
+-        let hundredths = stops * hundredthsKmPerStop
+-        let whole = hundredths / 100, fraction = hundredths % 100
+-        if fraction == 0 { return "\(whole)km" }
+-        if fraction % 10 == 0 { return "\(whole).\(fraction / 10)km" }
+-        return "\(whole).\(String(format: "%02d", fraction))km"
+-    }
+ }
+diff --git a/ios/FocusMate/JourneyReach.swift b/ios/FocusMate/JourneyReach.swift
+index 009c1db..f3bb537 100644
+--- a/ios/FocusMate/JourneyReach.swift
++++ b/ios/FocusMate/JourneyReach.swift
+@@ -1,31 +1,48 @@
+ import Foundation
+ 
+-/// 포기·새 여정에서 다음 출발 정류장이 되는 '도달 정류장' 규칙(BR-1, BR-2). 정류장 이름은 카탈로그 이름, 방향은 여정 방향 그대로다.
+-enum JourneyReach {
+-    /// 저장된 경과로 지난 정류장 칸 수. 몫이며 총 정류장 수를 넘지 않는다.
+-    static func reachedStops(elapsedSeconds: Int, minutes: Int, minutesPerStop: Int) -> Int {
+-        min(elapsedSeconds / (minutesPerStop * 60), minutes / minutesPerStop)
+-    }
++/// 포기·새 여정에서 다음 출발 정류장을 정한 결과(BR-1, BR-2, BR-12, BR-13).
++enum ReachResolution: Equatable {
++    /// 저장 경과로 계산한 정류장(도착이면 저장된 도착지).
++    case station(StationSnapshot)
++    /// 노선·구간을 다시 만들 수 없어 출발 정류장에 남는다.
++    case stayAtOrigin(StationSnapshot)
++    /// 출발 정류장도 데이터에 없어 정류장을 다시 골라야 한다.
++    case reselectStation
++}
+ 
+-    /// 출발 정류장에서 방향대로 `stops`칸 간 순환 정류장. 출발지가 카탈로그 밖이면 nil이다.
+-    static func station(originStopID: String, direction: Int, stops: Int) -> StationSnapshot? {
+-        guard let origin = RouteStops.all.firstIndex(where: { $0.id == originStopID }) else { return nil }
+-        let stop = RouteStops.all[RouteStops.wrap(origin + direction * stops)]
+-        return StationSnapshot(id: stop.id, name: stop.name, direction: direction)
++extension ReachResolution {
++    /// 다음 현재 정류장. 다시 골라야 하면 nil이다.
++    var station: StationSnapshot? {
++        switch self {
++        case let .station(station), let .stayAtOrigin(station): station
++        case .reselectStation: nil
++        }
+     }
+ }
+ 
++enum ReachAttempt: Equatable { case notLoaded, resolved(ReachResolution) }
++
+ extension JourneySnapshot {
+-    /// 도착한 여정은 저장된 도착지, 그 밖(출발 대기 포함)은 저장된 경과로 계산한 정류장이다.
+-    var reachedStation: StationSnapshot? {
+-        if isArrived {
+-            guard let name = destinationName else { return nil }
+-            return StationSnapshot(id: destinationStopID, name: name, direction: direction)
++    /// 도착한 여정의 정류장. 저장값만 쓰므로 정류장 데이터 상태와 무관하다(AC-78, AC-79).
++    var arrivedStation: StationSnapshot? {
++        isArrived ? StationSnapshot(id: destinationStopID, name: destinationName) : nil
++    }
++
++    func reachedStation(in availability: RouteDataAvailability) -> ReachAttempt {
++        if let arrivedStation { return .resolved(.station(arrivedStation)) }
++        switch availability {
++        case .loading: return .notLoaded
++        case .failed: return .resolved(.stayAtOrigin(StationSnapshot(id: originStopID, name: originName)))
++        case let .ready(catalog):
++            if let course = CourseJourney(journey: self, catalog: catalog) {
++                let elapsed = progress.elapsedSeconds
++                let reached = course.cumulativeSeconds.lastIndex { $0 <= elapsed } ?? 0
++                let stop = course.stops[reached]
++                return .resolved(.station(StationSnapshot(id: stop.id, name: stop.name)))
++            }
++            guard let origin = catalog.stopIndex(id: originStopID) else { return .resolved(.reselectStation) }
++            return .resolved(.stayAtOrigin(StationSnapshot(id: originStopID, name: catalog.stops[origin].name)))
+         }
+-        guard let bus else { return nil }
+-        let stops = JourneyReach.reachedStops(elapsedSeconds: progress.elapsedSeconds, minutes: minutes,
+-                                              minutesPerStop: bus.minutesPerStop)
+-        return JourneyReach.station(originStopID: originStopID, direction: direction, stops: stops)
+     }
+ }
+ 
+@@ -35,4 +52,10 @@ extension AppSnapshot {
+         updatingStage(cardIssued: cardIssued, initialStation: initialStation, currentStation: station)
+             .updating(journey: .empty)
+     }
++
++    /// 최초·현재 정류장과 진행 여정을 비운다. 카드·기록은 그대로다(옛 형식 이전, BR-13, BR-16).
++    func clearingStationsAndJourney() -> AppSnapshot {
++        updatingStage(cardIssued: cardIssued, initialStation: nil, currentStation: nil)
++            .updating(journey: .empty)
++    }
+ }
+diff --git a/ios/FocusMate/JourneySnapshot.swift b/ios/FocusMate/JourneySnapshot.swift
+index 3dbac8e..2dd3397 100644
+--- a/ios/FocusMate/JourneySnapshot.swift
++++ b/ios/FocusMate/JourneySnapshot.swift
+@@ -1,12 +1,12 @@
+ import Foundation
+ 
+-/// 승차 인식 순간 저장하는 진행 여정. 사용자가 고른 입력만 담고, 정류장 이름·정류장 수·거리처럼 다시 계산할 수 있는 값은 저장하지 않는다.
+-/// 정류장·버스 id는 `RouteStops`/`BusLine` 카탈로그 값이어야 한다(BR-3). 카탈로그가 바뀌면 그 여정은 읽을 때 버려진다.
++/// 승차 인식 순간 저장하는 진행 여정. 사용자가 고른 입력과 승차 당시의 표시 이름(출발·도착 정류장, 버스 번호·유형)을 담는다.
++/// 이름을 함께 저장하므로 정류장 데이터가 바뀌어도 기록·안내 문구는 승차 당시 값 그대로다. 정류장 수·거리처럼 다시 계산할 값은 저장하지 않는다.
+ struct JourneySnapshot: Equatable {
+     enum Phase: String, Codable { case awaitingDeparture, departed }
+-    /// 저장 파일 버전별 해석. v3에는 `paused` 키가 없다.
+-    enum Format { case v3, v4 }
+     static let maximumMinutes = 360
++    /// 기록 from/to/bus의 상한과 같다. 하차 기록 저장이 이름 길이 때문에 막히지 않게 승차 때 보장한다.
++    static let maximumNameLength = 500
+ 
+     /// 준비 초안의 태그는 메모리에만 있으므로 정의 전체를 복사해 둔다.
+     struct Tag: Codable, Equatable {
+@@ -24,10 +24,13 @@ struct JourneySnapshot: Equatable {
+     let id: String
+     let cardID: String
+     let originStopID: String
+-    let direction: Int
++    let originName: String
+     let minutes: Int
+     let busID: String
++    let busNumber: String
++    let busKind: String
+     let destinationStopID: String
++    let destinationName: String
+     let tag: Tag
+     let task: String
+     let sound: JourneySound
+@@ -38,12 +41,11 @@ struct JourneySnapshot: Equatable {
+     let paused: Bool
+ 
+     static func boarding(details: PreparedJourneyDetails, cardID: String, id: String, boardedAt: Date) -> JourneySnapshot {
+-        let origin = details.journey.origin
+-        let destination = RouteStops.all[RouteStops.wrap(origin.index + origin.direction * details.journey.stops)]
++        let journey = details.journey
+         return JourneySnapshot(
+-            id: id, cardID: cardID, originStopID: RouteStops.all[RouteStops.wrap(origin.index)].id,
+-            direction: origin.direction, minutes: details.journey.minutes, busID: details.journey.busID,
+-            destinationStopID: destination.id,
++            id: id, cardID: cardID, originStopID: journey.originStopID, originName: journey.originName,
++            minutes: journey.minutes, busID: journey.busID, busNumber: journey.busNumber, busKind: journey.busKind,
++            destinationStopID: journey.destinationStopID, destinationName: journey.destination,
+             tag: Tag(id: details.tag.id, name: details.tag.name, icon: details.tag.icon, color: details.tag.color),
+             task: details.task, sound: details.sound, boardedAt: boardedAt,
+             phase: .awaitingDeparture, progress: .start, paused: false
+@@ -65,27 +67,27 @@ struct JourneySnapshot: Equatable {
+     }
+ 
+     private func with(phase: Phase, progress: Progress, paused: Bool) -> JourneySnapshot {
+-        JourneySnapshot(id: id, cardID: cardID, originStopID: originStopID, direction: direction, minutes: minutes,
+-                        busID: busID, destinationStopID: destinationStopID, tag: tag, task: task, sound: sound,
++        JourneySnapshot(id: id, cardID: cardID, originStopID: originStopID, originName: originName, minutes: minutes,
++                        busID: busID, busNumber: busNumber, busKind: busKind, destinationStopID: destinationStopID,
++                        destinationName: destinationName, tag: tag, task: task, sound: sound,
+                         boardedAt: boardedAt, phase: phase, progress: progress, paused: paused)
+     }
+ 
+-    var originName: String? { RouteStops.all.first { $0.id == originStopID }?.name }
+-    var destinationName: String? { RouteStops.all.first { $0.id == destinationStopID }?.name }
+-    var bus: BusLine? { BusLine.all.first { $0.id == busID } }
+-
+-    /// 구조와 카탈로그를 본다. 손상 여정은 `SnapshotCodec.dropInvalidActiveJourney`가 여정만 버린다.
++    /// 구조만 본다(카탈로그 검사 없음). 손상 여정은 `SnapshotCodec.dropInvalidActiveJourney`가 여정만 버린다.
+     func validate(currentCardID: String?) throws {
+-        let required = [("id", id), ("cardID", cardID), ("originStopID", originStopID), ("busID", busID),
+-                        ("destinationStopID", destinationStopID), ("tag.id", tag.id)]
+-        if let empty = required.first(where: { $0.1.isEmpty }) { throw ActiveJourneyValidationIssue.emptyField(empty.0) }
++        let required = [("id", id), ("cardID", cardID), ("originStopID", originStopID), ("originName", originName),
++                        ("busID", busID), ("busNumber", busNumber), ("busKind", busKind),
++                        ("destinationStopID", destinationStopID), ("destinationName", destinationName), ("tag.id", tag.id)]
++        if let empty = required.first(where: { $0.1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
++            throw ActiveJourneyValidationIssue.emptyField(empty.0)
++        }
++        let names = [("originName", originName), ("destinationName", destinationName),
++                     ("busNumber", busNumber), ("busKind", busKind)]
++        if let long = names.first(where: { $0.1.utf16.count > Self.maximumNameLength }) {
++            throw ActiveJourneyValidationIssue.nameTooLong(long.0)
++        }
+         guard cardID == currentCardID else { throw ActiveJourneyValidationIssue.cardMismatch }
+-        guard direction == 1 || direction == -1 else { throw ActiveJourneyValidationIssue.invalidDirection(direction) }
+         guard (1...Self.maximumMinutes).contains(minutes) else { throw ActiveJourneyValidationIssue.invalidMinutes(minutes) }
+-        for stop in [originStopID, destinationStopID] where !RouteStops.all.contains(where: { $0.id == stop }) {
+-            throw ActiveJourneyValidationIssue.unknownStop(stop)
+-        }
+-        guard BusLine.all.contains(where: { $0.id == busID }) else { throw ActiveJourneyValidationIssue.unknownBus(busID) }
+         // 준비 초안과 같은 규칙: 할 일은 다듬어진 값 그대로·UTF-16 80 이하, 태그 이름은 20 이하.
+         guard task == task.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty, task.utf16.count <= 80
+         else { throw ActiveJourneyValidationIssue.invalidTask }
+@@ -98,14 +100,15 @@ struct JourneySnapshot: Equatable {
+ }
+ 
+ enum ActiveJourneyValidationIssue: Error, Equatable {
+-    case emptyField(String), cardMismatch, invalidDirection(Int), invalidMinutes(Int)
+-    case invalidTask, invalidTag, invalidProgress
+-    case unknownStop(String), unknownBus(String), invalidPausedState
++    case emptyField(String), cardMismatch, invalidMinutes(Int)
++    case invalidTask, invalidTag, invalidProgress, invalidPausedState
++    case nameTooLong(String)
+ }
+ 
+ extension JourneySnapshot: Codable {
+     private enum CodingKeys: String, CodingKey {
+-        case id, cardID, originStopID, direction, minutes, busID, destinationStopID, tag, task, sound, boardedAt, phase, progress, paused
++        case id, cardID, originStopID, originName, minutes, busID, busNumber, busKind, destinationStopID, destinationName
++        case tag, task, sound, boardedAt, phase, progress, paused
+     }
+     init(from decoder: Decoder) throws {
+         let c = try decoder.container(keyedBy: CodingKeys.self)
+@@ -113,18 +116,19 @@ extension JourneySnapshot: Codable {
+         guard let date = try? Date(text, strategy: .iso8601) else {
+             throw DecodingError.dataCorruptedError(forKey: .boardedAt, in: c, debugDescription: "boardedAt is not ISO 8601")
+         }
+-        let phase = try c.decode(Phase.self, forKey: .phase)
+-        // v3 파일에는 paused가 없다. 그때 출발한 여정은 타이머가 돌지 않았으므로 일시정지로 읽는다.
+-        let paused = decoder.userInfo[.journeyFormat] as? Format == .v3
+-            ? phase == .departed : try c.decode(Bool.self, forKey: .paused)
+         self.init(id: try c.decode(String.self, forKey: .id), cardID: try c.decode(String.self, forKey: .cardID),
+                   originStopID: try c.decode(String.self, forKey: .originStopID),
+-                  direction: try c.decode(Int.self, forKey: .direction), minutes: try c.decode(Int.self, forKey: .minutes),
++                  originName: try c.decode(String.self, forKey: .originName),
++                  minutes: try c.decode(Int.self, forKey: .minutes),
+                   busID: try c.decode(String.self, forKey: .busID),
++                  busNumber: try c.decode(String.self, forKey: .busNumber),
++                  busKind: try c.decode(String.self, forKey: .busKind),
+                   destinationStopID: try c.decode(String.self, forKey: .destinationStopID),
++                  destinationName: try c.decode(String.self, forKey: .destinationName),
+                   tag: try c.decode(Tag.self, forKey: .tag), task: try c.decode(String.self, forKey: .task),
+                   sound: try c.decode(JourneySound.self, forKey: .sound), boardedAt: date,
+-                  phase: phase, progress: try c.decode(Progress.self, forKey: .progress), paused: paused)
++                  phase: try c.decode(Phase.self, forKey: .phase), progress: try c.decode(Progress.self, forKey: .progress),
++                  paused: try c.decode(Bool.self, forKey: .paused))
+     }
+     /// 날짜를 직접 문자열로 써서 인코더의 날짜 전략과 무관하게 같은 바이트를 낸다(CardSnapshot과 같은 이유).
+     func encode(to encoder: Encoder) throws {
+@@ -132,10 +136,13 @@ extension JourneySnapshot: Codable {
+         try c.encode(id, forKey: .id)
+         try c.encode(cardID, forKey: .cardID)
+         try c.encode(originStopID, forKey: .originStopID)
+-        try c.encode(direction, forKey: .direction)
++        try c.encode(originName, forKey: .originName)
+         try c.encode(minutes, forKey: .minutes)
+         try c.encode(busID, forKey: .busID)
++        try c.encode(busNumber, forKey: .busNumber)
++        try c.encode(busKind, forKey: .busKind)
+         try c.encode(destinationStopID, forKey: .destinationStopID)
++        try c.encode(destinationName, forKey: .destinationName)
+         try c.encode(tag, forKey: .tag)
+         try c.encode(task, forKey: .task)
+         try c.encode(sound, forKey: .sound)
+@@ -146,10 +153,6 @@ extension JourneySnapshot: Codable {
+     }
+ }
+ 
+-extension CodingUserInfoKey {
+-    static let journeyFormat = CodingUserInfoKey(rawValue: "focusmate.journeyFormat")!
+-}
+-
+ /// 승차 저장값 생성기. ID·시계를 주입해 테스트에서 결정적으로 만든다.
+ struct ActiveJourneyFactory {
+     private let makeID: () -> String
+diff --git a/ios/FocusMate/JourneyTimerView.swift b/ios/FocusMate/JourneyTimerView.swift
+index a43aebe..9e3fef5 100644
+--- a/ios/FocusMate/JourneyTimerView.swift
++++ b/ios/FocusMate/JourneyTimerView.swift
+@@ -273,7 +273,7 @@ struct JourneyTimerView: View {
+             "bus": ["lat": bus.point.latitude, "lon": bus.point.longitude, "from": bus.segmentFrom, "to": bus.segmentTo,
+                     "fraction": bus.fraction, "arrived": bus.isArrived],
+             "destination": ["index": destination.index, "lat": destination.point.latitude, "lon": destination.point.longitude],
+-            "course": JourneyCourse.stops.map { [$0.point.latitude, $0.point.longitude] },
++            "course": map.journey.stops.map { [$0.point.latitude, $0.point.longitude] },
+             "render": ["route": map.routePoints.count, "stopMarkers": map.visibleStops.count, "bus": true, "destination": true],
+             "camera": ["lat": target.center.latitude, "lon": target.center.longitude, "heading": target.headingDegrees,
+                        "pitch": target.pitchDegrees, "animated": target.animated, "revision": target.revision],
+diff --git a/ios/FocusMate/JourneyView.swift b/ios/FocusMate/JourneyView.swift
+index c29949d..addf978 100644
+--- a/ios/FocusMate/JourneyView.swift
++++ b/ios/FocusMate/JourneyView.swift
+@@ -27,6 +27,8 @@ struct JourneyView: View {
+             ensureTimer()
+         }
+         .onChange(of: model.activeJourney?.phase) { _, _ in ensureTimer() }
++        // 정류장 데이터가 화면을 연 뒤에 준비되면 그때 지도를 붙인다.
++        .onChange(of: model.routeCatalog != nil) { _, _ in ensureMap() }
+         // 정상 경로에서는 이탈이 없다. 재생성될 때 일시정지 규칙과 저장을 맞추기 위한 방어다.
+         .onDisappear {
+             timer?.leave()
+@@ -43,11 +45,17 @@ struct JourneyView: View {
+                                        clock: services.clock, ticker: services.makeTicker(), announcer: services.announcer,
+                                        observer: liveActivity)
+         if resumed { services.announcer.announce(JourneyLifecycleText.resumeAnnouncement) }
+-        if let timer, let content = ArrivalBriefingContent(journey: journey) {
+-            arrival = ArrivalBriefingController(content: content, progress: timer, confirmer: model, sleep: services.sleep)
++        if let timer {
++            arrival = ArrivalBriefingController(content: ArrivalBriefingContent(journey: journey), progress: timer,
++                                                confirmer: model, sleep: services.sleep)
+         }
+-        // 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다.
+-        if let timer, let course = CourseJourney(journey: journey) {
++        ensureMap()
++    }
++
++    /// 정류장 데이터가 없거나 저장 도착지가 계산값과 다르면 지도 없이 W05 배치로 둔다(BR-12).
++    private func ensureMap() {
++        guard map == nil, let timer, let journey = model.activeJourney, let catalog = model.routeCatalog else { return }
++        if let course = CourseJourney(journey: journey, catalog: catalog) {
+             map = JourneyMapController(journey: course, status: timer.status, elapsedSeconds: timer.elapsedSeconds,
+                                        reduceMotion: services.reduceMotion(system: systemReduceMotion))
+         }
+diff --git a/ios/FocusMate/LocalSnapshotStore.swift b/ios/FocusMate/LocalSnapshotStore.swift
+index 0b0cf33..5623f88 100644
+--- a/ios/FocusMate/LocalSnapshotStore.swift
++++ b/ios/FocusMate/LocalSnapshotStore.swift
+@@ -85,14 +85,17 @@ final class LocalSnapshotStore {
+         return backupURL
+     }
+ 
+-    func load() throws -> AppSnapshot? {
++    func load() throws -> AppSnapshot? { try loadReport()?.snapshot }
++
++    /// 읽기 결과와 옛 형식 이전 여부. 파일이 없으면 nil이다.
++    func loadReport() throws -> (snapshot: AppSnapshot, migration: SnapshotMigration?)? {
+         let data: Data
+         do { data = try readData(fileURL) }
+         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
+         catch { throw StorageIssue.unreadable }
+-        let snapshot = try SnapshotCodec.decode(data)
+-        try validatePhotos(in: snapshot)
+-        return snapshot
++        let report = try SnapshotCodec.decodeReport(data)
++        try validatePhotos(in: report.snapshot)
++        return report
+     }
+ 
+     private func validatePhotos(in snapshot: AppSnapshot) throws {
+diff --git a/ios/FocusMate/PreparationDraft.swift b/ios/FocusMate/PreparationDraft.swift
+index 094fa5e..2d3c65c 100644
+--- a/ios/FocusMate/PreparationDraft.swift
++++ b/ios/FocusMate/PreparationDraft.swift
+@@ -136,7 +136,7 @@ struct PreparedJourneyDetails: Equatable {
+     let tag: PreparationTag
+     let task: String
+     let sound: JourneySound
+-    var originName: String { RouteStops.name(at: journey.origin.index) }
+-    var boundLabel: String { RouteStops.boundLabel(from: journey.origin) }
+-    var distanceText: String { JourneyPlanner.distanceText(stops: journey.stops) }
++    var originName: String { journey.originName }
++    var boundLabel: String? { journey.boundLabel }
++    var distanceText: String { RouteCandidates.distanceText(meters: journey.distanceMeters) }
+ }
+diff --git a/ios/FocusMate/RootView.swift b/ios/FocusMate/RootView.swift
+index 98e46a8..c7a9a0f 100644
+--- a/ios/FocusMate/RootView.swift
++++ b/ios/FocusMate/RootView.swift
+@@ -187,8 +187,9 @@ struct RootView: View {
+             Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
+             if let station = model.snapshot?.currentStation {
+                 Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
+-                Text(station.direction == 1 ? "정방향" : "역방향").foregroundStyle(.secondary)
+-                    .accessibilityValue(station.direction == 1 ? "정방향" : "역방향").accessibilityIdentifier("main.direction")
++                // 정류장 데이터를 읽기 전에는 비어 있다가 준비되면 채워진다(AC-42).
++                Text(model.currentStationBound ?? " ").foregroundStyle(.secondary)
++                    .accessibilityValue(model.currentStationBound ?? "").accessibilityIdentifier("main.bound")
+             }
+             if let stationName = model.abandonNotice {
+                 MainAbandonNoticeView(stationName: stationName)
+diff --git a/ios/FocusMate/RouteCandidates.swift b/ios/FocusMate/RouteCandidates.swift
+index 5861afb..fa05b82 100644
+--- a/ios/FocusMate/RouteCandidates.swift
++++ b/ios/FocusMate/RouteCandidates.swift
+@@ -1,6 +1,6 @@
+ import Foundation
+ 
+-/// 고른 시간에 맞는 노선 하나와 그 도착지(서울 전체 데이터). 기존 `JourneyCandidate`를 대신할 타입이다.
++/// 고른 시간에 맞는 노선 하나와 그 도착지(서울 전체 데이터).
+ struct RouteCandidate: Identifiable, Equatable {
+     let routeID: String
+     let busNumber: String
+@@ -13,11 +13,7 @@ struct RouteCandidate: Identifiable, Equatable {
+ 
+     var id: String { routeID }
+ 
+-    /// 0.1km 단위 반올림. 정수 km면 소수점을 붙이지 않는다.
+-    var distanceText: String {
+-        let tenths = (leg.distanceMeters + 50) / 100
+-        return tenths % 10 == 0 ? "\(tenths / 10)km" : "\(tenths / 10).\(tenths % 10)km"
+-    }
++    var distanceText: String { RouteCandidates.distanceText(meters: leg.distanceMeters) }
+ 
+     var accessibilityLabel: String { "\(busKind) \(busNumber)번, \(destination), \(minutes)분, \(stops)정류장" }
+ }
+@@ -26,6 +22,12 @@ struct RouteCandidate: Identifiable, Equatable {
+ enum RouteCandidates {
+     static let limit = 20
+ 
++    /// 0.1km 단위 반올림. 정수 km면 소수점을 붙이지 않는다.
++    static func distanceText(meters: Int) -> String {
++        let tenths = (meters + 50) / 100
++        return tenths % 10 == 0 ? "\(tenths / 10)km" : "\(tenths / 10).\(tenths % 10)km"
++    }
++
+     static func candidates(minutes: Int, originStop: Int, in catalog: RouteCatalog) -> [RouteCandidate] {
+         let legs = catalog.visits(stopIndex: originStop).compactMap { visit in
+             RouteLegFinder.leg(route: visit.route, originStop: originStop, minutes: minutes, in: catalog)
+diff --git a/ios/FocusMate/RouteData.swift b/ios/FocusMate/RouteData.swift
+deleted file mode 100644
+index c48d37b..0000000
+--- a/ios/FocusMate/RouteData.swift
++++ /dev/null
+@@ -1,88 +0,0 @@
+-import Foundation
+-
+-/// 순환 노선 위의 위치. `index`는 `RouteStops.all`의 순서, `direction`은 1(정방향) 또는 -1(역방향)이다.
+-struct StopPosition: Equatable, Hashable {
+-    let index: Int
+-    let direction: Int
+-}
+-
+-/// 웹 프로토타입과 같은 9개 가상 순환 정류장. 저장되는 `StationSnapshot.id`는 이 id다.
+-enum RouteStops {
+-    static let all: [(id: String, name: String)] = [
+-        ("seongsu", "성수역"),
+-        ("seongsuDong", "성수동"),
+-        ("ttukseom", "뚝섬역"),
+-        ("seongdongSportsCenter", "성동구민체육센터"),
+-        ("seoulForest", "서울숲역"),
+-        ("seoulForestGate", "서울숲 입구"),
+-        ("seongsuBridgeNorth", "성수대교 북단"),
+-        ("ttukseomHangangPark", "뚝섬한강공원"),
+-        ("seongsuIntersection", "성수사거리"),
+-    ]
+-
+-    static func wrap(_ offset: Int) -> Int {
+-        ((offset % all.count) + all.count) % all.count
+-    }
+-
+-    static func name(at index: Int) -> String { all[wrap(index)].name }
+-
+-    static func boundLabel(from position: StopPosition) -> String {
+-        name(at: position.index + position.direction) + " 방면"
+-    }
+-
+-    static func position(of station: StationSnapshot) -> StopPosition? {
+-        guard let index = all.firstIndex(where: { $0.id == station.id }) else { return nil }
+-        return StopPosition(index: index, direction: station.direction)
+-    }
+-}
+-
+-/// 첫 출발지 검색에 나오는 정류장·방면 한 건.
+-struct StationOption: Identifiable, Equatable {
+-    let id: String
+-    let stopID: String
+-    let position: StopPosition
+-    let name: String
+-    let aliases: [String]
+-
+-    var boundLabel: String { RouteStops.boundLabel(from: position) }
+-    var snapshot: StationSnapshot { StationSnapshot(id: stopID, name: name, direction: position.direction) }
+-
+-    init(index: Int, direction: Int, aliases: [String]) {
+-        let stop = RouteStops.all[index]
+-        id = "\(stop.id):\(direction)"
+-        stopID = stop.id
+-        position = StopPosition(index: index, direction: direction)
+-        name = stop.name
+-        self.aliases = aliases
+-    }
+-}
+-
+-enum StationCatalog {
+-    static let all: [StationOption] = [
+-        StationOption(index: 0, direction: 1, aliases: ["성수", "서울숲"]),
+-        StationOption(index: 0, direction: -1, aliases: ["성수", "건대"]),
+-        StationOption(index: 4, direction: 1, aliases: ["서울숲", "성수"]),
+-    ]
+-
+-    /// 앞뒤 공백을 지우고 대소문자를 무시해 이름·별칭·방면 문구 중 하나라도 부분 일치하면 결과에 넣는다.
+-    static func search(_ query: String) -> [StationOption] {
+-        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+-        guard !term.isEmpty else { return all }
+-        return all.filter { option in
+-            ([option.name, option.boundLabel] + option.aliases).contains { $0.lowercased().contains(term) }
+-        }
+-    }
+-}
+-
+-struct BusLine: Identifiable, Equatable {
+-    let id: String
+-    let number: String
+-    let kind: String
+-    let minutesPerStop: Int
+-
+-    static let all: [BusLine] = [
+-        BusLine(id: "2014", number: "2014", kind: "지선", minutesPerStop: 5),
+-        BusLine(id: "302", number: "강남02", kind: "마을", minutesPerStop: 6),
+-        BusLine(id: "421", number: "343", kind: "간선", minutesPerStop: 8),
+-    ]
+-}
+diff --git a/ios/FocusMate/SnapshotCodec.swift b/ios/FocusMate/SnapshotCodec.swift
+index 6fd03a9..d1e2045 100644
+--- a/ios/FocusMate/SnapshotCodec.swift
++++ b/ios/FocusMate/SnapshotCodec.swift
+@@ -44,29 +44,58 @@ struct LegacySnapshotV2: Decodable {
+     let records: RecordSection
+ }
+ 
++/// v3·v4 진행 여정은 예시 노선 기준이라 내용을 해석하지 않는다. 있었는지만 본다.
++struct LegacyJourneyPresence: Decodable {
++    let isPresent: Bool
++    private enum CodingKeys: String, CodingKey { case active }
++    init(from decoder: Decoder) throws {
++        let c = try decoder.container(keyedBy: CodingKeys.self)
++        guard c.contains(.active) else {
++            throw DecodingError.keyNotFound(CodingKeys.active, .init(codingPath: c.codingPath, debugDescription: "journey.active is required"))
++        }
++        isPresent = try !c.decodeNil(forKey: .active)
++    }
++}
++
++/// v3·v4 저장 계약. 카드·기록 형식은 v5와 같다.
++struct LegacySnapshotV3V4: Decodable {
++    let cardIssued: Bool
++    let initialStation: StationSnapshot?
++    let currentStation: StationSnapshot?
++    let cards: CardSection
++    let journey: LegacyJourneyPresence
++    let records: RecordSection
++}
++
++/// 옛 형식(v1~v4)을 읽으며 예시 데이터 정류장·여정을 비웠다는 보고.
++enum SnapshotMigration: Equatable { case routeDataReset }
++
+ /// 저장 파일 바이트와 `AppSnapshot` 사이의 변환. 판정 순서는 헤더 → 버전 → 구조 → 내용이다.
+ enum SnapshotCodec {
+-    static let currentVersion = 4
++    static let currentVersion = 5
+ 
+     private struct VersionHeader: Decodable { let version: Int }
++    private struct EnvelopeV3V4: Decodable { let state: LegacySnapshotV3V4 }
+     private struct EnvelopeV2: Decodable { let state: LegacySnapshotV2 }
+     private struct EnvelopeV1: Decodable { let state: LegacySnapshotV1 }
+     private struct Envelope: Codable { let version: Int; let state: AppSnapshot }
+ 
+-    static func decode(_ data: Data) throws -> AppSnapshot {
++    static func decode(_ data: Data) throws -> AppSnapshot { try decodeReport(data).snapshot }
++
++    static func decodeReport(_ data: Data) throws -> (snapshot: AppSnapshot, migration: SnapshotMigration?) {
+         let header: VersionHeader
+         do { header = try JSONDecoder().decode(VersionHeader.self, from: data) }
+         catch { throw StorageIssue.corrupt }
+         let state: AppSnapshot
++        var legacyJourney = false
+         do {
+             switch header.version {
+             case 1: state = migrateV1(try JSONDecoder().decode(EnvelopeV1.self, from: data).state)
+             case 2: state = migrateV2(try JSONDecoder().decode(EnvelopeV2.self, from: data).state)
+-            case 3:
+-                // v3는 진행 여정의 paused 키만 다르다. 같은 Envelope를 v3 해석으로 읽는다.
+-                let decoder = JSONDecoder()
+-                decoder.userInfo[.journeyFormat] = JourneySnapshot.Format.v3
+-                state = try decoder.decode(Envelope.self, from: data).state
++            case 3, 4:
++                let legacy = try JSONDecoder().decode(EnvelopeV3V4.self, from: data).state
++                legacyJourney = legacy.journey.isPresent
++                state = migrateV3V4(legacy)
+             case currentVersion: state = try JSONDecoder().decode(Envelope.self, from: data).state
+             default: throw StorageIssue.unsupportedVersion(header.version)
+             }
+@@ -75,7 +104,11 @@ enum SnapshotCodec {
+         let readable = dropInvalidActiveJourney(state)
+         do { try readable.validate() }
+         catch let issue as SnapshotValidationIssue { throw StorageIssue.invalidState(issue) }
+-        return readable.updating(records: readable.records.sortedNewestFirst())
++        let sorted = readable.updating(records: readable.records.sortedNewestFirst())
++        guard header.version < currentVersion else { return (sorted, nil) }
++        // 손상 판정을 지킨 뒤(validate 먼저) 예시 데이터 정류장·여정을 비운다. 카드·기록은 그대로다.
++        let hadRouteData = sorted.initialStation != nil || sorted.currentStation != nil || legacyJourney
++        return (sorted.clearingStationsAndJourney(), hadRouteData ? .routeDataReset : nil)
+     }
+ 
+     /// 읽기 전용 완화: 검증을 통과하지 못하는 진행 여정만 버린다. 쓰기(`LocalSnapshotStore.save`)는 그대로 엄격하다.
+@@ -91,6 +124,14 @@ enum SnapshotCodec {
+         return try encoder.encode(Envelope(version: currentVersion, state: snapshot))
+     }
+ 
++    static func migrateV3V4(_ legacy: LegacySnapshotV3V4) -> AppSnapshot {
++        AppSnapshot.empty.updatingStage(cardIssued: legacy.cardIssued,
++                                        initialStation: legacy.initialStation,
++                                        currentStation: legacy.currentStation)
++            .updating(cards: legacy.cards)
++            .updating(records: legacy.records)
++    }
++
+     static func migrateV2(_ legacy: LegacySnapshotV2) -> AppSnapshot {
+         AppSnapshot.empty.updatingStage(cardIssued: legacy.cardIssued,
+                                         initialStation: legacy.initialStation,
+diff --git a/ios/FocusMate/StationSearch.swift b/ios/FocusMate/StationSearch.swift
+index 9c73ca4..6c8032b 100644
+--- a/ios/FocusMate/StationSearch.swift
++++ b/ios/FocusMate/StationSearch.swift
+@@ -1,6 +1,6 @@
+ import Foundation
+ 
+-/// 최초 정류장 검색 결과 한 건(서울 전체 데이터). 기존 예시 데이터의 `StationOption`을 대신할 타입이다.
++/// 최초 정류장 검색 결과 한 건(서울 전체 데이터).
+ struct StopSearchOption: Identifiable, Equatable {
+     let id: String
+     let stopIndex: Int
+diff --git a/ios/FocusMate/StationSearchState.swift b/ios/FocusMate/StationSearchState.swift
+index a42a1ee..73556c2 100644
+--- a/ios/FocusMate/StationSearchState.swift
++++ b/ios/FocusMate/StationSearchState.swift
+@@ -5,14 +5,33 @@ struct StationSearchState: Equatable {
+     var query: String = ""
+     private(set) var selectedID: String?
+ 
+-    var results: [StationOption] { StationCatalog.search(query) }
+-    var selectedOption: StationOption? { results.first { $0.id == selectedID } }
+-    var confirmationText: String? { selectedOption.map { "\($0.name) · \($0.boundLabel)에서 출발" } }
+-    var canConfirm: Bool { selectedOption != nil }
++    func result(in catalog: RouteCatalog) -> StationSearchResult { StationSearch.search(query, in: catalog) }
+ 
+-    mutating func select(_ optionID: String) -> Bool {
+-        guard results.contains(where: { $0.id == optionID }) else { return false }
++    func selectedOption(in catalog: RouteCatalog) -> StopSearchOption? {
++        options(in: catalog).first { $0.id == selectedID }
++    }
++
++    /// "이름 · 방면에서 출발". 방면이 없는 정류장은 "이름에서 출발"이다.
++    func confirmationText(in catalog: RouteCatalog) -> String? {
++        selectedOption(in: catalog).map { option in
++            option.boundLabel.map { "\(option.name) · \($0)에서 출발" } ?? "\(option.name)에서 출발"
++        }
++    }
++
++    func canConfirm(in catalog: RouteCatalog) -> Bool { selectedOption(in: catalog) != nil }
++
++    mutating func select(_ optionID: String, in catalog: RouteCatalog) -> Bool {
++        guard options(in: catalog).contains(where: { $0.id == optionID }) else { return false }
+         selectedID = optionID
+         return true
+     }
++
++    private func options(in catalog: RouteCatalog) -> [StopSearchOption] {
++        if case let .results(options, _) = result(in: catalog) { return options }
++        return []
++    }
++}
++
++extension StopSearchOption {
++    var snapshot: StationSnapshot { StationSnapshot(id: id, name: name) }
+ }
+diff --git a/ios/FocusMate/TimeSelectionView.swift b/ios/FocusMate/TimeSelectionView.swift
+index f0ce44c..79f6417 100644
+--- a/ios/FocusMate/TimeSelectionView.swift
++++ b/ios/FocusMate/TimeSelectionView.swift
+@@ -42,8 +42,8 @@ struct TimeSelectionView: View {
+             VStack(alignment: .leading, spacing: 4) {
+                 Text(station.name).font(isLarge ? .headline : .title2.bold())
+                     .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
+-                if let position = model.journeyOrigin {
+-                    Text(RouteStops.boundLabel(from: position)).foregroundStyle(.secondary)
++                if let bound = model.currentStationBound {
++                    Text(bound).foregroundStyle(.secondary).accessibilityIdentifier("time.bound")
+                 }
+             }
+             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+@@ -56,18 +56,18 @@ struct TimeSelectionView: View {
+         Binding(get: { model.journeyPlan.minutes }, set: { model.journeyPlan.setMinutes($0) })
+     }
+ 
+-    private func candidateButton(_ candidate: JourneyCandidate) -> some View {
+-        let isSelected = model.journeyPlan.selectedBusID == candidate.bus.id
++    private func candidateButton(_ candidate: RouteCandidate) -> some View {
++        let isSelected = model.journeyPlan.selectedRouteID == candidate.routeID
+         return Button {
+-            if let origin = model.journeyOrigin { _ = model.journeyPlan.choose(busID: candidate.bus.id, from: origin) }
++            model.chooseJourneyRoute(candidate.routeID)
+         } label: {
+             // 접근성 글자 크기에서는 버튼이 길어져 아래가 고정 영역에 가려지므로 같은 정보를 두 줄로 압축한다.
+             HStack {
+                 VStack(alignment: .leading, spacing: 4) {
+                     if isLarge {
+-                        Text("\(candidate.bus.kind) \(candidate.bus.number) · \(candidate.destination)").font(.headline)
++                        Text("\(candidate.busKind) \(candidate.busNumber) · \(candidate.destination)").font(.headline)
+                     } else {
+-                        Text("\(candidate.bus.kind) \(candidate.bus.number)").font(.headline)
++                        Text("\(candidate.busKind) \(candidate.busNumber)").font(.headline)
+                         Text(candidate.destination)
+                     }
+                     Text("\(candidate.minutes)분 · \(candidate.stops)정류장 · \(candidate.distanceText)")
+@@ -83,6 +83,6 @@ struct TimeSelectionView: View {
+         .accessibilityElement(children: .ignore)
+         .accessibilityLabel(candidate.accessibilityLabel)
+         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+-        .accessibilityIdentifier("time.candidate.\(candidate.bus.id)")
++        .accessibilityIdentifier("time.candidate.\(candidate.routeID)")
+     }
+ }
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index 1886865..de909f2 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -18,6 +18,8 @@ struct UITestBootstrap {
+     let route: String?
+     let boardingSaveFailure: UITestCardSaveFailure
+     let manualClock: Bool
++    /// `--fm-ui-route-data`: fixture(기본, `RouteCatalog.uiTestFixture()`)·bundled(번들 서울 전체)·pending(로딩이 끝나지 않음)·failed.
++    let routeDataMode: String
+     let nextSaveFailure = UITestNextSaveFailure()
+     let writeCounter = UITestWriteCounter()
+     enum IssueHold { case standard, manual }
+@@ -69,6 +71,8 @@ struct UITestBootstrap {
+         let hold = try argument("--fm-ui-issue-hold")
+         guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
+         issueHold = hold == "manual" ? .manual : .standard
++        routeDataMode = try argument("--fm-ui-route-data") ?? "fixture"
++        guard ["fixture", "bundled", "pending", "failed"].contains(routeDataMode) else { throw SetupIssue.invalidArguments }
+         recoveryScenario = try argument("--fm-ui-recovery")
+         guard recoveryScenario == nil || ["readOnce", "readAlways", "backupFail", "backupMismatch", "cleanupFail"].contains(recoveryScenario!) else { throw SetupIssue.invalidArguments }
+         fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
+@@ -145,7 +149,8 @@ struct UITestBootstrap {
+         return String(decoding: data, as: UTF8.self)
+     }
+ 
+-    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
++    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney",
++                                                 "legacyV4Stations", "invalidMinutesJourney", "stationGone"])
+         .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys).union(recordSeeds)
+ 
+     func prepare() throws {
+@@ -157,16 +162,22 @@ struct UITestBootstrap {
+         case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard))
+         case "issuedWithoutCard": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
+         case "activeJourney":
++            guard let journey = Self.seededJourney else { throw SetupIssue.invalidArguments }
+             try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard)
+-                .updating(journey: JourneySection(active: Self.seededJourney)))
++                .updating(journey: JourneySection(active: journey)))
+         case let name where Self.timerSeeds[name] != nil:
+-            try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
++            guard let snapshot = Self.timerSnapshot(Self.timerSeeds[name]!) else { throw SetupIssue.invalidArguments }
++            try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
+         case let name where Self.lifecycleSeeds[name] != nil || Self.recordSeeds.contains(name):
+             guard let snapshot = Self.lifecycleSnapshot(name) else { throw SetupIssue.invalidArguments }
+             try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
+         case let name where Self.v3Seeds.contains(name):
+             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+             try Self.v3Bytes(name).write(to: fileURL, options: .atomic)
++        case "legacyV4Stations", "invalidMinutesJourney":
++            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
++            try (seed == "legacyV4Stations" ? Self.legacyV4Bytes() : Self.invalidMinutesBytes()).write(to: fileURL, options: .atomic)
++        case "stationGone": try LocalSnapshotStore(fileURL: fileURL).save(Self.stationGoneSnapshot)
+         default:
+             guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
+             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+@@ -212,7 +223,7 @@ struct UITestBootstrap {
+         guard shouldFailSave, model.launchState == .ready(.main) else { return }
+         guard let original = model.snapshot else { throw SetupIssue.invalidSaveState }
+         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
+-                                          currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
++                                          currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬")))
+     }
+ 
+     /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
+@@ -224,9 +235,9 @@ struct UITestBootstrap {
+             return
+         }
+         guard route == "boarding" else { return }
+-        guard model.launchState == .ready(.main), let origin = model.journeyOrigin else { throw SetupIssue.invalidSaveState }
++        guard model.launchState == .ready(.main), model.journeyOrigin != nil else { throw SetupIssue.invalidSaveState }
+         model.journeyPlan.setMinutes(60)
+-        _ = model.journeyPlan.choose(busID: "2014", from: origin)
++        guard model.chooseJourneyRoute("2014") else { throw SetupIssue.invalidSaveState }
+         model.preparation.chooseTag(id: "reading")
+         model.preparation.setTask("라우트 할 일")
+         guard model.confirmPreparation() else { throw SetupIssue.invalidSaveState }
+@@ -255,6 +266,18 @@ struct UITestBootstrap {
+         return (services, gate)
+     }
+ 
++    /// 정류장 데이터 저장소. pending은 로딩을 시작하지 않으므로 앱은 `startRouteData`를 부르지 않는다.
++    @MainActor func makeRouteCatalogStore() -> RouteCatalogStore {
++        switch routeDataMode {
++        case "bundled": RouteCatalogStore(load: { try RouteCatalogLoader.bundled() })
++        case "failed": RouteCatalogStore(load: { throw RouteCatalogIssue.malformed })
++        case "pending": RouteCatalogStore(load: { throw RouteCatalogIssue.malformed })
++        default: RouteCatalogStore(load: { try RouteCatalog.uiTestFixture() })
++        }
++    }
++
++    var startsRouteData: Bool { routeDataMode != "pending" }
++
+     @MainActor func makeSoundPreview() -> SoundPreviewController? {
+         guard shouldFailSound else { return nil }
+         return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
+@@ -269,53 +292,80 @@ struct UITestBootstrap {
+         catch { return "unreadable" }
+     }
+ 
+-    /// 승차 직후(출발 확인 전) 진행 여정 1건.
+-    private static let seededJourney = JourneySnapshot(
+-        id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
+-        destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
+-        tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
+-        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start, paused: false)
++    private static let seedTag = JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand)
++    private static let seedBoardedAt = Date(timeIntervalSince1970: 1_791_882_000)
++
++    /// UI 픽스처 카탈로그로 여정 시드를 만든다. 노선·출발 정류장이 데이터에 없으면 저장된 이름(`fallback`)을 그대로 쓴다.
++    private static func seedJourney(id: String, origin: String, route: String, minutes: Int, task: String,
++                                    phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool,
++                                    destination override: StationSnapshot? = nil) -> JourneySnapshot? {
++        guard let catalog = try? RouteCatalog.uiTestFixture() else { return nil }
++        let originIndex = catalog.stopIndex(id: origin)
++        let routeIndex = catalog.routeIndex(id: route)
++        let leg = originIndex.flatMap { o in
++            routeIndex.flatMap { RouteLegFinder.leg(route: $0, originStop: o, minutes: minutes, in: catalog) }
++        }
++        let computed = leg.map { catalog.stops[$0.stopIndices[$0.stopIndices.count - 1]] }
++            .map { StationSnapshot(id: $0.id, name: $0.name) }
++        guard let destination = override ?? computed else { return nil }
++        let bus = routeIndex.map { catalog.routes[$0] }
++        return JourneySnapshot(
++            id: id, cardID: fixedCard.id, originStopID: origin,
++            originName: originIndex.map { catalog.stops[$0].name } ?? "사라진 정류장", minutes: minutes,
++            busID: route, busNumber: bus?.number ?? "999", busKind: bus?.kind ?? "지선",
++            destinationStopID: destination.id, destinationName: destination.name,
++            tag: seedTag, task: task, sound: .bus, boardedAt: seedBoardedAt,
++            phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)
++    }
++
++    /// 승차 직후(출발 확인 전) 진행 여정 1건. 성수역에서 2014번 60분(12정류장) → 성동구민체육센터.
++    private static var seededJourney: JourneySnapshot? {
++        seedJourney(id: "seed-journey", origin: "seongsu", route: "2014", minutes: 60, task: "시드 여정",
++                    phase: .awaitingDeparture, elapsed: 0, paused: false)
++    }
+ 
+     /// 타이머 시드: 25분, 서울숲역 출발, 출발 완료·일시정지. 값은 경과 초.
+     private static let timerSeeds: [String: Int] = ["timerPaused90": 90, "timerNearArrival": 1440, "timerArrived": 1500]
++    /// 옛 형식(v3) 시드. 읽으면 이전되어 정류장·여정이 비워진다.
+     private static let v3Seeds: Set<String> = ["v3Awaiting", "v3Departed", "v3InvalidMinutes", "v3UnknownStop"]
+ 
+-    private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot {
+-        JourneySnapshot(
+-            id: "seed-timer", cardID: fixedCard.id, originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
+-            // 서울숲역(4)에서 역방향 5정류장 = 성수사거리(8). 지도는 계산값과 다른 도착지를 손상으로 본다.
+-            destinationStopID: RouteStops.all[RouteStops.wrap(4 - 5)].id,
+-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "타이머 시드",
+-            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: phase,
+-            progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)
++    /// 서울숲역(역방향 승강장)에서 2014번 역방향 5정류장 = 성수사거리.
++    private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot? {
++        seedJourney(id: "seed-timer", origin: "seoulForest-r", route: "2014-r", minutes: 25, task: "타이머 시드",
++                    phase: phase, elapsed: elapsed, paused: paused)
+     }
+ 
+-    private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot {
+-        readySnapshot.issuingCard(fixedCard)
+-            .updating(journey: JourneySection(active: timerJourney(phase: .departed, elapsed: elapsed, paused: true)))
++    private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot? {
++        timerJourney(phase: .departed, elapsed: elapsed, paused: true).map {
++            readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: $0))
++        }
+     }
+ 
+-    /// W07 시드: 재실행된 상태(출발 후 일시정지)의 2014번 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
+-    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destinationStopID`가 있으면 계산 도착지 대신 그 값을 저장한다.
++    /// W07 시드: 재실행된 상태(출발 후 일시정지)의 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
++    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destination`이 있으면 계산 도착지 대신 그 값을 저장한다.
++    /// W16 *Gone 시드는 UI 픽스처에 없는 노선·정류장을 저장한다(BR-13).
+     private struct LifecycleSeed {
+-        let originStopID: String; let direction: Int; let elapsed: Int?
+-        var task = "생명주기 시드"; var withRecord = true; var destinationStopID: String?
++        let originStopID: String; let routeID: String; let elapsed: Int?
++        var task = "생명주기 시드"; var withRecord = true; var destination: StationSnapshot?
+     }
++    private static let goneDestination = StationSnapshot(id: "gone-dest", name: "사라진 도착지")
+     private static let lifecycleSeeds: [String: LifecycleSeed] = [
+-        "lifePaused90": .init(originStopID: "seongsu", direction: 1, elapsed: 90),
+-        "lifePaused600": .init(originStopID: "seongsu", direction: 1, elapsed: 600),
+-        "lifePaused0": .init(originStopID: "seongsu", direction: 1, elapsed: 0),
+-        "lifePaused299": .init(originStopID: "seongsu", direction: 1, elapsed: 299),
+-        "lifePaused300": .init(originStopID: "seongsu", direction: 1, elapsed: 300),
+-        "lifePaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499),
+-        "lifeReverse300": .init(originStopID: "seongsu", direction: -1, elapsed: 300),
+-        "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", direction: 1, elapsed: 900),
+-        "lifeArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500),
+-        "lifeAwaiting": .init(originStopID: "seongsu", direction: 1, elapsed: nil),
+-        "alightPaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499, task: "논문", withRecord: false),
+-        "alightArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문", withRecord: false),
+-        "alightMismatchArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문",
+-                                       withRecord: false, destinationStopID: "ttukseom"),
++        "lifePaused90": .init(originStopID: "seongsu", routeID: "2014", elapsed: 90),
++        "lifePaused600": .init(originStopID: "seongsu", routeID: "2014", elapsed: 600),
++        "lifePaused0": .init(originStopID: "seongsu", routeID: "2014", elapsed: 0),
++        "lifePaused299": .init(originStopID: "seongsu", routeID: "2014", elapsed: 299),
++        "lifePaused300": .init(originStopID: "seongsu", routeID: "2014", elapsed: 300),
++        "lifePaused1499": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1499),
++        "lifeReverse300": .init(originStopID: "seongsu-r", routeID: "2014-r", elapsed: 300),
++        "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", routeID: "2014", elapsed: 900),
++        "lifeArrived": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1500),
++        "lifeAwaiting": .init(originStopID: "seongsu", routeID: "2014", elapsed: nil),
++        "lifeRouteGone700": .init(originStopID: "seongsu", routeID: "gone-route", elapsed: 700, destination: goneDestination),
++        "lifeOriginGone700": .init(originStopID: "gone-stop", routeID: "gone-route", elapsed: 700, destination: goneDestination),
++        "alightPaused1499": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1499, task: "논문", withRecord: false),
++        "alightArrived": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1500, task: "논문", withRecord: false),
++        "alightMismatchArrived": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1500, task: "논문",
++                                       withRecord: false, destination: StationSnapshot(id: "ttukseom", name: "뚝섬역")),
+     ]
+     private static let lifecycleRecord = RecordSnapshot(
+         id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014", tag: "독서",
+@@ -359,17 +409,12 @@ struct UITestBootstrap {
+ 
+     static func lifecycleSnapshot(_ name: String) -> AppSnapshot? {
+         if recordSeeds.contains(name) { return recordSnapshot(name) }
+-        guard let seed = lifecycleSeeds[name], let bus = BusLine.all.first(where: { $0.id == "2014" }),
+-              let origin = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction, stops: 0),
+-              let destination = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction,
+-                                                     stops: 25 / bus.minutesPerStop) else { return nil }
+-        let journey = JourneySnapshot(
+-            id: "seed-life", cardID: fixedCard.id, originStopID: seed.originStopID, direction: seed.direction, minutes: 25,
+-            busID: bus.id, destinationStopID: seed.destinationStopID ?? destination.id,
+-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: seed.task,
+-            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000),
+-            phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
+-            progress: JourneySnapshot.Progress(elapsedSeconds: seed.elapsed ?? 0), paused: seed.elapsed != nil)
++        guard let seed = lifecycleSeeds[name],
++              let journey = seedJourney(id: "seed-life", origin: seed.originStopID, route: seed.routeID, minutes: 25,
++                                        task: seed.task, phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
++                                        elapsed: seed.elapsed ?? 0, paused: seed.elapsed != nil,
++                                        destination: seed.destination) else { return nil }
++        let origin = StationSnapshot(id: journey.originStopID, name: journey.originName)
+         return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: origin, currentStation: origin)
+             .issuingCard(fixedCard)
+             .updating(records: RecordSection(items: seed.withRecord ? [lifecycleRecord] : []))
+@@ -378,7 +423,8 @@ struct UITestBootstrap {
+ 
+     /// v4로 만든 뒤 version을 3으로 바꾸고 paused 키를 지운다. 손상 시드는 그 위에서 값만 바꾼다.
+     private static func v3Bytes(_ name: String) throws -> Data {
+-        let journey = timerJourney(phase: name == "v3Awaiting" ? .awaitingDeparture : .departed, elapsed: 0, paused: name != "v3Awaiting")
++        guard let journey = timerJourney(phase: name == "v3Awaiting" ? .awaitingDeparture : .departed, elapsed: 0,
++                                         paused: name != "v3Awaiting") else { throw SetupIssue.invalidSaveState }
+         let data = try SnapshotCodec.encode(readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: journey)))
+         guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
+@@ -406,8 +452,58 @@ struct UITestBootstrap {
+     }
+ 
+     private static let readySnapshot = AppSnapshot.empty.updatingStage(cardIssued: true,
+-        initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
+-        currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
++        initialStation: StationSnapshot(id: "seongsu", name: "성수"),
++        currentStation: StationSnapshot(id: "seoulForest-r", name: "서울숲"))
++
++    /// 여정 없이 현재 정류장만 데이터에서 사라진 상태(BR-16).
++    private static var stationGoneSnapshot: AppSnapshot {
++        let gone = StationSnapshot(id: "gone-stop", name: "사라진 정류장")
++        return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: gone, currentStation: gone).issuingCard(fixedCard)
++    }
++
++    /// 마이페이지 UI 테스트: 카드 번호 FM-12345678과 완료 기록 3건(25·25·15분, 합 65분). 옛 형식이면 이전 때문에 메인이 아니라
++    /// 최초 정류장 화면으로 가므로 현재 버전으로 만든다.
++    private static var profileSnapshot: AppSnapshot {
++        let record = { (id: String, at: String, minutes: Int) in
++            RecordSnapshot(id: id, completedAt: at, date: "2026-10-13", bus: "버스2014", tag: "독서", tagColor: "#12ABef",
++                           task: "책 한 챕터 읽기", minutes: minutes, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
++        }
++        return readySnapshot.issuingCard(CardSnapshot(id: "FM-12345678", issuedAt: fixedCard.issuedAt))
++            .updating(records: RecordSection(items: [record("journey-a", "2026-10-13T03:00:00Z", 25),
++                                                     record("journey-b", "2026-10-13T02:00:00Z", 25),
++                                                     record("journey-c", "2026-10-13T01:00:00Z", 15)]))
++    }
++
++    /// 현재 버전 파일의 손상 여정(361분). 읽으면 여정만 버리고 카드·정류장은 남는다(메인, 진행 카드 없음).
++    private static func invalidMinutesBytes() throws -> Data {
++        guard let journey = timerJourney(phase: .departed, elapsed: 0, paused: true) else { throw SetupIssue.invalidSaveState }
++        let data = try SnapshotCodec.encode(readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: journey)))
++        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
++              var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
++              var active = section["active"] as? [String: Any] else { throw SetupIssue.invalidSaveState }
++        active["minutes"] = 361
++        section["active"] = active; state["journey"] = section; root["state"] = state
++        return try JSONSerialization.data(withJSONObject: root, options: .sortedKeys)
++    }
++
++    /// v4 시절 형식: 현재 버전으로 만든 뒤 정류장·여정에 direction을 넣고 version을 4로 바꾼다. 진행 여정·카드 1장·기록 3건.
++    private static func legacyV4Bytes() throws -> Data {
++        let base = profileSnapshot
++        guard let journey = lifecycleSnapshot("lifePaused600")?.journey.active
++        else { throw SetupIssue.invalidSaveState }
++        let data = try SnapshotCodec.encode(base.updating(cards: CardSection(items: [fixedCard]))
++            .updating(journey: JourneySection(active: journey)))
++        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
++              var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
++              var active = section["active"] as? [String: Any],
++              var initial = state["initialStation"] as? [String: Any], var current = state["currentStation"] as? [String: Any]
++        else { throw SetupIssue.invalidSaveState }
++        initial["direction"] = 1; current["direction"] = -1; active["direction"] = 1
++        section["active"] = active; state["journey"] = section
++        state["initialStation"] = initial; state["currentStation"] = current
++        root["state"] = state; root["version"] = 4
++        return try JSONSerialization.data(withJSONObject: root, options: .sortedKeys)
++    }
+ 
+     private static let stations = #""currentStation":{"direction":-1,"id":"seoulForest","name":"서울숲"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
+     private static let card = #"{"id":"FM-20261013","issuedAt":"2026-10-13T09:00:00Z"}"#
+@@ -425,10 +521,7 @@ struct UITestBootstrap {
+         "duplicateCards": state(cards: card + "," + #"{"id":"FM-20261014","issuedAt":"2026-10-13T09:00:00Z"}"#),
+         "cardWithoutIssuance": state(issued: false, cards: card, stations: #""currentStation":null,"initialStation":null"#),
+         "undefinedRecord": state(cards: "", records: #"{"kind":"x"}"#),
+-        // 마이페이지 UI 테스트: 카드 번호 FM-12345678과 완료 기록 3건(25·25·15분, 합 65분).
+-        // 버전 2 형식이다. 카드 꾸미기(W10)가 합류하면 버전 3 변환(카드 style 기본값)을 거쳐 읽힌다.
+-        "profileRecords": state(cards: #"{"id":"FM-12345678","issuedAt":"2026-10-13T09:00:00Z"}"#,
+-                                records: ##"{"bus":"버스2014","completedAt":"2026-10-13T03:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-a","memo":"","minutes":25,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"},{"bus":"버스2014","completedAt":"2026-10-13T02:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-b","memo":"","minutes":25,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"},{"bus":"버스2014","completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-c","memo":"","minutes":15,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"}"##),
++        "profileRecords": (try? SnapshotCodec.encode(profileSnapshot)).map { String(decoding: $0, as: UTF8.self) } ?? "",
+     ]
+ }
+ 

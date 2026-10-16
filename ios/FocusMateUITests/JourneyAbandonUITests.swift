@@ -186,13 +186,13 @@ final class JourneyAbandonUITests: XCTestCase {
         XCTAssertEqual(stationName(h), "뚝섬역")
     }
 
-    // 깨짐: 저장된 현재 정류장이 도달 정류장(뚝섬 정방향)이 아니거나 완료 기록이 늘거나 줄거나 여정이 남는다.
-    func testAC16_포기하면_저장된_정류장은_뚝섬_정방향이고_기록은_1건이다() throws {
+    // 깨짐: 저장된 현재 정류장이 도달 정류장(뚝섬역)이 아니거나 완료 기록이 늘거나 줄거나 여정이 남는다.
+    func testAC16_포기하면_저장된_정류장은_뚝섬역이고_기록은_1건이다() throws {
         let h = abandonToMain("lifePaused600")
 
         let station = try h.persistedCurrentStation()
         XCTAssertEqual(station.id, "ttukseom")
-        XCTAssertEqual(station.direction, 1)
+        XCTAssertEqual(station.name, "뚝섬역")
         XCTAssertNil(try h.persistedJourney().active)
         XCTAssertEqual(try h.persistedRecordCount(), 1)
     }
@@ -235,12 +235,12 @@ final class JourneyAbandonUITests: XCTestCase {
         XCTAssertEqual(stationName(h), "성수동")
     }
 
-    // 깨짐: 역방향 진행을 정방향으로 계산하거나 방향을 잃는다.
-    func testAC18_역방향_300초에서_포기하면_성수사거리이고_방향은_역이다() throws {
+    // 깨짐: 역방향 노선 진행을 정방향으로 계산하거나 역방향 승강장(id -r)을 잃는다.
+    func testAC18_역방향_300초에서_포기하면_역방향_성수사거리_승강장이다() throws {
         let h = abandonToMain("lifeReverse300")
 
         XCTAssertEqual(stationName(h), "성수사거리")
-        XCTAssertEqual(try h.persistedCurrentStation().direction, -1)
+        XCTAssertEqual(try h.persistedCurrentStation().id, "seongsuIntersection-r")
     }
 
     // 깨짐: 노선 끝을 넘는 진행이 순환하지 않는다.

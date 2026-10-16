@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from route_data.routes import (REASON_COORDINATE, REASON_KIND, REASON_NO_INFO,  # noqa: E402
                                JoinRateError, build_routes, normalize_integer)
 from route_data.segments import allocate_seconds, is_minimum_only, loop_meters, uses_run_minutes  # noqa: E402
-from route_data.xlsx import MissingColumnsError, read_first_sheet, require_columns  # noqa: E402
+from route_data.xlsx import MissingColumnsError, XlsxError, read_first_sheet, require_columns  # noqa: E402
 
 STOP_COLUMNS = ["ROUTE_ID", "노선명", "순번", "NODE_ID", "ARS_ID", "정류소명", "X좌표", "Y좌표"]
 INFO_COLUMNS = ["노선번호", "유형", "운행시간"]
@@ -33,6 +33,8 @@ SOURCE = {
     "provider": "서울 열린데이터광장",
     "routeInfoDataset": "서울시버스노선기본정보",
     "routeInfoDatasetID": "OA-15066",
+    "routeInfoSourceURL": "https://data.seoul.go.kr/dataList/OA-15066/F/1/datasetView.do",
+    "sourceURL": "https://data.seoul.go.kr/dataList/OA-1095/F/1/datasetView.do",
 }
 
 
@@ -90,6 +92,7 @@ def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fr
     data = text.encode("utf-8")
     if len(data) > max_bytes:
         raise OutputTooLargeError(f"산출 크기 {len(data)} bytes가 한도 {max_bytes} bytes를 넘습니다")
+    input_hashes = (_sha256(stops_path.read_bytes()), _sha256(routes_path.read_bytes()))
     _replace_atomically(out_path, data)
 
     excluded = result.excluded
@@ -114,8 +117,8 @@ def build(stops_path, routes_path, out_path, *, base_date=None, min_join_rate=Fr
         f"최소 보정 초과 노선 수: {minimum_only}",
         f"결합률: {float(result.join_rate) * 100:.1f}%",
         f"산출 크기: {len(data)} bytes",
-        f"SHA-256 정류소정보: {_sha256(stops_path.read_bytes())}",
-        f"SHA-256 노선기본정보: {_sha256(routes_path.read_bytes())}",
+        f"SHA-256 정류소정보: {input_hashes[0]}",
+        f"SHA-256 노선기본정보: {input_hashes[1]}",
         f"SHA-256 산출: {_sha256(data)}",
     ]
     return "\n".join(summary)
@@ -157,6 +160,9 @@ def _replace_atomically(path, data):
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
         os.replace(temporary, path)
     except BaseException:
         if os.path.exists(temporary):
@@ -176,7 +182,7 @@ def main(argv=None):
     try:
         summary = build(args.stops, args.routes, args.out, base_date=args.base_date,
                         min_join_rate=args.min_join_rate, max_bytes=args.max_bytes)
-    except (InputError, MissingColumnsError) as error:
+    except (InputError, MissingColumnsError, XlsxError) as error:
         print(error, file=sys.stderr)
         return 2
     except JoinRateError as error:

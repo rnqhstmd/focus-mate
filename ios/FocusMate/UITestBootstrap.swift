@@ -18,6 +18,8 @@ struct UITestBootstrap {
     let route: String?
     let boardingSaveFailure: UITestCardSaveFailure
     let manualClock: Bool
+    /// `--fm-ui-route-data`: fixture(기본, `RouteCatalog.uiTestFixture()`)·bundled(번들 서울 전체)·pending(로딩이 끝나지 않음)·failed.
+    let routeDataMode: String
     let nextSaveFailure = UITestNextSaveFailure()
     let writeCounter = UITestWriteCounter()
     enum IssueHold { case standard, manual }
@@ -69,6 +71,8 @@ struct UITestBootstrap {
         let hold = try argument("--fm-ui-issue-hold")
         guard hold == nil || hold == "manual" else { throw SetupIssue.invalidArguments }
         issueHold = hold == "manual" ? .manual : .standard
+        routeDataMode = try argument("--fm-ui-route-data") ?? "fixture"
+        guard ["fixture", "bundled", "pending", "failed"].contains(routeDataMode) else { throw SetupIssue.invalidArguments }
         recoveryScenario = try argument("--fm-ui-recovery")
         guard recoveryScenario == nil || ["readOnce", "readAlways", "backupFail", "backupMismatch", "cleanupFail"].contains(recoveryScenario!) else { throw SetupIssue.invalidArguments }
         fileURL = applicationSupport.appendingPathComponent("FocusMate/UITests", isDirectory: true)
@@ -145,7 +149,8 @@ struct UITestBootstrap {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney"])
+    private static let seeds: Set<String> = Set(["none", "cardOnly", "ready", "issuedWithoutCard", "activeJourney",
+                                                 "legacyV4Stations", "invalidMinutesJourney", "stationGone"])
         .union(rawSeeds.keys).union(timerSeeds.keys).union(v3Seeds).union(lifecycleSeeds.keys).union(recordSeeds)
 
     func prepare() throws {
@@ -157,16 +162,22 @@ struct UITestBootstrap {
         case "ready": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard))
         case "issuedWithoutCard": try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot)
         case "activeJourney":
+            guard let journey = Self.seededJourney else { throw SetupIssue.invalidArguments }
             try LocalSnapshotStore(fileURL: fileURL).save(Self.readySnapshot.issuingCard(Self.fixedCard)
-                .updating(journey: JourneySection(active: Self.seededJourney)))
+                .updating(journey: JourneySection(active: journey)))
         case let name where Self.timerSeeds[name] != nil:
-            try LocalSnapshotStore(fileURL: fileURL).save(Self.timerSnapshot(Self.timerSeeds[name]!))
+            guard let snapshot = Self.timerSnapshot(Self.timerSeeds[name]!) else { throw SetupIssue.invalidArguments }
+            try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
         case let name where Self.lifecycleSeeds[name] != nil || Self.recordSeeds.contains(name):
             guard let snapshot = Self.lifecycleSnapshot(name) else { throw SetupIssue.invalidArguments }
             try LocalSnapshotStore(fileURL: fileURL).save(snapshot)
         case let name where Self.v3Seeds.contains(name):
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Self.v3Bytes(name).write(to: fileURL, options: .atomic)
+        case "legacyV4Stations", "invalidMinutesJourney":
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try (seed == "legacyV4Stations" ? Self.legacyV4Bytes() : Self.invalidMinutesBytes()).write(to: fileURL, options: .atomic)
+        case "stationGone": try LocalSnapshotStore(fileURL: fileURL).save(Self.stationGoneSnapshot)
         default:
             guard let raw = Self.rawSeeds[seed] else { throw SetupIssue.invalidArguments }
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -212,7 +223,7 @@ struct UITestBootstrap {
         guard shouldFailSave, model.launchState == .ready(.main) else { return }
         guard let original = model.snapshot else { throw SetupIssue.invalidSaveState }
         model.save(original.updatingStage(cardIssued: original.cardIssued, initialStation: original.initialStation,
-                                          currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬", direction: 1)))
+                                          currentStation: StationSnapshot(id: "ttukseom", name: "뚝섬")))
     }
 
     /// `--fm-ui-route boarding`: 저장 없이 준비를 확정하고 승차 태그 화면까지 경로를 쌓는다(시드 ready 전용).
@@ -224,9 +235,10 @@ struct UITestBootstrap {
             return
         }
         guard route == "boarding" else { return }
-        guard model.launchState == .ready(.main), let origin = model.journeyOrigin else { throw SetupIssue.invalidSaveState }
+        guard model.launchState == .ready(.main), model.journeyOrigin != nil else { throw SetupIssue.invalidSaveState }
         model.journeyPlan.setMinutes(60)
-        _ = model.journeyPlan.choose(busID: "2014", from: origin)
+        // ready 시드의 현재 정류장은 역방향 승강장(seoulForest-r)이라 2014번 역방향 노선이다(60분 → 성수동).
+        guard model.chooseJourneyRoute("2014-r") else { throw SetupIssue.invalidSaveState }
         model.preparation.chooseTag(id: "reading")
         model.preparation.setTask("라우트 할 일")
         guard model.confirmPreparation() else { throw SetupIssue.invalidSaveState }
@@ -255,6 +267,18 @@ struct UITestBootstrap {
         return (services, gate)
     }
 
+    /// 정류장 데이터 저장소. pending은 로딩을 시작하지 않으므로 앱은 `startRouteData`를 부르지 않는다.
+    @MainActor func makeRouteCatalogStore() -> RouteCatalogStore {
+        switch routeDataMode {
+        case "bundled": RouteCatalogStore(load: { try RouteCatalogLoader.bundled() })
+        case "failed": RouteCatalogStore(load: { throw RouteCatalogIssue.malformed })
+        case "pending": RouteCatalogStore(load: { throw RouteCatalogIssue.malformed })
+        default: RouteCatalogStore(load: { try RouteCatalog.uiTestFixture() })
+        }
+    }
+
+    var startsRouteData: Bool { routeDataMode != "pending" }
+
     @MainActor func makeSoundPreview() -> SoundPreviewController? {
         guard shouldFailSound else { return nil }
         return SoundPreviewController(sound: .bus, makePlayer: { _ in throw SetupIssue.invalidArguments })
@@ -269,53 +293,80 @@ struct UITestBootstrap {
         catch { return "unreadable" }
     }
 
-    /// 승차 직후(출발 확인 전) 진행 여정 1건.
-    private static let seededJourney = JourneySnapshot(
-        id: "seed-journey", cardID: fixedCard.id, originStopID: "seongsu", direction: 1, minutes: 60, busID: "2014",
-        destinationStopID: RouteStops.all[RouteStops.wrap(12)].id,
-        tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "시드 여정",
-        sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: .awaitingDeparture, progress: .start, paused: false)
+    private static let seedTag = JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand)
+    private static let seedBoardedAt = Date(timeIntervalSince1970: 1_791_882_000)
+
+    /// UI 픽스처 카탈로그로 여정 시드를 만든다. 노선·출발 정류장이 데이터에 없으면(*Gone 시드) 도착지는 `override`, 이름은 고정 문구를 쓴다.
+    private static func seedJourney(id: String, origin: String, route: String, minutes: Int, task: String,
+                                    phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool,
+                                    destination override: StationSnapshot? = nil) -> JourneySnapshot? {
+        guard let catalog = try? RouteCatalog.uiTestFixture() else { return nil }
+        let originIndex = catalog.stopIndex(id: origin)
+        let routeIndex = catalog.routeIndex(id: route)
+        let leg = originIndex.flatMap { o in
+            routeIndex.flatMap { RouteLegFinder.leg(route: $0, originStop: o, minutes: minutes, in: catalog) }
+        }
+        let computed = leg.map { catalog.stops[$0.stopIndices[$0.stopIndices.count - 1]] }
+            .map { StationSnapshot(id: $0.id, name: $0.name) }
+        guard let destination = override ?? computed else { return nil }
+        let bus = routeIndex.map { catalog.routes[$0] }
+        return JourneySnapshot(
+            id: id, cardID: fixedCard.id, originStopID: origin,
+            originName: originIndex.map { catalog.stops[$0].name } ?? "사라진 정류장", minutes: minutes,
+            busID: route, busNumber: bus?.number ?? "999", busKind: bus?.kind ?? "지선",
+            destinationStopID: destination.id, destinationName: destination.name,
+            tag: seedTag, task: task, sound: .bus, boardedAt: seedBoardedAt,
+            phase: phase, progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)
+    }
+
+    /// 승차 직후(출발 확인 전) 진행 여정 1건. 성수역에서 2014번 60분(12정류장) → 성동구민체육센터.
+    private static var seededJourney: JourneySnapshot? {
+        seedJourney(id: "seed-journey", origin: "seongsu", route: "2014", minutes: 60, task: "시드 여정",
+                    phase: .awaitingDeparture, elapsed: 0, paused: false)
+    }
 
     /// 타이머 시드: 25분, 서울숲역 출발, 출발 완료·일시정지. 값은 경과 초.
     private static let timerSeeds: [String: Int] = ["timerPaused90": 90, "timerNearArrival": 1440, "timerArrived": 1500]
+    /// 옛 형식(v3) 시드. 읽으면 이전되어 정류장·여정이 비워진다.
     private static let v3Seeds: Set<String> = ["v3Awaiting", "v3Departed", "v3InvalidMinutes", "v3UnknownStop"]
 
-    private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot {
-        JourneySnapshot(
-            id: "seed-timer", cardID: fixedCard.id, originStopID: "seoulForest", direction: -1, minutes: 25, busID: "2014",
-            // 서울숲역(4)에서 역방향 5정류장 = 성수사거리(8). 지도는 계산값과 다른 도착지를 손상으로 본다.
-            destinationStopID: RouteStops.all[RouteStops.wrap(4 - 5)].id,
-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: "타이머 시드",
-            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000), phase: phase,
-            progress: JourneySnapshot.Progress(elapsedSeconds: elapsed), paused: paused)
+    /// 서울숲역(역방향 승강장)에서 2014번 역방향 5정류장 = 성수사거리.
+    private static func timerJourney(phase: JourneySnapshot.Phase, elapsed: Int, paused: Bool) -> JourneySnapshot? {
+        seedJourney(id: "seed-timer", origin: "seoulForest-r", route: "2014-r", minutes: 25, task: "타이머 시드",
+                    phase: phase, elapsed: elapsed, paused: paused)
     }
 
-    private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot {
-        readySnapshot.issuingCard(fixedCard)
-            .updating(journey: JourneySection(active: timerJourney(phase: .departed, elapsed: elapsed, paused: true)))
+    private static func timerSnapshot(_ elapsed: Int) -> AppSnapshot? {
+        timerJourney(phase: .departed, elapsed: elapsed, paused: true).map {
+            readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: $0))
+        }
     }
 
-    /// W07 시드: 재실행된 상태(출발 후 일시정지)의 2014번 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
-    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destinationStopID`가 있으면 계산 도착지 대신 그 값을 저장한다.
+    /// W07 시드: 재실행된 상태(출발 후 일시정지)의 25분 여정. 현재 정류장은 출발 정류장이고 완료 기록 1건이 있다.
+    /// W09 alight* 시드는 할 일 "논문"·기록 0건이고, `destination`이 있으면 계산 도착지 대신 그 값을 저장한다.
+    /// W16 *Gone 시드는 UI 픽스처에 없는 노선·정류장을 저장한다(BR-13).
     private struct LifecycleSeed {
-        let originStopID: String; let direction: Int; let elapsed: Int?
-        var task = "생명주기 시드"; var withRecord = true; var destinationStopID: String?
+        let originStopID: String; let routeID: String; let elapsed: Int?
+        var task = "생명주기 시드"; var withRecord = true; var destination: StationSnapshot?
     }
+    private static let goneDestination = StationSnapshot(id: "gone-dest", name: "사라진 도착지")
     private static let lifecycleSeeds: [String: LifecycleSeed] = [
-        "lifePaused90": .init(originStopID: "seongsu", direction: 1, elapsed: 90),
-        "lifePaused600": .init(originStopID: "seongsu", direction: 1, elapsed: 600),
-        "lifePaused0": .init(originStopID: "seongsu", direction: 1, elapsed: 0),
-        "lifePaused299": .init(originStopID: "seongsu", direction: 1, elapsed: 299),
-        "lifePaused300": .init(originStopID: "seongsu", direction: 1, elapsed: 300),
-        "lifePaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499),
-        "lifeReverse300": .init(originStopID: "seongsu", direction: -1, elapsed: 300),
-        "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", direction: 1, elapsed: 900),
-        "lifeArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500),
-        "lifeAwaiting": .init(originStopID: "seongsu", direction: 1, elapsed: nil),
-        "alightPaused1499": .init(originStopID: "seongsu", direction: 1, elapsed: 1499, task: "논문", withRecord: false),
-        "alightArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문", withRecord: false),
-        "alightMismatchArrived": .init(originStopID: "seongsu", direction: 1, elapsed: 1500, task: "논문",
-                                       withRecord: false, destinationStopID: "ttukseom"),
+        "lifePaused90": .init(originStopID: "seongsu", routeID: "2014", elapsed: 90),
+        "lifePaused600": .init(originStopID: "seongsu", routeID: "2014", elapsed: 600),
+        "lifePaused0": .init(originStopID: "seongsu", routeID: "2014", elapsed: 0),
+        "lifePaused299": .init(originStopID: "seongsu", routeID: "2014", elapsed: 299),
+        "lifePaused300": .init(originStopID: "seongsu", routeID: "2014", elapsed: 300),
+        "lifePaused1499": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1499),
+        "lifeReverse300": .init(originStopID: "seongsu-r", routeID: "2014-r", elapsed: 300),
+        "lifeWrap900": .init(originStopID: "seongsuBridgeNorth", routeID: "2014", elapsed: 900),
+        "lifeArrived": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1500),
+        "lifeAwaiting": .init(originStopID: "seongsu", routeID: "2014", elapsed: nil),
+        "lifeRouteGone700": .init(originStopID: "seongsu", routeID: "gone-route", elapsed: 700, destination: goneDestination),
+        "lifeOriginGone700": .init(originStopID: "gone-stop", routeID: "gone-route", elapsed: 700, destination: goneDestination),
+        "alightPaused1499": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1499, task: "논문", withRecord: false),
+        "alightArrived": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1500, task: "논문", withRecord: false),
+        "alightMismatchArrived": .init(originStopID: "seongsu", routeID: "2014", elapsed: 1500, task: "논문",
+                                       withRecord: false, destination: StationSnapshot(id: "ttukseom", name: "뚝섬역")),
     ]
     private static let lifecycleRecord = RecordSnapshot(
         id: "seed-record-1", completedAt: "2026-10-13T01:00:00Z", date: "2026-10-13", bus: "버스2014", tag: "독서",
@@ -359,17 +410,12 @@ struct UITestBootstrap {
 
     static func lifecycleSnapshot(_ name: String) -> AppSnapshot? {
         if recordSeeds.contains(name) { return recordSnapshot(name) }
-        guard let seed = lifecycleSeeds[name], let bus = BusLine.all.first(where: { $0.id == "2014" }),
-              let origin = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction, stops: 0),
-              let destination = JourneyReach.station(originStopID: seed.originStopID, direction: seed.direction,
-                                                     stops: 25 / bus.minutesPerStop) else { return nil }
-        let journey = JourneySnapshot(
-            id: "seed-life", cardID: fixedCard.id, originStopID: seed.originStopID, direction: seed.direction, minutes: 25,
-            busID: bus.id, destinationStopID: seed.destinationStopID ?? destination.id,
-            tag: JourneySnapshot.Tag(id: "reading", name: "독서", icon: .reading, color: .sand), task: seed.task,
-            sound: .bus, boardedAt: Date(timeIntervalSince1970: 1_791_882_000),
-            phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
-            progress: JourneySnapshot.Progress(elapsedSeconds: seed.elapsed ?? 0), paused: seed.elapsed != nil)
+        guard let seed = lifecycleSeeds[name],
+              let journey = seedJourney(id: "seed-life", origin: seed.originStopID, route: seed.routeID, minutes: 25,
+                                        task: seed.task, phase: seed.elapsed == nil ? .awaitingDeparture : .departed,
+                                        elapsed: seed.elapsed ?? 0, paused: seed.elapsed != nil,
+                                        destination: seed.destination) else { return nil }
+        let origin = StationSnapshot(id: journey.originStopID, name: journey.originName)
         return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: origin, currentStation: origin)
             .issuingCard(fixedCard)
             .updating(records: RecordSection(items: seed.withRecord ? [lifecycleRecord] : []))
@@ -378,7 +424,8 @@ struct UITestBootstrap {
 
     /// v4로 만든 뒤 version을 3으로 바꾸고 paused 키를 지운다. 손상 시드는 그 위에서 값만 바꾼다.
     private static func v3Bytes(_ name: String) throws -> Data {
-        let journey = timerJourney(phase: name == "v3Awaiting" ? .awaitingDeparture : .departed, elapsed: 0, paused: name != "v3Awaiting")
+        guard let journey = timerJourney(phase: name == "v3Awaiting" ? .awaitingDeparture : .departed, elapsed: 0,
+                                         paused: name != "v3Awaiting") else { throw SetupIssue.invalidSaveState }
         let data = try SnapshotCodec.encode(readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: journey)))
         guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
@@ -406,8 +453,58 @@ struct UITestBootstrap {
     }
 
     private static let readySnapshot = AppSnapshot.empty.updatingStage(cardIssued: true,
-        initialStation: StationSnapshot(id: "seongsu", name: "성수", direction: 1),
-        currentStation: StationSnapshot(id: "seoulForest", name: "서울숲", direction: -1))
+        initialStation: StationSnapshot(id: "seongsu", name: "성수"),
+        currentStation: StationSnapshot(id: "seoulForest-r", name: "서울숲"))
+
+    /// 여정 없이 현재 정류장만 데이터에서 사라진 상태(BR-16).
+    private static var stationGoneSnapshot: AppSnapshot {
+        let gone = StationSnapshot(id: "gone-stop", name: "사라진 정류장")
+        return AppSnapshot.empty.updatingStage(cardIssued: true, initialStation: gone, currentStation: gone).issuingCard(fixedCard)
+    }
+
+    /// 마이페이지 UI 테스트: 카드 번호 FM-12345678과 완료 기록 3건(25·25·15분, 합 65분). 옛 형식이면 이전 때문에 메인이 아니라
+    /// 최초 정류장 화면으로 가므로 현재 버전으로 만든다.
+    private static var profileSnapshot: AppSnapshot {
+        let record = { (id: String, at: String, minutes: Int) in
+            RecordSnapshot(id: id, completedAt: at, date: "2026-10-13", bus: "버스2014", tag: "독서", tagColor: "#12ABef",
+                           task: "책 한 챕터 읽기", minutes: minutes, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
+        }
+        return readySnapshot.issuingCard(CardSnapshot(id: "FM-12345678", issuedAt: fixedCard.issuedAt))
+            .updating(records: RecordSection(items: [record("journey-a", "2026-10-13T03:00:00Z", 25),
+                                                     record("journey-b", "2026-10-13T02:00:00Z", 25),
+                                                     record("journey-c", "2026-10-13T01:00:00Z", 15)]))
+    }
+
+    /// 현재 버전 파일의 손상 여정(361분). 읽으면 여정만 버리고 카드·정류장은 남는다(메인, 진행 카드 없음).
+    private static func invalidMinutesBytes() throws -> Data {
+        guard let journey = timerJourney(phase: .departed, elapsed: 0, paused: true) else { throw SetupIssue.invalidSaveState }
+        let data = try SnapshotCodec.encode(readySnapshot.issuingCard(fixedCard).updating(journey: JourneySection(active: journey)))
+        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
+              var active = section["active"] as? [String: Any] else { throw SetupIssue.invalidSaveState }
+        active["minutes"] = 361
+        section["active"] = active; state["journey"] = section; root["state"] = state
+        return try JSONSerialization.data(withJSONObject: root, options: .sortedKeys)
+    }
+
+    /// v4 시절 형식: 현재 버전으로 만든 뒤 정류장·여정에 direction을 넣고 version을 4로 바꾼다. 진행 여정·카드 1장·기록 3건.
+    private static func legacyV4Bytes() throws -> Data {
+        let base = profileSnapshot
+        guard let journey = lifecycleSnapshot("lifePaused600")?.journey.active
+        else { throw SetupIssue.invalidSaveState }
+        let data = try SnapshotCodec.encode(base.updating(cards: CardSection(items: [fixedCard]))
+            .updating(journey: JourneySection(active: journey)))
+        guard var root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var state = root["state"] as? [String: Any], var section = state["journey"] as? [String: Any],
+              var active = section["active"] as? [String: Any],
+              var initial = state["initialStation"] as? [String: Any], var current = state["currentStation"] as? [String: Any]
+        else { throw SetupIssue.invalidSaveState }
+        initial["direction"] = 1; current["direction"] = -1; active["direction"] = 1
+        section["active"] = active; state["journey"] = section
+        state["initialStation"] = initial; state["currentStation"] = current
+        root["state"] = state; root["version"] = 4
+        return try JSONSerialization.data(withJSONObject: root, options: .sortedKeys)
+    }
 
     private static let stations = #""currentStation":{"direction":-1,"id":"seoulForest","name":"서울숲"},"initialStation":{"direction":1,"id":"seongsu","name":"성수"}"#
     private static let card = #"{"id":"FM-20261013","issuedAt":"2026-10-13T09:00:00Z"}"#
@@ -425,10 +522,7 @@ struct UITestBootstrap {
         "duplicateCards": state(cards: card + "," + #"{"id":"FM-20261014","issuedAt":"2026-10-13T09:00:00Z"}"#),
         "cardWithoutIssuance": state(issued: false, cards: card, stations: #""currentStation":null,"initialStation":null"#),
         "undefinedRecord": state(cards: "", records: #"{"kind":"x"}"#),
-        // 마이페이지 UI 테스트: 카드 번호 FM-12345678과 완료 기록 3건(25·25·15분, 합 65분).
-        // 버전 2 형식이다. 카드 꾸미기(W10)가 합류하면 버전 3 변환(카드 style 기본값)을 거쳐 읽힌다.
-        "profileRecords": state(cards: #"{"id":"FM-12345678","issuedAt":"2026-10-13T09:00:00Z"}"#,
-                                records: ##"{"bus":"버스2014","completedAt":"2026-10-13T03:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-a","memo":"","minutes":25,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"},{"bus":"버스2014","completedAt":"2026-10-13T02:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-b","memo":"","minutes":25,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"},{"bus":"버스2014","completedAt":"2026-10-13T01:00:00Z","date":"2026-10-13","from":"성수역","id":"journey-c","memo":"","minutes":15,"sound":"빗소리","tag":"독서","tagColor":"#12ABef","task":"책 한 챕터 읽기","to":"서울숲 입구"}"##),
+        "profileRecords": (try? SnapshotCodec.encode(profileSnapshot)).map { String(decoding: $0, as: UTF8.self) } ?? "",
     ]
 }
 

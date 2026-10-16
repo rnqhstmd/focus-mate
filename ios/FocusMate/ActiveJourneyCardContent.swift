@@ -19,13 +19,12 @@ struct ActiveJourneyCardContent: Equatable {
         [title, task, busText, remainingText, routeText].compactMap { $0 }.joined(separator: ", ")
     }
 
-    init?(journey: JourneySnapshot) {
-        guard let bus = journey.bus, let destination = journey.destinationName else { return nil }
+    init(journey: JourneySnapshot) {
         kind = journey.isArrived ? .arrived : .resumable
         title = kind == .arrived ? JourneyLifecycleText.arrivedTitle : JourneyLifecycleText.resumableTitle
         task = journey.task
-        busText = "\(bus.kind) \(bus.number)"
-        routeText = JourneyLifecycleText.route(tag: journey.tag.name, destination: destination)
+        busText = "\(journey.busKind) \(journey.busNumber)"
+        routeText = JourneyLifecycleText.route(tag: journey.tag.name, destination: journey.destinationName)
         remainingText = kind == .arrived ? nil : JourneyLifecycleText.remaining(
             minutes: JourneyTimerDisplay.remainingMinutes(totalSeconds: journey.totalSeconds,
                                                           elapsedSeconds: journey.progress.elapsedSeconds))

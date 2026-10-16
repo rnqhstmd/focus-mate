@@ -2,8 +2,13 @@ import Foundation
 
 // 마이페이지 읽기·이동. 통계는 records 집계만 읽고 저장하지 않는다.
 enum ProfileMenuItem {
-    case settings
-    var destination: Destination { .settings }
+    case settings, dataSource
+    var destination: Destination {
+        switch self {
+        case .settings: .settings
+        case .dataSource: .dataSource
+        }
+    }
 }
 
 enum ProfileStats: Equatable {

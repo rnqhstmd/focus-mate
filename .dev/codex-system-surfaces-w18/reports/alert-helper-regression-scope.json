@@ -1,0 +1,30 @@
+[
+  {
+    "file": "ios/FocusMateUITests/BoardingLargeTextUITests.swift",
+    "tests": 2
+  },
+  {
+    "file": "ios/FocusMateUITests/JourneyLifecycleSafetyUITests.swift",
+    "tests": 14
+  },
+  {
+    "file": "ios/FocusMateUITests/JourneyAbandonUITests.swift",
+    "tests": 30
+  },
+  {
+    "file": "ios/FocusMateUITests/RouteDataUITests.swift",
+    "tests": 10
+  },
+  {
+    "file": "ios/FocusMateUITests/NewJourneyUITests.swift",
+    "tests": 19
+  },
+  {
+    "file": "ios/FocusMateUITests/ActiveJourneyMainUITests.swift",
+    "tests": 3
+  },
+  {
+    "file": "ios/FocusMateUITests/WidgetEntryUITests.swift",
+    "tests": 5
+  }
+]

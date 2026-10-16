@@ -32,19 +32,19 @@ enum JourneyLiveActivityPolicy {
     }
 
     /// 운행 중은 종료 시각에 만료되고, 일시정지는 만료가 없다(BR-5). 도착은 종료 대상이라 요청이 없다.
-    static func request(status: JourneyTimerController.Status, remainingSeconds: Int, now: Date) -> JourneyActivityRequest? {
+    static func request(status: JourneyTimerController.Status, remainingSeconds: Int, now: Date, totalSeconds: Int? = nil) -> JourneyActivityRequest? {
         switch status {
         case .running:
             let endDate = now.addingTimeInterval(TimeInterval(remainingSeconds))
-            return JourneyActivityRequest(state: .init(status: .running, endDate: endDate, pausedRemainingSeconds: nil),
+            return JourneyActivityRequest(state: .init(status: .running, endDate: endDate, pausedRemainingSeconds: nil, totalSeconds: totalSeconds),
                                           staleDate: endDate)
-        case .paused: return pausedRequest(remainingSeconds: remainingSeconds)
+        case .paused: return pausedRequest(remainingSeconds: remainingSeconds, totalSeconds: totalSeconds)
         case .arrived: return nil
         }
     }
 
-    static func pausedRequest(remainingSeconds: Int) -> JourneyActivityRequest {
-        JourneyActivityRequest(state: .init(status: .paused, endDate: nil, pausedRemainingSeconds: max(0, remainingSeconds)),
+    static func pausedRequest(remainingSeconds: Int, totalSeconds: Int? = nil) -> JourneyActivityRequest {
+        JourneyActivityRequest(state: .init(status: .paused, endDate: nil, pausedRemainingSeconds: max(0, remainingSeconds), totalSeconds: totalSeconds),
                                staleDate: nil)
     }
 
@@ -62,6 +62,6 @@ enum JourneyLiveActivityPolicy {
         let (reuseID, endIDs) = appearPlan(existing: existing, journeyID: journey.id)
         let remaining = journey.totalSeconds - journey.progress.elapsedSeconds
         return JourneyLaunchPlan(endIDs: endIDs,
-                                 pausedUpdate: reuseID.map { .init(id: $0, request: pausedRequest(remainingSeconds: remaining)) })
+                                 pausedUpdate: reuseID.map { .init(id: $0, request: pausedRequest(remainingSeconds: remaining, totalSeconds: journey.totalSeconds)) })
     }
 }

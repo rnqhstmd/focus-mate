@@ -10,6 +10,7 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
         let pausedRemainingSeconds: Int?
     }
 
+    private let totalSeconds: Int
     private let attributes: JourneyActivityAttributes
     private let gateway: LiveActivityGateway
     private let now: @MainActor () -> Date
@@ -20,6 +21,7 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
     private var lastSent: SentKey?
 
     init(journey: JourneySnapshot, gateway: LiveActivityGateway, now: @escaping @MainActor () -> Date = { Date() }) {
+        totalSeconds = journey.totalSeconds
         attributes = JourneyLiveActivityPolicy.attributes(for: journey)
         self.gateway = gateway
         self.now = now
@@ -28,7 +30,7 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
     func timerDidChange(status: JourneyTimerController.Status, remainingSeconds: Int) {
         reconcileOnce()
         guard !startFailed else { return }
-        guard let request = JourneyLiveActivityPolicy.request(status: status, remainingSeconds: remainingSeconds, now: now()) else {
+        guard let request = JourneyLiveActivityPolicy.request(status: status, remainingSeconds: remainingSeconds, now: now(), totalSeconds: totalSeconds) else {
             if let activityID { gateway.end(id: activityID) }
             activityID = nil
             return

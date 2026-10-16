@@ -1,0 +1,107 @@
+[
+  {
+    "file": "ios/FocusMateTests/JourneyActivityContentStateCodableTests.swift",
+    "manifest": ".dev/codex-feat-live-activity-design/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/JourneyActivityDisplayTests.swift",
+    "manifest": ".dev/codex-feat-live-activity-design/reports/t2-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/JourneyActivityPresentationTests.swift",
+    "manifest": ".dev/codex-feat-live-activity-design/reports/t2-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/JourneyLiveActivityCleanupTests.swift",
+    "manifest": ".dev/codex-feat-live-activity-design/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift",
+    "manifest": ".dev/codex-feat-live-activity-design/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/JourneyLiveActivitySyncTests.swift",
+    "manifest": ".dev/codex-feat-live-activity-design/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/RecordsAnalyticsAdapterTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w09b/reports/t2-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/RecordsAnalyticsBrowserTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w09b/reports/t2-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/RecordsAnalyticsRowTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w09b/reports/t3-regression-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/RecordsAnalyticsTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w09b/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetEntryLinksTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t3-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetFixtures.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetLinkTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetNavigationTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t2-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetPresentationTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t3-ax-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetPublicationTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t2-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetSnapshotStoreTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t1-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetSnapshotTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t1-fix-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateTests/WidgetTimelinePlanTests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t3-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateUITests/RecordsAnalyticsUITests.swift",
+    "manifest": ".dev/codex-system-surfaces-w09b/reports/t3-regression-test-hashes.json",
+    "matches": true
+  },
+  {
+    "file": "ios/FocusMateUITests/WidgetEntryUITests.swift",
+    "manifest": ".dev/codex-system-surfaces-w18/reports/t2-ui-test-hashes-final.json",
+    "matches": true
+  }
+]

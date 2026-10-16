@@ -1,10 +1,12 @@
 import SwiftUI
 import WidgetKit
 
-/// 위젯 확장 진입점. 홈 화면 위젯 없이 여행 Live Activity만 제공한다.
+/// Live Activity와 두 종류의 홈 위젯을 함께 제공한다.
 @main
 struct FocusMateWidgetsBundle: WidgetBundle {
     var body: some Widget {
         JourneyLiveActivityWidget()
+        FocusPromptWidget()
+        AnalyticsHomeWidget()
     }
 }

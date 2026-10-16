@@ -14,6 +14,15 @@ struct JourneyActivityAttributes: ActivityAttributes {
         var endDate: Date?
         /// 일시정지에만 있다. 멈춘 남은 초.
         var pausedRemainingSeconds: Int?
+        /// 진행 막대의 전체 집중 시간. 이전 활동에는 없을 수 있다.
+        var totalSeconds: Int?
+
+        init(status: JourneyActivityStatus, endDate: Date?, pausedRemainingSeconds: Int?, totalSeconds: Int? = nil) {
+            self.status = status
+            self.endDate = endDate
+            self.pausedRemainingSeconds = pausedRemainingSeconds
+            self.totalSeconds = totalSeconds
+        }
     }
 
     let journeyID: String

@@ -2,80 +2,141 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-/// 여행 진행 표시(잠금 화면·다이나믹 아일랜드). 문구·시간 선택은 `JourneyActivityDisplay`가 정하고 여기서는 그리기만 한다.
+private enum JourneyActivityPalette {
+    static let charcoal = Color(red: 0.08, green: 0.085, blue: 0.09)
+    static let paper = Color(red: 0.95, green: 0.945, blue: 0.92)
+}
+
+/// 시간·상태는 같은 presentation에서 읽고 실제 시간 진행은 시스템 renderer에 맡긴다.
 struct JourneyLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: JourneyActivityAttributes.self) { context in
-            JourneyLockScreenView(context: context)
-                .activityBackgroundTint(Color.black.opacity(0.8))
-                .activitySystemActionForegroundColor(.white)
+            let presentation = JourneyActivityDisplay.presentation(state: context.state, isStale: context.isStale, now: .now)
+            JourneyLockScreenView(attributes: context.attributes, presentation: presentation)
+                .activityBackgroundTint(JourneyActivityPalette.charcoal)
+                .activitySystemActionForegroundColor(JourneyActivityPalette.paper)
         } dynamicIsland: { context in
-            DynamicIsland {
+            let presentation = JourneyActivityDisplay.presentation(state: context.state, isStale: context.isStale, now: .now)
+            let summary = JourneyActivityDisplay.accessibilitySummary(attributes: context.attributes, presentation: presentation)
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.attributes.busNumber, systemImage: "bus.fill").font(.headline)
+                    Text(JourneyActivityDisplay.busTitle(busNumber: context.attributes.busNumber, busKind: context.attributes.busKind))
+                        .font(.headline).lineLimit(1).minimumScaleFactor(0.8)
+                        .accessibilityLabel(summary)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    JourneyActivityTimeText(context: context).font(.title3.monospacedDigit())
+                    VStack(alignment: .trailing, spacing: 2) {
+                        JourneyActivityTimeText(presentation: presentation)
+                            .font(.title2.weight(.semibold).monospacedDigit())
+                        Text(presentation.status == .running ? "남은 집중 시간" : JourneyActivityDisplay.statusName(presentation.status))
+                            .font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        Text(context.attributes.destinationName).lineLimit(1)
-                        Spacer()
-                        Text(statusName(context))
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    JourneyActivityTimeline(destination: context.attributes.destinationName, presentation: presentation)
+                        .padding(.top, 6).accessibilityHidden(true)
                 }
             } compactLeading: {
-                Image(systemName: "bus.fill")
-                    .accessibilityLabel(JourneyActivityDisplay.compactAccessibilityLabel(busNumber: context.attributes.busNumber))
+                Image(systemName: presentation.statusSymbol)
+                    .foregroundStyle(JourneyActivityPalette.paper)
+                    .accessibilityLabel(summary)
             } compactTrailing: {
-                JourneyActivityTimeText(context: context).monospacedDigit().frame(maxWidth: 56)
+                JourneyActivityTimeText(presentation: presentation)
+                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                    .lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth: 64)
             } minimal: {
-                JourneyActivityTimeText(context: context).monospacedDigit()
+                Image(systemName: presentation.statusSymbol)
+                    .foregroundStyle(JourneyActivityPalette.paper)
+                    .accessibilityLabel(summary)
+                    .accessibilityValue(presentation.status == .arrived ? Text("") : JourneyActivityTimeText.text(presentation.time))
             }
+            .keylineTint(JourneyActivityPalette.paper)
         }
     }
 }
 
-private func statusName(_ context: ActivityViewContext<JourneyActivityAttributes>) -> String {
-    JourneyActivityDisplay.statusName(JourneyActivityDisplay.displayStatus(state: context.state, isStale: context.isStale))
-}
-
-private struct JourneyLockScreenView: View {
-    let context: ActivityViewContext<JourneyActivityAttributes>
+struct JourneyLockScreenView: View {
+    let attributes: JourneyActivityAttributes
+    let presentation: JourneyActivityPresentation
 
     var body: some View {
-        // 설명(버스·도착지·상태)과 카운트다운을 따로 둔다. 하나로 합치면 운행 중 남은 시간이 읽히지 않는다.
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: "bus.fill").font(.title2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(JourneyActivityDisplay.busTitle(busNumber: context.attributes.busNumber,
-                                                         busKind: context.attributes.busKind)).font(.headline)
-                    Text(context.attributes.destinationName).font(.subheadline).lineLimit(1)
+                Image(systemName: presentation.statusSymbol).font(.title2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(JourneyActivityDisplay.busTitle(busNumber: attributes.busNumber, busKind: attributes.busKind))
+                        .font(.headline).lineLimit(1)
+                    Text(attributes.destinationName).font(.subheadline).lineLimit(1)
+                    Text(JourneyActivityDisplay.statusName(presentation.status)).font(.caption).foregroundStyle(.secondary)
                 }
-                Spacer()
-                Text(statusName(context)).font(.caption)
+                Spacer(minLength: 4)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(JourneyActivityDisplay.accessibilityLabel(attributes: context.attributes,
-                                                                         state: context.state, isStale: context.isStale))
-            JourneyActivityTimeText(context: context).font(.title2.monospacedDigit())
+            .accessibilityLabel(JourneyActivityDisplay.accessibilitySummary(attributes: attributes, presentation: presentation))
+            JourneyActivityTimeText(presentation: presentation)
+                .font(.title2.weight(.semibold).monospacedDigit())
+                .lineLimit(1).minimumScaleFactor(0.7)
         }
-        .foregroundStyle(.white)
-        .padding(16)
+        .foregroundStyle(JourneyActivityPalette.paper)
+        .padding(18)
     }
 }
 
-/// 운행 중은 시스템 카운트다운, 일시정지·만료는 정적 문자열.
-private struct JourneyActivityTimeText: View {
-    let context: ActivityViewContext<JourneyActivityAttributes>
+struct JourneyActivityTimeline: View {
+    let destination: String
+    let presentation: JourneyActivityPresentation
 
     var body: some View {
-        switch JourneyActivityDisplay.timeContent(state: context.state, isStale: context.isStale, now: .now) {
-        case .countdown(let range): Text(timerInterval: range, countsDown: true, showsHours: false)
-        case .fixed(let text): Text(text)
+        VStack(spacing: 8) {
+            if presentation.progress != .hidden {
+                HStack(spacing: 10) {
+                    // 이 심볼은 여정 표시다. 진행 위치는 시스템 막대의 채움만 나타낸다.
+                    Image(systemName: presentation.statusSymbol).font(.system(size: 16, weight: .medium))
+                    VStack(spacing: 4) {
+                        HStack(alignment: .bottom, spacing: 0) {
+                            ForEach(0..<25, id: \.self) { index in
+                                Rectangle().fill(JourneyActivityPalette.paper.opacity(index.isMultiple(of: 6) ? 0.8 : 0.35))
+                                    .frame(width: 1, height: index.isMultiple(of: 6) ? 9 : 4)
+                                if index != 24 { Spacer(minLength: 1) }
+                            }
+                        }
+                        switch presentation.progress {
+                        case .timer(let range):
+                            ProgressView(timerInterval: range, countsDown: false)
+                                .progressViewStyle(.linear).labelsHidden()
+                        case .fixed(let fraction):
+                            ProgressView(value: fraction).progressViewStyle(.linear)
+                        case .hidden: EmptyView()
+                        }
+                    }
+                }
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(presentation.status == .running ? "출발" : JourneyActivityDisplay.statusName(presentation.status))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(destination).lineLimit(1).truncationMode(.tail)
+            }
+            .font(.caption)
         }
+        .tint(JourneyActivityPalette.paper)
+        .foregroundStyle(JourneyActivityPalette.paper)
+    }
+}
+
+struct JourneyActivityTimeText: View {
+    let presentation: JourneyActivityPresentation
+
+    static func text(_ content: JourneyActivityTimeContent) -> Text {
+        switch content {
+        case .countdown(let range): Text(timerInterval: range, countsDown: true, showsHours: false)
+        case .fixed(let value): Text(value)
+        }
+    }
+
+    var body: some View {
+        Self.text(presentation.time)
+            .accessibilityHint(Text("남은 집중 시간"))
+            .accessibilityHidden(presentation.status == .arrived)
     }
 }

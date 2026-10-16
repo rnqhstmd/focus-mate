@@ -64,8 +64,8 @@ final class JourneyActivityDisplayTests: XCTestCase {
         XCTAssertEqual(accessibilityText(status: .arrived), "343번 간선 버스, 도착지 서울역, 도착")
     }
 
-    // 깨짐: 모델에 카드 id·이름·할 일·태그·소리·출발지·progress 같은 필드를 추가하거나 7개 중 하나를 빼면 실패한다.
-    func testV15_AC30_표시_데이터_모델_필드는_정확히_7가지다() {
+    // 깨짐: 승인된 totalSeconds 외에 카드·할 일·태그 등 민감 정보를 표시 데이터에 추가한다.
+    func testW17_AC30_표시_데이터는_총시간만_추가한_8필드로_제한한다() {
         let attributes = JourneyActivityAttributes(
             journeyID: "j-1", busNumber: "343", busKind: "간선", destinationName: "서울역"
         )
@@ -77,7 +77,7 @@ final class JourneyActivityDisplayTests: XCTestCase {
         XCTAssertEqual(
             labels,
             ["journeyID", "busNumber", "busKind", "destinationName",
-             "status", "endDate", "pausedRemainingSeconds"]
+             "status", "endDate", "pausedRemainingSeconds", "totalSeconds"]
         )
     }
 
@@ -158,20 +158,20 @@ final class JourneyActivityDisplayTests: XCTestCase {
         XCTAssertEqual(content, .fixed("도착했어요"))
     }
 
-    // 깨짐: 일시정지 라벨에 남은 시간 문구가 빠지면 실패한다.
-    func testV15_위젯_일시정지_접근성_라벨은_남은_시간을_읽는다() {
+    // 깨짐: 일시정지 summary가 시간 요소와 별개로 남은 시간을 합성하여 중복 낭독한다.
+    func testW17_위젯_일시정지_summary는_별도시간을_중복하지_않는다() {
         let label = JourneyActivityDisplay.accessibilityLabel(
             attributes: widgetAttributes, state: widgetState(.paused, paused: 3000), isStale: false
         )
-        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지, 남은 시간 50분 0초")
+        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지")
     }
 
-    // 깨짐: stale이 일시정지 라벨을 "도착"으로 덮으면 실패한다.
-    func testV15_위젯_stale이어도_일시정지_접근성_라벨은_같다() {
+    // 깨짐: stale이 일시정지 summary를 도착으로 덮거나 남은 시간을 중복 합성한다.
+    func testW17_stale이어도_일시정지_summary는_상태만_한번_제공한다() {
         let label = JourneyActivityDisplay.accessibilityLabel(
             attributes: widgetAttributes, state: widgetState(.paused, paused: 3000), isStale: true
         )
-        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지, 남은 시간 50분 0초")
+        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지")
     }
 
     // 깨짐: stale 운행이 "운행 중"으로 읽히면 실패한다.
@@ -251,4 +251,81 @@ final class JourneyActivityDisplayTests: XCTestCase {
         let status = JourneyActivityDisplay.displayStatus(state: widgetState(.arrived), isStale: false)
         XCTAssertEqual(status, .arrived)
     }
+    // MARK: W17 T2 1차 — 기존 공개 API의 정규화·단일 시간 소유
+
+    // 깨짐: 종료시각 없는 running을 운행 중 심볼 상태로 남겨 만료 시간과 모순시킨다.
+    func testW17_종료시각없는_running의_표시상태는_도착이다() {
+        let status = JourneyActivityDisplay.displayStatus(
+            state: widgetState(.running), isStale: false
+        )
+
+        XCTAssertEqual(status, .arrived)
+    }
+
+    // 깨짐: 종료시각 없는 running을 접근성에서 운행 중으로 설명한다.
+    func testW17_종료시각없는_running의_접근성은_도착이다() {
+        let label = JourneyActivityDisplay.accessibilityLabel(
+            attributes: widgetAttributes, state: widgetState(.running), isStale: false
+        )
+
+        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 도착")
+    }
+
+    // 깨짐: 긴 이름을 축약하거나, 일시정지 summary에 18:42를 다시 합성한다.
+    func testW17_일시정지_summary는_긴한글이름_전체와_상태만_보존한다() {
+        let attributes = JourneyActivityAttributes(
+            journeyID: "long-journey", busNumber: "서울도심순환심야광역급행12345",
+            busKind: "심야광역급행", destinationName: "서울특별시성동구성수동복합문화체육센터정문앞"
+        )
+
+        let label = JourneyActivityDisplay.accessibilityLabel(
+            attributes: attributes, state: widgetState(.paused, paused: 1122), isStale: false
+        )
+
+        XCTAssertEqual(label, "서울도심순환심야광역급행12345번 심야광역급행 버스, 도착지 서울특별시성동구성수동복합문화체육센터정문앞, 일시정지")
+    }
+
+    // 호환 회귀. 깨짐: 정상 running의 긴 노선·목적지를 접근성에서도 축약한다.
+    func testW17_호환_running_접근성은_긴한글이름을_축약하지_않는다() {
+        let attributes = JourneyActivityAttributes(
+            journeyID: "long-journey", busNumber: "서울도심순환심야광역급행12345",
+            busKind: "심야광역급행", destinationName: "서울특별시성동구성수동복합문화체육센터정문앞"
+        )
+
+        let label = JourneyActivityDisplay.accessibilityLabel(
+            attributes: attributes,
+            state: widgetState(.running, endDate: Date(timeIntervalSince1970: 1_791_883_122)),
+            isStale: false
+        )
+
+        XCTAssertEqual(label, "서울도심순환심야광역급행12345번 심야광역급행 버스, 도착지 서울특별시성동구성수동복합문화체육센터정문앞, 운행 중")
+    }
+
+    // 호환 회귀. 깨짐: 장시간을 시 단위로 바꾸거나 분·초 경계의 0패딩을 잃는다.
+    func testW17_호환_정지시간은_5초부터360분까지_분초를_유지한다() {
+        let examples: [(Int, String)] = [
+            (5, "0:05"), (599, "9:59"), (5999, "99:59"),
+            (7200, "120:00"), (21600, "360:00")
+        ]
+
+        for (seconds, expected) in examples {
+            XCTAssertEqual(JourneyActivityDisplay.pausedTime(seconds: seconds), expected)
+        }
+    }
+
+    // 호환 회귀. 깨짐: stale 입력에서 정지 고정 시간을 도착 문구·countdown으로 바꾼다.
+    func testW17_호환_stale정지도_모든길이의_고정시간을_유지한다() {
+        let examples: [(Int, String)] = [
+            (5, "0:05"), (599, "9:59"), (5999, "99:59"),
+            (7200, "120:00"), (21600, "360:00")
+        ]
+
+        for (seconds, expected) in examples {
+            let content = JourneyActivityDisplay.timeContent(
+                state: widgetState(.paused, paused: seconds), isStale: true, now: widgetNow
+            )
+            XCTAssertEqual(content, .fixed(expected))
+        }
+    }
+
 }

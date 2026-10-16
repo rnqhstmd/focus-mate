@@ -22,6 +22,7 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
 
     func makeRig(
         existing: [LiveActivityHandle] = [],
+        minutes: Int = 60,
         elapsed: Int = 0,
         paused: Bool = false,
         autoStart: Bool = true,
@@ -31,7 +32,7 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
         let saver = FakeProgressSaver(results: results)
         let gateway = RecordingLiveActivityGateway(existing: existing)
         let journey = BoardingFixtures.journey(
-            minutes: 60, busID: "421", busNumber: "343", busKind: "간선", phase: .departed, elapsedSeconds: elapsed, paused: paused
+            minutes: minutes, busID: "421", busNumber: "343", busKind: "간선", phase: .departed, elapsedSeconds: elapsed, paused: paused
         )
         let start = base
         let sync = try XCTUnwrap(JourneyLiveActivitySync(
@@ -44,6 +45,70 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
         )
         return Rig(controller: controller, clock: clock, saver: saver, gateway: gateway,
                    sync: sync, journey: journey, base: start)
+    }
+
+    // MARK: W17 총 시간 전달
+
+    private func totalSecondsJSON(_ request: JourneyActivityRequest) throws -> Int? {
+        let data = try JSONEncoder().encode(request.state)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return object["totalSeconds"] as? Int
+    }
+
+    // 깨짐: 실행 요청에서 총 시간을 누락하거나 잔여 1122초를 총 시간으로 전달한다.
+    func testW17_실행_시작은_30분의_총1800초를_전달한다() throws {
+        let rig = try makeRig(minutes: 30, elapsed: 678)
+
+        rig.controller.appear()
+
+        let request = try XCTUnwrap(rig.gateway.entries.first?.request)
+        XCTAssertEqual(request.state.status, .running)
+        XCTAssertEqual(try totalSecondsJSON(request), 1800)
+    }
+
+    // 깨짐: 일시정지 요청에서 총 시간을 버리거나 잔여 시간으로 덮어쓴다.
+    func testW17_일시정지는_남은1122초와_총1800초를_전달한다() throws {
+        let rig = try makeRig(minutes: 30)
+        rig.controller.appear()
+        rig.clock.advance(by: .seconds(678), notify: false)
+
+        rig.controller.pause()
+
+        let request = try XCTUnwrap(rig.gateway.entries.last?.request)
+        XCTAssertEqual(request.state.status, .paused)
+        XCTAssertEqual(request.state.pausedRemainingSeconds, 1122)
+        XCTAssertEqual(try totalSecondsJSON(request), 1800)
+    }
+
+    // 깨짐: 재개 요청에서 총 시간을 누락하거나 일시정지 300초를 총 시간에 더한다.
+    func testW17_300초_정지후_재개도_총1800초를_전달한다() throws {
+        let rig = try makeRig(minutes: 30)
+        rig.controller.appear()
+        rig.clock.advance(by: .seconds(678), notify: false)
+        rig.controller.pause()
+        rig.clock.advance(by: .seconds(300), notify: false)
+
+        rig.controller.resume()
+
+        let request = try XCTUnwrap(rig.gateway.entries.last?.request)
+        XCTAssertEqual(request.state.status, .running)
+        XCTAssertEqual(request.state.endDate, Date(timeIntervalSince1970: 1_791_884_100))
+        XCTAssertEqual(try totalSecondsJSON(request), 1800)
+    }
+
+    // 깨짐: 기존 활동 재사용 갱신에 총 시간을 보강하지 않는다.
+    func testW17_기존활동_재사용은_60분의_총3600초를_보강한다() throws {
+        let rig = try makeRig(
+            existing: [LiveActivityHandle(id: "old-1", journeyID: "journey-1")],
+            minutes: 60, elapsed: 600
+        )
+
+        rig.controller.appear()
+
+        XCTAssertEqual(rig.gateway.count(.start), 0)
+        XCTAssertEqual(rig.gateway.entries.last?.op, .update)
+        let request = try XCTUnwrap(rig.gateway.entries.last?.request)
+        XCTAssertEqual(try totalSecondsJSON(request), 3600)
     }
 
     // MARK: AC-1

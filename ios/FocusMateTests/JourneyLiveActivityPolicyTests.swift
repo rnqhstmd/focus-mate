@@ -156,9 +156,10 @@ final class JourneyLiveActivityPolicyTests: XCTestCase {
         let plan = JourneyLiveActivityPolicy.launchPlan(existing: [handle("a", "j-1")], journey: departed())
 
         XCTAssertEqual(plan.endIDs, [])
-        XCTAssertEqual(plan.pausedUpdate, JourneyLaunchPlan.PausedUpdate(
-            id: "a", request: JourneyLiveActivityPolicy.pausedRequest(remainingSeconds: 3000)
-        ))
+        XCTAssertEqual(plan.pausedUpdate?.id, "a")
+        XCTAssertEqual(plan.pausedUpdate?.request.state.status, .paused)
+        XCTAssertNil(plan.pausedUpdate?.request.state.endDate)
+        XCTAssertNil(plan.pausedUpdate?.request.staleDate)
         XCTAssertEqual(plan.pausedUpdate?.request.state.pausedRemainingSeconds, 3000)
     }
 
@@ -198,4 +199,18 @@ final class JourneyLiveActivityPolicyTests: XCTestCase {
         XCTAssertEqual(running, paused)
         XCTAssertEqual(running.pausedUpdate?.request.state.pausedRemainingSeconds, 3000)
     }
+    // 깨짐: launch 계획이 잔여 1122초를 총 시간으로 쓰거나 총 시간을 누락한다.
+    func testW17_launch계획은_30분여정의_총1800초를_전달한다() throws {
+        let journey = F.journey(id: "j-1", minutes: 30, phase: .departed, elapsedSeconds: 678)
+
+        let plan = JourneyLiveActivityPolicy.launchPlan(
+            existing: [handle("a", "j-1")], journey: journey
+        )
+
+        let request = try XCTUnwrap(plan.pausedUpdate?.request)
+        let data = try JSONEncoder().encode(request.state)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["totalSeconds"] as? Int, 1800)
+    }
+
 }

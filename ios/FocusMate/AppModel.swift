@@ -23,6 +23,69 @@ enum Destination: String, Hashable, CaseIterable {
 
 @MainActor @Observable
 final class AppModel {
+    private(set) var widgetAnalyticsEntry: WidgetAnalyticsEntry?
+    @ObservationIgnored private var pendingWidgetURL: URL?
+    @ObservationIgnored private var widgetEntryBlocked = false
+    @ObservationIgnored private var widgetPublicationEligible = false
+    @ObservationIgnored private let widgetPublisher: WidgetSnapshotPublisher?
+
+    @discardableResult func handleWidgetURL(_ url: URL) -> WidgetNavigationDecision {
+        guard case .ready = launchState, !isRecovering else {
+            pendingWidgetURL = url
+            return .deferUntilReady
+        }
+        return applyWidgetURL(url)
+    }
+    func consumePendingWidgetURL() -> WidgetNavigationDecision? {
+        guard case .ready = launchState, !isRecovering, let url = pendingWidgetURL else { return nil }
+        pendingWidgetURL = nil
+        return applyWidgetURL(url)
+    }
+    func setWidgetEntryBlocked(_ blocked: Bool) { widgetEntryBlocked = blocked }
+    func consumeWidgetAnalyticsEntry() -> WidgetAnalyticsEntry? {
+        defer { widgetAnalyticsEntry = nil }
+        return widgetAnalyticsEntry
+    }
+    func refreshWidgetSnapshotIfEligible() {
+        guard !isRecovering else { return }
+        publishConfirmedWidgetSnapshot()
+    }
+    private func publishConfirmedWidgetSnapshot() {
+        guard widgetPublicationEligible, case .ready = launchState, let snapshot else { return }
+        widgetPublisher?.publish(snapshot: snapshot)
+    }
+    private func applyWidgetURL(_ url: URL) -> WidgetNavigationDecision {
+        let now = recordClock.now(), zone = recordClock.timeZone()
+        let phase: WidgetJourneyPhase
+        if presentedRoute != .main { phase = .setup }
+        else if let active = activeJourney {
+            phase = active.phase == .awaitingDeparture ? .awaitingDeparture : active.isArrived ? .arrived : active.paused ? .paused : .running
+        } else { phase = .ready }
+        let state = WidgetNavigationState(isReady: true, needsSetup: presentedRoute != .main, activeJourneyID: activeJourney?.id,
+                                          phase: phase, isJourneyOpen: path.contains(.journey),
+                                          hasOtherOpenFlow: widgetEntryBlocked || !path.isEmpty)
+        let decision = WidgetNavigationPolicy.decide(link: WidgetLinkCodec.parse(url, now: now), state: state, now: now,
+                                                     calendar: Calendar(identifier: .gregorian), timeZone: zone)
+        switch decision {
+        case .prepare: _ = startTripFromMain()
+        case .showDeparture:
+            if activeJourney?.phase == .awaitingDeparture { open(.journey) }
+        case .alight: _ = beginAlighting()
+        case .analytics(let day, let tag, let kind):
+            guard let section = snapshot?.records,
+                  let period = try? RecordsAnalytics.period(kind: kind, containing: day, calendar: Calendar(identifier: .gregorian)),
+                  case .available(let content) = RecordsAnalyticsAdapter.load(section: section, period: period, selectedTag: tag,
+                      now: now, calendar: Calendar(identifier: .gregorian), timeZone: zone) else {
+                open(.records); return .safeHome
+            }
+            let effective = content.computation.effectiveTag
+            widgetAnalyticsEntry = WidgetAnalyticsEntry(day: day, tag: effective, kind: kind)
+            open(.records)
+            return .analytics(day: day, tag: effective, kind: kind)
+        default: break
+        }
+        return decision
+    }
     private(set) var launchState: LaunchState = .loading
     private(set) var snapshot: AppSnapshot?
     var path: [Destination] = []
@@ -108,8 +171,9 @@ final class AppModel {
     init(store: LocalSnapshotStore, cardFactory: CardSnapshotFactory = .init(),
          soundPreview: SoundPreviewController? = nil, journeyFactory: ActiveJourneyFactory = .init(),
          recordClock: RecordClock = .live,
-         routeData: RouteCatalogStore? = nil) {
+         routeData: RouteCatalogStore? = nil, widgetPublisher: WidgetSnapshotPublisher? = nil) {
         self.store = store
+        self.widgetPublisher = widgetPublisher
         // 기본 인자는 메인 액터 밖에서 평가되므로 저장소는 여기서 만든다(soundPreview와 같은 이유).
         self.routeData = routeData ?? RouteCatalogStore(load: { try RouteCatalogLoader.bundled() })
         self.recordClock = recordClock
@@ -150,6 +214,8 @@ final class AppModel {
         do {
             try store.save(candidate)
             self.snapshot = candidate
+            widgetPublicationEligible = true
+            publishConfirmedWidgetSnapshot()
         } catch let issue as StorageIssue { supplementFailure = issue }
         catch { supplementFailure = .writeFailed }
     }
@@ -200,6 +266,8 @@ final class AppModel {
             path = []
             saveFailure = nil
             recoveryFailure = nil
+            widgetPublicationEligible = true
+            publishConfirmedWidgetSnapshot()
             return true
         } catch let issue as StorageRecoveryIssue { recoveryFailure = issue }
         catch { recoveryFailure = .backupFailed }
@@ -213,6 +281,7 @@ final class AppModel {
     }
 
     private func loadSnapshot() {
+        widgetPublicationEligible = false
         do {
             let report = try store.loadReport()
             let loaded = report?.snapshot ?? .empty
@@ -224,6 +293,8 @@ final class AppModel {
             launchState = .ready(route)
             path = []
             saveFailure = nil
+            widgetPublicationEligible = report?.migration == nil && !restored.needsCardSupplement
+            publishConfirmedWidgetSnapshot()
         } catch let issue as StorageIssue {
             snapshot = nil; path = []; launchState = .failed(issue)
         } catch {
@@ -256,6 +327,8 @@ final class AppModel {
             try store.save(candidate)
             snapshot = candidate; launchState = .ready(nextRoute)
             if previousRoute != nextRoute { path = [] }
+            widgetPublicationEligible = true
+            publishConfirmedWidgetSnapshot()
             return nil
         } catch let issue as SnapshotValidationIssue { return .invalidState(issue) }
         catch let issue as StorageIssue { return issue }

@@ -151,7 +151,12 @@ extension FocusMateUIHarness {
     func tap(_ identifier: String, timeout: TimeInterval = FocusMateUIHarness.timeout) {
         let target = element(identifier)
         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing: \(identifier)")
-        target.tap()
+        let buttons = app.buttons.matching(identifier: identifier)
+        if buttons.count == 1 {
+            buttons.element.tap()
+        } else {
+            target.tap()
+        }
     }
 
     /// 다음 저장 1건을 실패시키고 곧바로 action을 실행한다(수동 시계에는 자율 쓰기가 없어 결정적이다).
@@ -229,13 +234,33 @@ extension FocusMateUIHarness {
             .firstMatch
     }
 
-    /// 접근성 식별자와 보이는 문구를 함께 맞춘 alert 버튼. alert는 제목을 모르므로 앱 전체 alert에서 찾는다.
+    /// ID와 정확한 문구를 우선한다. 시스템이 ID를 누락하면 단일 alert의 유일한 같은 문구 버튼만 허용한다.
     @MainActor
     func alertButton(_ id: String, label: String) -> XCUIElement {
-        app.alerts.buttons
+        let exactLabel = NSPredicate(format: "label == %@", label)
+        let identified = app.alerts.buttons
             .matching(identifier: id)
-            .matching(NSPredicate(format: "label == %@", label))
-            .firstMatch
+            .matching(exactLabel)
+        let identifiedCandidates = identified.allElementsBoundByAccessibilityElement
+        let identifiedLeaves = identifiedCandidates.filter {
+            $0.descendants(matching: .button)
+                .matching(identifier: id)
+                .matching(exactLabel).count == 0
+        }
+        if identifiedLeaves.count == 1 {
+            return identifiedLeaves[0]
+        }
+        if identifiedCandidates.isEmpty, app.alerts.count == 1 {
+            let labeled = app.alerts.element.buttons.matching(exactLabel)
+            let labeledLeaves = labeled.allElementsBoundByAccessibilityElement.filter {
+                $0.descendants(matching: .button).matching(exactLabel).count == 0
+            }
+            if labeledLeaves.count == 1 {
+                return labeledLeaves[0]
+            }
+        }
+        // 일치 없음이나 중복은 실패하게 두고 임의의 첫 버튼을 선택하지 않는다.
+        return identified.element
     }
 
     /// 저장된 바이트(base64)의 최상위 state 사전. 없으면 최상위 자체.

@@ -50,15 +50,75 @@ extension JourneyActivityDisplay {
 
     /// 만료된 운행 중 카드는 도착으로 보인다. 일시정지는 만료가 없으므로 그대로다.
     static func displayStatus(state: JourneyActivityAttributes.ContentState, isStale: Bool) -> JourneyActivityStatus {
-        state.status == .running && isStale ? .arrived : state.status
+        state.status == .running && (isStale || state.endDate == nil) ? .arrived : state.status
     }
 
     /// 카드 전체 설명. 만료된 운행 중 카드는 도착으로 읽는다.
     static func accessibilityLabel(attributes: JourneyActivityAttributes,
                                    state: JourneyActivityAttributes.ContentState, isStale: Bool) -> String {
         let status = displayStatus(state: state, isStale: isStale)
-        return accessibilityDescription(busNumber: attributes.busNumber, busKind: attributes.busKind,
-                                        destination: attributes.destinationName, status: status,
-                                        pausedRemainingSeconds: state.pausedRemainingSeconds)
+        return "\(attributes.busNumber)번 \(attributes.busKind) 버스, 도착지 \(attributes.destinationName), \(statusName(status))"
+    }
+}
+
+
+/// 시스템 진행 표시와 정적 정지 진행을 구분한다.
+enum JourneyActivityProgressContent: Equatable {
+    case timer(ClosedRange<Date>)
+    case fixed(Double)
+    case hidden
+}
+
+struct JourneyActivityPresentation: Equatable {
+    let status: JourneyActivityStatus
+    let time: JourneyActivityTimeContent
+    let progress: JourneyActivityProgressContent
+    let statusSymbol: String
+}
+
+extension JourneyActivityDisplay {
+    static func presentation(state: JourneyActivityAttributes.ContentState, isStale: Bool, now: Date) -> JourneyActivityPresentation {
+        let status = displayStatus(state: state, isStale: isStale)
+        let symbol: String
+        switch status {
+        case .running: symbol = "bus.fill"
+        case .paused: symbol = "pause.fill"
+        case .arrived: symbol = "checkmark"
+        }
+        let progress: JourneyActivityProgressContent
+        if let fraction = progressFraction(state: state, isStale: isStale, now: now) {
+            if status == .paused {
+                progress = .fixed(fraction)
+            } else if let end = state.endDate, let total = state.totalSeconds {
+                progress = .timer(end.addingTimeInterval(-Double(total))...end)
+            } else {
+                progress = .hidden
+            }
+        } else {
+            progress = .hidden
+        }
+        return JourneyActivityPresentation(status: status, time: timeContent(state: state, isStale: isStale, now: now),
+                                           progress: progress, statusSymbol: symbol)
+    }
+
+    static func remainingSeconds(state: JourneyActivityAttributes.ContentState, isStale: Bool, now: Date) -> Int {
+        switch displayStatus(state: state, isStale: isStale) {
+        case .paused: return max(0, state.pausedRemainingSeconds ?? 0)
+        case .running:
+            guard let end = state.endDate else { return 0 }
+            return max(0, Int(ceil(end.timeIntervalSince(now))))
+        case .arrived: return 0
+        }
+    }
+
+    static func progressFraction(state: JourneyActivityAttributes.ContentState, isStale: Bool, now: Date) -> Double? {
+        guard let total = state.totalSeconds, total > 0,
+              displayStatus(state: state, isStale: isStale) != .arrived else { return nil }
+        let remaining = remainingSeconds(state: state, isStale: isStale, now: now)
+        return min(1, max(0, 1 - Double(remaining) / Double(total)))
+    }
+
+    static func accessibilitySummary(attributes: JourneyActivityAttributes, presentation: JourneyActivityPresentation) -> String {
+        "\(attributes.busNumber)번 \(attributes.busKind) 버스, 도착지 \(attributes.destinationName), \(statusName(presentation.status))"
     }
 }

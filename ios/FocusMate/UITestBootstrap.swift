@@ -373,7 +373,7 @@ struct UITestBootstrap {
         tagColor: "#12ABef", task: "책 한 챕터 읽기", minutes: 25, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
 
     /// W09 기록 화면 시드. 실행한 날의 정오(로컬)를 기준으로 만들어 날짜 경계에 흔들리지 않는다. 진행 여정은 없다.
-    private static let recordSeeds: Set<String> = ["recordsMemo", "recordsTwoYears"]
+    private static let recordSeeds: Set<String> = ["recordsMemo", "recordsTwoYears", "analytics", "analyticsManyTags"]
 
     private static func recordSnapshot(_ name: String) -> AppSnapshot? {
         var calendar = Calendar(identifier: .gregorian)
@@ -391,6 +391,24 @@ struct UITestBootstrap {
         }
         let items: [RecordSnapshot?]
         switch name {
+        case "analyticsManyTags":
+            let start = calendar.startOfDay(for: now)
+            let formatter = ISO8601DateFormatter()
+            items = [("A", 40), ("B", 30), ("C", 20), ("D", 10)].map { tag, minutes in
+                RecordSnapshot(id: "analytics-many-\(tag)", completedAt: formatter.string(from: start),
+                    date: RecordDay.from(start, timeZone: .current).key, bus: "2014", tag: tag,
+                    tagColor: "#D7B378", task: "집중 \(tag)", minutes: minutes,
+                    sound: "버스", from: "성수역", to: "서울숲 입구", memo: "")
+            }
+        case "analytics":
+            let start = calendar.startOfDay(for: now)
+            let formatter = ISO8601DateFormatter()
+            items = (0..<6).map { index in
+                RecordSnapshot(id: "analytics-\(index)", completedAt: formatter.string(from: start),
+                    date: RecordDay.from(start, timeZone: .current).key, bus: "2014", tag: index.isMultiple(of: 2) ? "독서" : "공부",
+                    tagColor: index.isMultiple(of: 2) ? "#D7B378" : "#B49CE1", task: "집중 기록 \(index)", minutes: 25,
+                    sound: "버스", from: "성수역", to: "서울숲 입구", memo: (1...4).contains(index) ? "회고 \(index)" : "")
+            }
         case "recordsMemo":
             items = (0..<12).map { record("records-memo-\($0)", at: noon.addingTimeInterval(Double(-60 * $0)),
                                           memo: $0 == 1 ? "집중 잘됨" : "") }

@@ -20,7 +20,7 @@
 | W14 | [P6] 실기기 QA·출시 준비 | 통합 | journey NFR-2(실기기), preferences NFR-2 | W04, W06, W07, W09, W10, W11, W13 | - | 대기 |
 | W15 | [P3] 다이나믹 아일랜드·잠금 화면 진행 표시(Live Activity) | journey | journey FR-5 보조(2026-10-15 사용자 요청) | W05 | feat/live-activity-progress | 완료 |
 | W16 | [P3] 서울 전체 실데이터 번들(정류장·노선·버스·구간 시간) | journey | journey FR-7·FR-8·FR-6 데이터 교체(2026-10-15 사용자 요청) | W02, W06 | feat/seoul-real-route-data | 진행 |
-| W17 | Live Activity 디자인·눈금 타임라인 | journey | journey FR-14 | W15 | - | 대기 |
+| W17 | Live Activity 디자인·눈금 타임라인 | journey | journey FR-14 | W15 | codex/feat-live-activity-design | 진행 |
 | W18 | 홈 위젯(공유 기반·집중 유도·분석) | 통합 | journey FR-15, NFR-3; records FR-8, NFR-2 | W07, W08, W09b | - | 대기 |
 
 요구사항 ID는 `context/{도메인}/status.md`의 원장을 따른다. `[P2]`는 [개발 단계](../docs/DEVELOPMENT-PHASES.md)의 Phase다.

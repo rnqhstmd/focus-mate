@@ -1,8 +1,8 @@
 phase: implement
 status: in_progress
 pipeline: gx-tdd
-verify-status: pending
-verify-fingerprint: ""
+verify-status: passed
+verify-fingerprint: "9c93018:e00a3022e81a"
 model-profile: standard
 mode: all
 intent-source: user-selection
@@ -20,7 +20,7 @@ auto-stashed: false
 config-setup-attempts: 0
 warnings-baseline: 1
 simulator: FM-W16 680F8A78-9875-4E68-8FC1-95CDFEA87139
-current-step: "W16b T3~T7 구현 완료 → 커밋 후 phase-review"
+current-step: "W16b verify 통과·인수 ACCEPT → PR"
 user-scope: "W16b — 설계 12~27단계(앱 연결). W09a 머지(#23 6542996) 위에서 진행. ±1분 규칙 유지(사용자 결정 2026-10-15)"
 phases: { setup: completed, requirements: completed, design: completed, implement: completed, review: completed, complete: completed, w16b: { design-delta: completed, implement: in_progress } }
 execution-log:
@@ -62,3 +62,7 @@ steps:
   - { phase: w16b, task: T5, result: "UI 테스트 이전 + RouteDataUITests 11 pass, 승차 경로 시드 2014-r 수정 후 BoardingTag pass. 전체 UI는 verify에서" }
   - { phase: w16b, task: T6, result: "실데이터 9 pass(검색 0.01s, 후보 0.0005s, 로드 0.17s, 1.69MB, 0건 9%)" }
   - { phase: w16b, task: T7, result: "glossary·architecture·status·plan.md 정정" }
+  - { phase: w16b, agent: reviewer, result: "phase-review SPEC FAIL(AC-28·32 테스트 공백)·QUALITY Important 1(BR-17) → 보강 RED·수정" }
+  - { phase: w16b, agent: security-auditor, result: "CRITICAL 0 HIGH 0 MEDIUM 5 LOW 7 — 번들 이름·출처 회귀 테스트 추가, 나머지 유예, 이전 백업 미수용(Q4)" }
+  - { phase: w16b, gate: verify, result: "전체 1회: 단위 1264/0, UI 306 중 21 실패(테스트 기대값 이전 누락 20 + 큰 글자 탭 1) → 수정 후 해당 7개 클래스 69건 재실행 통과. python 117 OK, 빌드 경고 1(기준 1). 지문 9c93018:e00a3022e81a" }
+  - { phase: w16b, agent: product-owner, result: "ACCEPT — 권고(0건 비율 전수·OA-15066 근거) 반영" }

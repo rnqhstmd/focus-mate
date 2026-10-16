@@ -55,14 +55,14 @@ struct DataSourceView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(Destination.dataSource.title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                Text(Destination.dataSource.title).font(FontCatalog.text(23, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("screen.dataSource")
                 switch model.routeAvailability {
                 case .loading:
-                    Text(ProceedState.routeDataLoading.title).foregroundStyle(.secondary)
+                    Text(ProceedState.routeDataLoading.title).foregroundStyle(FMDesign.secondaryText)
                         .accessibilityIdentifier("dataSource.loading")
                 case .failed:
-                    Text(ProceedState.routeDataFailed.title).foregroundStyle(.secondary)
+                    Text(ProceedState.routeDataFailed.title).foregroundStyle(FMDesign.secondaryText)
                         .accessibilityIdentifier("dataSource.failed")
                     content(.unavailable)
                 case let .ready(catalog):
@@ -70,9 +70,13 @@ struct DataSourceView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
+            .fmPanel()
+            .padding(.horizontal, 12).padding(.vertical, 20)
         }
-        .navigationTitle(Destination.dataSource.title).navigationBarTitleDisplayMode(.inline)
+        .background(FMDesign.background.ignoresSafeArea())
+        .foregroundStyle(FMDesign.primary).tint(FMDesign.primary)
+        .font(FontCatalog.text(15))
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder private func content(_ content: DataSourceContent) -> some View {
@@ -84,7 +88,7 @@ struct DataSourceView: View {
         line(content.licenseText, id: "dataSource.license")
         line(content.baseDateText, id: "dataSource.baseDate")
         ForEach(Array(content.sourceURLs.enumerated()), id: \.offset) { index, url in
-            Text(url).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
+            Text(url).font(FontCatalog.text(12, relativeTo: .footnote)).foregroundStyle(FMDesign.secondaryText).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("dataSource.url.\(index)")
         }
         line(content.processingNotice, id: "dataSource.processing")

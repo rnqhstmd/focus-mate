@@ -37,22 +37,27 @@ struct RecordsAnalyticsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Text("여행 분석").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.analytics")
+                Text("여행 분석").font(FontCatalog.text(23, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.analytics")
                 if let browser {
                     toolbar(browser)
-                    Text(periodTitle(browser.period)).font(.title3.weight(.semibold)).accessibilityIdentifier("analytics.range")
+                    Text(periodTitle(browser.period)).font(FontCatalog.text(18, bold: true, relativeTo: .title3)).accessibilityIdentifier("analytics.range")
                 }
                 switch content {
                 case .unavailable:
                     Text("기록을 불러올 수 없어요").accessibilityIdentifier("analytics.unavailable")
-                    Button("기록으로 돌아가기") { dismiss() }
+                    Button("기록으로 돌아가기") { dismiss() }.buttonStyle(FMPrimaryButtonStyle())
                 case .available(let value):
                     analysis(value)
                 }
             }
-            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fmPanel()
+            .padding(.horizontal, 12).padding(.vertical, 20)
         }
-        .navigationTitle("분석").navigationBarTitleDisplayMode(.inline)
+        .background(FMDesign.background.ignoresSafeArea())
+        .foregroundStyle(FMDesign.primary).tint(FMDesign.primary)
+        .font(FontCatalog.text(15))
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .onAppear { refresh() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
@@ -69,9 +74,10 @@ struct RecordsAnalyticsView: View {
 
     private func toolbar(_ state: RecordsAnalyticsBrowser) -> some View {
         VStack(spacing: 12) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 periodButton("주간", kind: .week, state: state)
                 periodButton("월간", kind: .month, state: state)
+                Spacer(minLength: 0)
             }
             HStack {
                 Button { editBrowser { _ = try $0.move(by: -1, today: today, calendar: calendar) } } label: {
@@ -88,14 +94,19 @@ struct RecordsAnalyticsView: View {
                 }
                 .disabled((try? RecordsAnalytics.shift(period: state.period, by: 1, today: today, calendar: calendar)) == nil)
                 .accessibilityLabel("다음 기간").accessibilityIdentifier("analytics.next")
-            }
+            }.buttonStyle(.plain)
         }
     }
 
     private func periodButton(_ title: String, kind: AnalyticsPeriodKind, state: RecordsAnalyticsBrowser) -> some View {
-        Button(title) { editBrowser { try $0.setKind(kind, calendar: calendar) } }
-            .buttonStyle(.bordered).frame(maxWidth: .infinity, minHeight: 44)
-            .tint(state.period.kind == kind ? .white : .gray)
+        Button { editBrowser { try $0.setKind(kind, calendar: calendar) } } label: {
+            Text(title)
+                .font(FontCatalog.text(13, bold: state.period.kind == kind, relativeTo: .subheadline))
+                .padding(.horizontal, 15).frame(minHeight: 44)
+                .foregroundStyle(state.period.kind == kind ? FMDesign.primary : FMDesign.secondaryText)
+                .background(state.period.kind == kind ? FMDesign.primary.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+        }
+            .buttonStyle(.plain)
             .accessibilityAddTraits(state.period.kind == kind ? .isSelected : [])
             .accessibilityIdentifier("analytics.period.\(kind.rawValue)")
     }
@@ -106,27 +117,33 @@ struct RecordsAnalyticsView: View {
         summary(report)
         if report.totals.count == 0 {
             Text(value.hasAnyEligibleRecords ? "이 기간에는 마친 여행이 없어요" : "첫 여행을 마치면 집중 기록을 분석해드려요")
-                .foregroundStyle(.secondary).accessibilityIdentifier("analytics.empty")
+                .foregroundStyle(FMDesign.secondaryText).accessibilityIdentifier("analytics.empty")
         }
-        Divider()
-        Text("태그별 여행 시간 · 전체 기간").font(.headline)
+        Text("태그별 여행 시간 · 전체 기간").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
         if !report.tags.isEmpty {
             let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16)) : AnyLayout(HStackLayout(alignment: .center, spacing: 18))
             layout {
                 donut(report)
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(report.topTags, id: \.id) { tag in
-                        Text("\(tag.name) · \(tag.minutes)분 · \(tag.count)회 · \(Int((tag.share * 100).rounded()))%")
-                            .font(.subheadline)
-                            .foregroundStyle(tag.id == .remainder ? .secondary : .primary)
-                            .accessibilityIdentifier(tag.id == .remainder ? "analytics.tag.remainder" : "analytics.composition.\(tag.name)")
+                        HStack(alignment: .top, spacing: 8) {
+                            Circle().fill(color(tag.color)).frame(width: 6, height: 6).padding(.top, 6).accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(tag.name).font(FontCatalog.text(13, relativeTo: .subheadline))
+                                Text("\(tag.minutes)분 · \(tag.count)회 · \(Int((tag.share * 100).rounded()))%")
+                                    .font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+                            }
+                        }
+                        .foregroundStyle(tag.id == .remainder ? FMDesign.secondaryText : FMDesign.primary)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(tag.id == .remainder ? "analytics.tag.remainder" : "analytics.composition.\(tag.name)")
                     }
                 }
 
             }
         }
         if !report.tags.isEmpty {
-            Text("태그로 활동 보기").font(.subheadline).foregroundStyle(.secondary)
+            Text("태그로 활동 보기").font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
                     ForEach(report.tags, id: \.id) { tag in
@@ -141,9 +158,9 @@ struct RecordsAnalyticsView: View {
                 }
             }
         }
-        Text(comparisonText(report.comparison)).font(.footnote).foregroundStyle(.secondary)
+        Text(comparisonText(report.comparison)).font(FontCatalog.text(11, relativeTo: .footnote)).foregroundStyle(FMDesign.secondaryText)
         HStack {
-            Text(computation.effectiveTag.map { "\($0) 활동" } ?? "전체 활동").font(.headline)
+            Text(computation.effectiveTag.map { "\($0) 활동" } ?? "전체 활동").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
             Spacer()
             if computation.effectiveTag != nil {
                 Button("전체 보기") { browser?.selectTag(nil, available: report.tags) }
@@ -151,30 +168,34 @@ struct RecordsAnalyticsView: View {
             }
         }
         dailyChart(computation.filteredDays)
-        Text("마친 시간대 · 표시 시간대 기준").font(.headline)
-        if computation.insights.needsMoreTimeBandRecords { Text("기록이 더 필요해요").font(.footnote).foregroundStyle(.secondary) }
+        Divider()
+        Text("마친 시간대 · 표시 시간대 기준").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
+        if computation.insights.needsMoreTimeBandRecords { Text("기록이 더 필요해요").font(FontCatalog.text(11, relativeTo: .footnote)).foregroundStyle(FMDesign.secondaryText) }
         ForEach(computation.insights.timeBands, id: \.band) { band in
             metricRow(bandName(band.band), minutes: band.minutes, count: band.count)
         }
-        Text("자주 탄 노선").font(.headline)
+        Divider()
+        Text("자주 탄 노선").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
         ForEach(Array(computation.insights.routes.enumerated()), id: \.offset) { _, route in
             metricRow("\(route.bus) · \(route.from) → \(route.to)", minutes: route.minutes, count: route.count)
         }
-        Text("여행 길이").font(.headline)
+        Divider()
+        Text("여행 길이").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
         ForEach(computation.insights.lengths, id: \.band) { length in
             metricRow(lengthName(length.band), minutes: length.minutes, count: length.count)
         }
-        Text("최장 연속 \(computation.insights.longestStreak)일 · 전체 기간").font(.headline)
-        Text("최근 여행").font(.headline)
+        Text("최장 연속 \(computation.insights.longestStreak)일 · 전체 기간").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
+        Divider()
+        Text("최근 여행").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
         ForEach(value.recent.map(RecordsAnalyticsRow.init)) { row in recordButton(row.record, memo: false) }
-        Text("메모 회고 · \(value.memoCount)회").font(.headline)
+        Divider()
+        Text("메모 회고 · \(value.memoCount)회").font(FontCatalog.text(15, bold: true, relativeTo: .headline))
         ForEach(value.recentMemos.map(RecordsAnalyticsRow.init)) { row in recordButton(row.record, memo: true) }
     }
 
     private func summary(_ report: RecordsAnalyticsReport) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(ProfileTimeText.display(minutes: report.totals.minutes)).font(.largeTitle.weight(.semibold).monospacedDigit())
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 16) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 220 : 90), alignment: .leading)], alignment: .leading, spacing: 16) {
                 stat("완료한 여행", "\(report.totals.count)회")
                 stat("여행한 날", "\(report.totals.activeDays)일")
                 stat("평균 여행 시간", "\(report.totals.averageMinutes)분")
@@ -183,10 +204,12 @@ struct RecordsAnalyticsView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("전체 기간 \(report.totals.minutes)분 · \(report.totals.count)회 · \(report.totals.activeDays)일 · 평균 \(report.totals.averageMinutes)분")
         .accessibilityIdentifier("analytics.summary")
+        .padding(.bottom, 20)
+        .overlay(alignment: .bottom) { Rectangle().fill(FMDesign.primary.opacity(0.14)).frame(height: 1) }
     }
 
     private func stat(_ name: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) { Text(value).font(.title3.bold()); Text(name).font(.caption).foregroundStyle(.secondary) }
+        VStack(alignment: .leading, spacing: 3) { Text(value).font(FontCatalog.text(17, bold: true, relativeTo: .title3)); Text(name).font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText) }
     }
 
     private func donut(_ report: RecordsAnalyticsReport) -> some View {
@@ -197,8 +220,8 @@ struct RecordsAnalyticsView: View {
                 Circle().trim(from: start, to: min(1, start + tag.share)).stroke(color(tag.color), lineWidth: 17).rotationEffect(.degrees(-90))
             }
             VStack(spacing: 3) {
-                Text(ProfileTimeText.display(minutes: report.totals.minutes)).font(.headline)
-                Text("합계").font(.caption).foregroundStyle(.secondary)
+                Text(ProfileTimeText.display(minutes: report.totals.minutes)).font(FontCatalog.text(15, bold: true, relativeTo: .headline))
+                Text("합계").font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
             }
         }.frame(width: 140, height: 140).padding(9).accessibilityHidden(true)
     }
@@ -216,7 +239,7 @@ struct RecordsAnalyticsView: View {
                                 Rectangle().fill(color(tag.color)).frame(height: 90 * Double(tag.minutes) / Double(maximum))
                             }
                         }.frame(width: 22)
-                        Text(String(day.day.suffix(2))).font(.caption2)
+                        Text(String(day.day.suffix(2))).font(FontCatalog.text(10, relativeTo: .caption2))
                     }
                     .frame(width: 28, height: 120).opacity(day.isFuture ? 0.35 : 1)
                     .accessibilityElement(children: .ignore)
@@ -228,17 +251,20 @@ struct RecordsAnalyticsView: View {
 
     private func metricRow(_ name: String, minutes: Int, count: Int) -> some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline) { Text(name); Spacer(minLength: 12); Text("\(minutes)분 · \(count)회").foregroundStyle(.secondary) }
-            VStack(alignment: .leading, spacing: 3) { Text(name); Text("\(minutes)분 · \(count)회").foregroundStyle(.secondary) }
-        }.font(.subheadline).accessibilityElement(children: .ignore).accessibilityLabel("\(name), \(minutes)분, \(count)회")
+            HStack(alignment: .firstTextBaseline) { Text(name); Spacer(minLength: 12); Text("\(minutes)분 · \(count)회").foregroundStyle(FMDesign.secondaryText) }
+            VStack(alignment: .leading, spacing: 3) { Text(name); Text("\(minutes)분 · \(count)회").foregroundStyle(FMDesign.secondaryText) }
+        }.font(FontCatalog.text(13, relativeTo: .subheadline)).accessibilityElement(children: .ignore).accessibilityLabel("\(name), \(minutes)분, \(count)회")
     }
 
     private func recordButton(_ record: RecordSnapshot, memo: Bool) -> some View {
         Button { onOpenRecord(record.id) } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Text(memo ? record.memo : record.task).font(.subheadline.weight(.medium)).multilineTextAlignment(.leading)
-                Text("\(record.tag) · \(record.minutes)분 · \(record.date)").font(.caption).foregroundStyle(.secondary)
-            }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(12).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                Text(memo ? record.memo : record.task).font(FontCatalog.text(13, relativeTo: .subheadline)).multilineTextAlignment(.leading)
+                Text("\(record.tag) · \(record.minutes)분 · \(record.date)").font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+            }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+                .padding(.vertical, 13)
+                .overlay(alignment: .bottom) { Rectangle().fill(FMDesign.primary.opacity(0.14)).frame(height: 1) }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(memo ? record.memo : record.task), \(record.tag), \(record.minutes)분, 기록과 메모 열기")

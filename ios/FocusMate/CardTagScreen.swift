@@ -61,7 +61,7 @@ struct CardTagScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(name: Self.space)
-        .background(Color(red: 0x0F / 255, green: 0x13 / 255, blue: 0x11 / 255).ignoresSafeArea())
+        .background(Color(red: 0x10 / 255, green: 0x11 / 255, blue: 0x12 / 255).ignoresSafeArea())
         .overlay(alignment: .bottom) { notices }
         .opacity(controller.phase == .fading || controller.phase == .finished ? 0 : 1)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.45), value: controller.phase == .fading)
@@ -79,7 +79,7 @@ struct CardTagScreen: View {
             onSettle()
             guard !reduceMotion else { entered = true; return }
             withAnimation(.easeOut(duration: 0.38).delay(0.12)) { entered = true }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { blink = true }
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { blink = true }
         }
         .onDisappear {
             controller.cancelPendingTransition()
@@ -110,8 +110,8 @@ struct CardTagScreen: View {
                 Capsule().fill(controller.isRecognized ? Color(red: 0.7, green: 0.85, blue: 0.75) : .gray.opacity(0.6))
                     .frame(height: 4).padding(.horizontal, 24)
                 lcd(time: time)
-                RoundedRectangle(cornerRadius: 18).fill(Color.white.opacity(0.06))
-                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.18)))
+                RoundedRectangle(cornerRadius: 20).fill(Color(red: 0x20 / 255, green: 0x23 / 255, blue: 0x24 / 255))
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.32)))
                     .overlay(Image(systemName: "wave.3.right").font(.system(size: 40)).foregroundStyle(.white.opacity(0.7)))
                     .frame(width: geometry.tagAreaSize.width, height: geometry.tagAreaSize.height)
                     .background(GeometryReader { proxy in
@@ -121,9 +121,9 @@ struct CardTagScreen: View {
                     .accessibilityHidden(true)
                     .overlay(Color.clear.accessibilityElement().accessibilityLabel("태그 영역").accessibilityIdentifier("\(prefix).tagArea"))
             }
-            .padding(.vertical, 18)
+            .padding(.vertical, 15)
             .frame(width: 274)
-            .background(RoundedRectangle(cornerRadius: 28).fill(Color(white: 0.11)))
+            .background(RoundedRectangle(cornerRadius: 28).fill(Color(red: 0x1B / 255, green: 0x1D / 255, blue: 0x1E / 255)))
             .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.2)))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Focus Mate \(kind.terminalName), \(time), \(controller.isRecognized ? "집중동행카드 인식됨" : kind.readyLCDText)")
@@ -135,29 +135,30 @@ struct CardTagScreen: View {
     private func lcd(time: String) -> some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Focus Mate").font(.footnote).foregroundStyle(.secondary)
+                Text("Focus Mate").font(.system(size: 9)).foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.76))
                 Spacer()
-                Text(time).font(.footnote.weight(.semibold)).monospacedDigit()
+                Text(time).font(.system(size: 10, weight: .semibold)).monospacedDigit()
             }
             Divider()
             Group {
                 if controller.isRecognized {
                     VStack(spacing: 6) {
-                        Text(PassIdentity.displayName).font(.title3.bold())
+                        Text(PassIdentity.displayName).font(.system(size: 18, weight: .semibold))
                         Image(systemName: "checkmark").font(.title3).foregroundStyle(Color(red: 0.7, green: 0.85, blue: 0.75))
                     }
                 } else {
-                    Text(kind.readyLCDText).font(.title3.bold())
+                    Text(kind.readyLCDText).font(.system(size: 18, weight: .semibold))
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 64)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .ignore)
             .accessibilityValue(controller.isRecognized ? PassIdentity.displayName : kind.readyLCDText)
             .accessibilityIdentifier("\(prefix).lcdStatus")
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color.black))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2)))
+        .padding(12)
+        .frame(height: 112)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0x09 / 255, green: 0x0B / 255, blue: 0x0C / 255)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.35)))
         .padding(.horizontal, 18)
     }
 
@@ -173,7 +174,7 @@ struct CardTagScreen: View {
                 .padding(8)
                 .overlay(RoundedRectangle(cornerRadius: 22)
                     .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                    .foregroundStyle(.white.opacity(controller.isRecognized ? 0 : (blink && !reduceMotion ? 0.25 : 0.7))))
+                    .foregroundStyle(.white.opacity(controller.isRecognized ? 0 : (blink && !reduceMotion ? 0.18 : 0.55))))
                 .offset(x: controller.cardOffset.width, y: controller.cardOffset.height + bounceOffset)
                 // 끄는 동안은 손가락을 바로 따라가고, 되돌아갈 때만 부드럽게 움직인다.
                 .animation(reduceMotion || controller.phase == .dragging ? nil : .spring(duration: 0.3), value: controller.cardOffset)

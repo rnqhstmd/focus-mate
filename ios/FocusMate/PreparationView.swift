@@ -8,6 +8,7 @@ struct PreparationView: View {
   @State private var taskInput: String
   @State private var showTagEditor = false
   @State private var showSoundSelection = false
+  @State private var panelHeight: CGFloat = 0
   @FocusState private var taskEditing: Bool
   @AccessibilityFocusState private var soundFocused: Bool
   @AccessibilityFocusState private var addTagFocused: Bool
@@ -22,6 +23,13 @@ struct PreparationView: View {
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
+        if let journey = model.preparedJourney {
+          Label("\(journey.busKind) \(journey.busNumber) · \(journey.destination)", systemImage: "bus.fill")
+            .font(PreparationTypography.medium(13, relativeTo: .caption))
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(FMDesign.panel.opacity(0.85), in: Capsule())
+            .padding(.top, 12).padding(.horizontal, 12)
+        }
         if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
         VStack(spacing: 0) {
           ScrollViewReader { proxy in
@@ -120,11 +128,26 @@ struct PreparationView: View {
           maxHeight: typeSize.isAccessibilitySize
             ? geometry.size.height : (model.preparation.selectedTag == nil ? 270 : 350)
         )
+        .background {
+          GeometryReader { panel in
+            Color.clear.preference(key: PreparationPanelHeightKey.self, value: panel.size.height)
+          }
+        }
         .background(Color(white: 0.035), in: RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.12)))
         .padding(.horizontal, 12).padding(.bottom, 12)
       }
     }
+    .background {
+      if showTagEditor || showSoundSelection || taskEditing {
+        FMDesign.background.ignoresSafeArea()
+      } else {
+        SceneMapBackdrop(model: model, bottomInset: panelHeight + 12 + 28,
+                         routeID: model.preparedJourney?.busID)
+          .allowsHitTesting(false)
+      }
+    }
+    .onPreferenceChange(PreparationPanelHeightKey.self) { panelHeight = $0 }
     .sheet(isPresented: $showTagEditor, onDismiss: { addTagFocused = true }) {
       TagEditorView(model: model, onSaved: { taskEditing = true })
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(410), .large])
@@ -187,6 +210,13 @@ struct PreparationView: View {
 
   #if DEBUG
   #endif
+}
+
+private struct PreparationPanelHeightKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
+  }
 }
 
 @MainActor
@@ -352,7 +382,7 @@ private struct SoundSelectionView: View {
             .red
           ).accessibilityIdentifier("sound.error")
         }
-        VStack(spacing: 3) {
+        VStack(spacing: 16) {
           Button {
             previewTask?.cancel()
             previewTask = Task { await model.soundPreview.togglePreview() }

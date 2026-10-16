@@ -284,13 +284,31 @@ final class ProfileUITests: XCTestCase {
 
         let navMaxY = h.app.navigationBars.firstMatch.frame.maxY
         let windowMaxY = h.app.windows.firstMatch.frame.maxY
+        let profileScroll = h.app.scrollViews.firstMatch
+        XCTAssertTrue(profileScroll.waitForExistence(timeout: timeout))
         for id in ["profile.card", "profile.customize", "profile.stat.journeys", "profile.stat.time", "profile.settings"] {
             let target = h.element(id)
             XCTAssertTrue(target.waitForExistence(timeout: timeout), "없음: \(id)")
-            var swipes = 0
-            while !(target.frame.minY >= navMaxY && target.frame.maxY <= windowMaxY) && swipes < 3 {
-                h.app.swipeUp()
-                swipes += 1
+            for _ in 0..<8 {
+                let targetFrame = target.frame
+                if targetFrame.minY >= navMaxY && targetFrame.maxY <= windowMaxY { break }
+                let scrollFrame = profileScroll.frame.intersection(h.app.windows.firstMatch.frame)
+                let top = max(scrollFrame.minY, navMaxY) + 12
+                let bottom = min(scrollFrame.maxY, windowMaxY) - 12
+                let height = bottom - top
+                guard height > 0, scrollFrame.width > 0 else { break }
+                // A prior upward gesture may have moved this target above the bar.
+                // Choose direction and distance from the current target and actual viewport.
+                let shift = (top + bottom) / 2 - targetFrame.midY
+                let distance = min(abs(shift), height * 0.5)
+                let startY = shift > 0 ? top + height * 0.25 : top + height * 0.75
+                let endY = startY + (shift > 0 ? distance : -distance)
+                let origin = h.app.coordinate(withNormalizedOffset: .zero)
+                let x = scrollFrame.minX + scrollFrame.width * 0.92 - h.app.frame.minX
+                let start = origin.withOffset(CGVector(dx: x, dy: startY - h.app.frame.minY))
+                let end = origin.withOffset(CGVector(dx: x, dy: endY - h.app.frame.minY))
+                start.press(forDuration: 0.05, thenDragTo: end,
+                            withVelocity: .slow, thenHoldForDuration: 0.3)
             }
             XCTAssertGreaterThanOrEqual(target.frame.minY, navMaxY, "\(id) 위쪽이 내비바에 가림")
             XCTAssertLessThanOrEqual(target.frame.maxY, windowMaxY, "\(id) 아래쪽이 화면 밖")

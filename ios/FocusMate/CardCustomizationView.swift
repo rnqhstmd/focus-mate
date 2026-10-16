@@ -19,8 +19,8 @@ struct CardCustomizationView: View {
     @State private var importGate = UITestCardImportGate()
     #endif
 
-    private let background = Color(red: 13 / 255, green: 15 / 255, blue: 16 / 255)
-    private let secondary = Color(red: 184 / 255, green: 191 / 255, blue: 197 / 255)
+    private let background = FMDesign.background
+    private let secondary = FMDesign.secondaryText
     private var locked: Bool { controller.isImporting || controller.isSaving }
     private var selected: CardPhoto? { controller.draft.photos.first { $0.id == controller.selectedPhotoID } }
     private let palette: [(String, String, CardColor)] = [
@@ -68,7 +68,7 @@ struct CardCustomizationView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }.accessibilityElement(children: .contain).accessibilityIdentifier("cardCustomization.body")
         }
-        .background(background).foregroundStyle(.white)
+        .background(background).foregroundStyle(FMDesign.primary).tint(FMDesign.primary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button {
                 #if DEBUG
@@ -249,7 +249,7 @@ struct CardCustomizationView: View {
             let size = canvas.size
             let style = previewStyle(size: size)
             ZStack {
-                PassFace(style: style).accessibilityHidden(true)
+                PassFace(style: style, dotsOpacity: 0.25).accessibilityHidden(true)
                 if let photo = style.photos.first(where: { $0.id == controller.selectedPhotoID }) {
                     let rect = photoRect(photo, size: size)
                     Rectangle().stroke(.white, lineWidth: 1).frame(width: rect.width, height: rect.height)

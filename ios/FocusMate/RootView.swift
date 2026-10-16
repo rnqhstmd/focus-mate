@@ -28,17 +28,11 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack(path: $model.path) {
-            VStack(alignment: .leading, spacing: 24) {
-                content
-                if model.saveFailure != nil && model.launchState != .ready(.initialStationEntry) {
-                    Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
-                        .accessibilityIdentifier("storage.saveFailure").foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(24)
+            rootContent
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(FMDesign.background)
             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
+            .toolbar(hidesRootNavigationBar ? .hidden : .visible, for: .navigationBar)
             .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization, services: services) }
             .newJourneyConfirmation(isPresented: $confirmsNewJourney) { apply(model.confirmNewJourney()) }
         }
@@ -142,6 +136,41 @@ struct RootView: View {
         #endif
     }
 
+    private var hidesRootNavigationBar: Bool {
+        guard model.path.isEmpty else { return false }
+        switch model.launchState {
+        case .ready:
+            return model.presentedRoute == .main || model.presentedRoute == .cardEntry
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder private var rootContent: some View {
+        if model.presentedRoute == .main, case .ready = model.launchState {
+            content
+                .safeAreaInset(edge: .bottom, spacing: 0) { saveFailureNotice }
+        } else {
+            VStack(alignment: .leading, spacing: 24) {
+                content
+                saveFailureNotice
+                Spacer(minLength: 0)
+            }
+            .padding(24)
+        }
+    }
+
+    @ViewBuilder private var saveFailureNotice: some View {
+        if model.saveFailure != nil && model.launchState != .ready(.initialStationEntry) {
+            Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
+                .accessibilityIdentifier("storage.saveFailure")
+                .foregroundStyle(FMDesign.secondaryText)
+                .padding(.horizontal, model.presentedRoute == .main ? 24 : 0)
+                .padding(.vertical, model.presentedRoute == .main ? 12 : 0)
+                .background(FMDesign.background)
+        }
+    }
+
     private func updateWidgetEntryBlock() {
         model.setWidgetEntryBlocked(showsCustomization || confirmsNewJourney)
     }
@@ -199,8 +228,7 @@ struct RootView: View {
         case .initialStationEntry:
             InitialStationSearchView(model: model)
         case .main:
-            // 가장 큰 글자에서 진행 여정 안내가 더해져도 모든 메뉴에 닿도록 스크롤한다.
-            ScrollView { VStack(alignment: .leading, spacing: 24) { mainContent } }
+            mainContent
                 // 포기 안내는 바뀌는 순간 한 번만 낭독한다. 안내 뷰의 등장 횟수에 묶지 않는다.
                 .onChange(of: model.abandonNotice) { _, name in
                     if let name { services.announcer.announce(JourneyLifecycleText.abandonNotice(stationName: name)) }
@@ -210,36 +238,17 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private var mainContent: some View {
-            Text("현재 정류장").foregroundStyle(.secondary).accessibilityIdentifier("screen.main")
-            if let station = model.snapshot?.currentStation {
-                Text(station.name).font(.largeTitle.bold()).accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
-                // 정류장 데이터를 읽기 전에는 비어 있다가 준비되면 채워진다(AC-42).
-                Text(model.currentStationBound ?? " ").foregroundStyle(.secondary)
-                    .accessibilityValue(model.currentStationBound ?? "").accessibilityIdentifier("main.bound")
-            }
-            if let stationName = model.abandonNotice {
-                MainAbandonNoticeView(stationName: stationName)
-            }
-            if mainActionFailed {
-                Text(JourneyLifecycleText.saveFailure).foregroundStyle(.orange).accessibilityIdentifier("main.saveFailure")
-            }
-            if let card = model.activeJourneyCard {
-                ActiveJourneyCardView(content: card, onResume: { apply(model.resumeJourney()) },
-                                      onAlight: { apply(model.beginAlighting()) })
-            }
-            PassFace(style: model.currentCardStyle).frame(maxWidth: 354)
-            Button("카드 꾸미기", action: startCardCustomization)
-                .buttonStyle(.bordered).accessibilityIdentifier("open.cardCustomization")
-            ForEach(model.mainMenuDestinations, id: \.self) { destination in
-                Button(destination == .preparation ? model.mainStartTitle : destination.mainMenuTitle) {
-                    if destination != .preparation { model.open(destination.mainMenuTarget) }
-                    // 진행 여정은 확인을 거쳐서만 정리한다(W07).
-                    else if model.activeJourney != nil { confirmsNewJourney = true }
-                    else { model.startTripFromMain() }
-                }.buttonStyle(.bordered)
-                    .accessibilityIdentifier("open.\(destination.rawValue)")
-            }
+    private var mainContent: some View {
+        MainHomeView(model: model, actionFailed: mainActionFailed,
+                     openDestination: openMainDestination, customizeCard: startCardCustomization,
+                     resume: { apply(model.resumeJourney()) }, alight: { apply(model.beginAlighting()) })
+    }
+
+    private func openMainDestination(_ destination: Destination) {
+        if destination != .preparation { model.open(destination.mainMenuTarget) }
+        // 진행 여정은 확인을 거쳐서만 정리한다(W07).
+        else if model.activeJourney != nil { confirmsNewJourney = true }
+        else { model.startTripFromMain() }
     }
 
     /// 메인 동작 실패 안내는 이 화면에만 둔다. 거부(연타 등)는 안내를 바꾸지 않는다.

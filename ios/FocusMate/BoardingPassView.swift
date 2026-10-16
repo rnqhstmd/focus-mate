@@ -6,15 +6,36 @@ struct BoardingPassView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        ZStack {
-            Image("BoardMap").resizable().scaledToFill().ignoresSafeArea()
+        GeometryReader { geometry in
+          ZStack {
+            // The approved ticket uses this artwork; constrain its intrinsic size to the viewport.
+            Image("BoardMap").resizable().scaledToFill()
+                .frame(width: geometry.size.width,
+                       height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom)
+                .clipped()
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                .ignoresSafeArea()
                 .overlay(Color.black.opacity(0.35).ignoresSafeArea())
                 .accessibilityHidden(true)
             if let details = model.confirmedPreparation {
                 let content = BoardingPassContent(details: details, now: .now, timeZone: .current)
+                VStack {
+                    Text("\(details.originName) → \(details.journey.destination)")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(FMDesign.panel.opacity(0.8), in: Capsule())
+                        .padding(.top, 12).padding(.horizontal, 24)
+                    Spacer(minLength: 0)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
                 ScrollView {
-                    VStack { Spacer(minLength: 0); ticket(content) }
-                        .padding(.horizontal, 24).padding(.vertical, 24)
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 24)
+                        ticket(content)
+                    }
+                    .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 12)
+                    .frame(minHeight: max(0, geometry.size.height - 100), alignment: .bottom)
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .safeAreaInset(edge: .bottom) { boardButton }
@@ -22,6 +43,8 @@ struct BoardingPassView: View {
                 Text("준비를 다시 확인해주세요").font(.headline).padding(24)
                     .accessibilityIdentifier("board.unavailable")
             }
+          }
+          .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.board")
@@ -29,21 +52,21 @@ struct BoardingPassView: View {
     }
 
     private func ticket(_ content: BoardingPassContent) -> some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 16) {
             // 버스 번호·여행 시간은 화면 글자가 아니라 낭독 요소로만 둔다.
             Color.clear.frame(width: 1, height: 1).accessibilityElement()
                 .accessibilityLabel(content.routeAccessibilityLabel).accessibilityIdentifier("board.route")
             row(("출발", content.originName, "board.origin"), ("도착", content.destinationName, "board.destination"),
-                valueFont: .system(size: content.stationFontSize, weight: .bold), lineLimit: 2)
+                valueFont: .custom("SeoulAlrimTTF-Bold", size: min(content.stationFontSize, 24), relativeTo: .title2), lineLimit: 2)
             row(("정류장", content.stopsText, "board.stops"), ("거리", content.distanceText, "board.distance"),
-                valueFont: .title3.monospacedDigit().weight(.semibold))
+                valueFont: .subheadline.monospacedDigit().weight(.semibold))
             row(("탑승", content.boardingText, "board.boarding"), ("날짜", content.dateText, "board.date"),
-                valueFont: .title3.monospacedDigit().weight(.semibold))
+                valueFont: .subheadline.monospacedDigit().weight(.semibold))
             row(("태그", content.tagName, "board.tag"), ("할 일", content.task, "board.task"),
-                valueFont: .title3.weight(.semibold), lineLimit: 3)
+                valueFont: .subheadline.weight(.semibold), lineLimit: 3)
                 .padding(.top, 18)
         }
-        .padding(24)
+        .padding(22)
         .background {
             ZStack {
                 Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255)

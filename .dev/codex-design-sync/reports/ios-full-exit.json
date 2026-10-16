@@ -1,0 +1,7 @@
+{
+  "exitCode": 65,
+  "elapsedSeconds": 5931.415,
+  "finishedAt": "2026-10-16T20:32:49.696413+09:00",
+  "command": "python3 scripts/check-ios.py test",
+  "temporaryCollectorExcluded": true
+}

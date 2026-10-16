@@ -131,3 +131,10 @@ iOS에서는 지도 테마 시트·버스 따라가기를 직접 구현한다. A
 - **연도 이동**: 이전/다음 버튼과 연도 메뉴로 옮기며 올해 이후로는 갈 수 없다. 연도를 옮기면 올해는 오늘, 그 밖의 해는 그 해 가장 최근 기록일, 기록이 없으면 1월 1일이 선택된다.
 - **메모 수정**: 기록에서 '메모 남기기'/'메모 수정' 시트로 200자까지 쓴다. 저장에 실패하면 입력을 유지한다.
 - 저장 형식은 v4 그대로다. 분석 화면(주/월·태그·인사이트)은 W09b로 분리했다. 실기기 VoiceOver(잔디 조정·첫 초점)·햅틱·큰 글자 확인은 W14다.
+
+## iOS 시간 선택 입력 — 2026-10-16 (design-sync)
+
+- 일반 글자: Canvas 가로 눈금자를 실제 드래그해15~360분을1분 단위로 선택한다. 고정 중앙 포인터와 현재 분을 표시하고 native Slider 접근성 노출/값을 유지한다.
+- 접근성 큰 글자: 보이는 native Slider와 최소44pt ±1분 버튼을 사용한다. 양끝에서는 해당 버튼을 비활성화하며 후보는 본문 세로 흐름에 놓아 첫/마지막 후보와 진행 버튼에 도달한다.
+- 입력은 기존 Binding → journeyPlan.setMinutes를 사용한다. 시간이 바뀌면 선택 후보를 해제하고 다시 유효 후보를 선택하기 전 진행을 잠근다. 계산·저장 정책과 취소/뒤로가기 계약은 바꾸지 않는다. W02 휠은 과거 구현 이력이다.
+- 증거: [최종 소스 검토](../.dev/codex-design-sync/reports/review-final.md), [계획](../.dev/codex-design-sync/implementation-plan.md), [after17 focused](../.dev/codex-design-sync/reports/after-capture-focused-17.log), [SE21 시간2](../.dev/codex-design-sync/reports/small-21.log). 실제 drag/±버튼과 Slider 노출·값 확인은 synthetic Slider 조절이나 실기기 VoiceOver 증가/감소 통과를 뜻하지 않는다. 첫 전체는unit1426/0실패·UI319/2실패(exit65), 수정 후 영향7건/0실패·별도 빌드exit0으로 구분하며 실기기 VoiceOver·햅틱은 미검증이다.

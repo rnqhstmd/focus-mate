@@ -25,54 +25,97 @@ struct CardIssuanceView: View {
     private var showsCard: Bool { controller.phase == .issuing || isIssued }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(isIssued ? CardIssuanceCopy.issuedTitle : CardIssuanceCopy.readyTitle)
-                    .font(.title.bold())
-                    .accessibilityValue(isIssued ? CardIssuanceCopy.issuedTitle : CardIssuanceCopy.readyTitle)
-                    .accessibilityIdentifier("card.title")
-                Text(isIssued ? CardIssuanceCopy.issuedBody : CardIssuanceCopy.readyBody)
-                    .foregroundStyle(.secondary)
-                cardStage
-                Text(isIssued ? CardIssuanceCopy.issuedHint : CardIssuanceCopy.readyHint)
-                    .font(.footnote).foregroundStyle(.secondary)
-                if controller.phase == .failed {
-                    Text(CardIssuanceCopy.issueError)
-                        .accessibilityValue(CardIssuanceCopy.issueError)
-                        .accessibilityIdentifier("card.issueError")
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Focus Mate")
+                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                        .padding(.top, 12).padding(.bottom, 46)
+                    Text(displayTitle)
+                        .font(FontCatalog.text(28, bold: true, relativeTo: .title))
+                        .lineSpacing(5)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityValue(isIssued ? CardIssuanceCopy.issuedTitle : CardIssuanceCopy.readyTitle)
+                        .accessibilityIdentifier("card.title")
+                    Text(showsCard ? "오늘부터, 나만의 시간으로.\n이 카드가 매 여정에 함께해요." : "독서도, 작업도, 잠깐의 쉼도.\n한 장의 카드로 나만의 여정을 시작해요.")
+                        .font(.subheadline).lineSpacing(5)
+                        .foregroundStyle(Color(red: 0.76, green: 0.80, blue: 0.77))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 18)
+                    Spacer(minLength: 30)
+                    cardStage
+                    Spacer(minLength: 30)
                 }
+                .frame(maxWidth: .infinity, minHeight: max(0, geometry.size.height - 116), alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .scrollBounceBehavior(.basedOnSize)
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 18) {
+                    if controller.phase == .failed {
+                        Text(CardIssuanceCopy.issueError)
+                            .font(.footnote).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityValue(CardIssuanceCopy.issueError)
+                            .accessibilityIdentifier("card.issueError")
+                    }
+                    Text(showsCard ? CardIssuanceCopy.issuedHint : CardIssuanceCopy.readyHint)
+                        .font(.footnote).foregroundStyle(Color(red: 0.67, green: 0.73, blue: 0.68))
+                        .multilineTextAlignment(.center)
+                    actionButton
+                }.padding(.top, 12).padding(.bottom, 12)
+            }
         }
-        .safeAreaInset(edge: .bottom) { actionButton.padding(.top, 12) }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(red: 0x10 / 255, green: 0x11 / 255, blue: 0x12 / 255).ignoresSafeArea())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.cardEntry")
         .onChange(of: controller.focusTarget) { _, target in continueFocused = target == .continueButton }
     }
 
+    private var displayTitle: String {
+        if isIssued { return "카드가 발급됐어요.\n이제, 어디에서 출발할까요?" }
+        if controller.phase == .issuing { return "나만의 카드를\n발급하고 있어요." }
+        return "집중동행카드를\n발급받아볼까요?"
+    }
+
     private var cardStage: some View {
-        ZStack(alignment: .top) {
-            Capsule().fill(.secondary.opacity(0.4)).frame(width: 180, height: 6)
-            if showsCard {
-                PassFace()
-                    .accessibilityIdentifier("card.face")
-                    .offset(y: cardOut ? 0 : -42)
-                    .mask(alignment: .bottom) {
-                        Rectangle().frame(maxHeight: .infinity).scaleEffect(y: cardOut ? 1 : 0.02, anchor: .bottom)
+        VStack(spacing: 24) {
+            Capsule()
+                .fill(Color.black)
+                .overlay(Capsule().stroke(Color(red: 0.34, green: 0.39, blue: 0.35)))
+                .frame(width: 214, height: 7)
+                .accessibilityHidden(true)
+            ZStack {
+                if showsCard {
+                    PassFace()
+                        .accessibilityIdentifier("card.face")
+                        .offset(y: cardOut ? 0 : -42)
+                        .mask(alignment: .bottom) {
+                            Rectangle().scaleEffect(y: cardOut ? 1 : 0.02, anchor: .bottom)
+                        }
+                        .onAppear { slideOut() }
+                } else {
+                    VStack(spacing: 15) {
+                        Image(systemName: "creditcard").font(.system(size: 31, weight: .light))
+                        Text("당신의 여정이 담길 한 장").font(.footnote)
                     }
-                    .padding(.top, 14)
-                    .onAppear { slideOut() }
+                    .foregroundStyle(Color(red: 0.65, green: 0.72, blue: 0.67))
+                    .frame(maxWidth: .infinity, minHeight: 184)
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(red: 0.43, green: 0.51, blue: 0.45).opacity(0.4)))
+                    .accessibilityHidden(true)
+                }
+            }
+            if isIssued {
+                Label("발급 완료", systemImage: "checkmark.circle")
+                    .font(.footnote).foregroundStyle(Color(red: 0.71, green: 0.83, blue: 0.73))
             }
         }
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 292)
         .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder private var actionButton: some View {
         if isIssued {
             Button { controller.proceed() } label: { buttonLabel(CardIssuanceCopy.continueButton) }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(FMPrimaryButtonStyle())
                 .accessibilityIdentifier("card.continueButton")
                 .accessibilityFocused($continueFocused)
         } else {
@@ -82,14 +125,14 @@ struct CardIssuanceView: View {
                 buttonLabel(controller.phase == .issuing ? CardIssuanceCopy.issuingButton
                             : controller.phase == .failed ? CardIssuanceCopy.retryButton : CardIssuanceCopy.issueButton)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(FMPrimaryButtonStyle())
             .disabled(controller.phase == .issuing)
             .accessibilityIdentifier("card.issueButton")
         }
     }
 
     private func buttonLabel(_ title: String) -> some View {
-        Text(title).frame(maxWidth: .infinity, minHeight: 44).multilineTextAlignment(.center)
+        Text(title).frame(maxWidth: .infinity).multilineTextAlignment(.center)
     }
 
     private func slideOut() {

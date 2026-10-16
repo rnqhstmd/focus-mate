@@ -241,8 +241,7 @@ final class PreparationEditorUITests: XCTestCase {
     private func enterPreparation(_ h: FocusMateUIHarness) throws {
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         h.app.buttons["open.preparation"].tap()
-        let wheel = h.app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout)); wheel.adjust(toPickerWheelValue: "60분")
+        h.app.setJourneyMinutes(60, timeout: timeout)
         tap(h.element("time.candidate.2014-r"), in: h.app); tap(h.element("time.proceed"), in: h.app)
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
     }

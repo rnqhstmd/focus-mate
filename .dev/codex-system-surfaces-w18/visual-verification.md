@@ -18,3 +18,6 @@
 
 ## OS URL scheme 인식 범위
 빌드된Info.plist에focusmate scheme등록확인. simctl openurl실행시`reports/w18-os-url-system-confirmation.png`의‘FocusMate에서열겠습니까’시스템확인창까지직접확인했다. 외부URL확인창을수락하지않았으므로실제onOpenURL전달완료라고주장하지않는다. fixture를쓴DEBUG URL실제앱진입은별도UI5건/0fail(t2-ui-final-focused.log)로검증했다. 전체회귀전전용시뮬레이터를재시작해확인창상태를정리한다.
+
+## 2026-10-16 후속 검증
+Release Simulator 일반 실행·실제 App Group 게시(0분/150분6회)·Release 진단 제외를 추가 확인했다. 실제 WidgetKit gallery/확장읽기/탭·OS접근성은 Device Hub 제어 차단으로 미확보, 실기기는 사용자 선택으로 범위 제외다. 계정 프로비저닝 성공으로 해석하지 않는다. [상세](reports/system-verification-followup.md).

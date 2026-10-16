@@ -1,0 +1,24 @@
+{
+  "start": "2026-10-16T05:17:31.954626+00:00",
+  "seconds": 46.92,
+  "exit": 0,
+  "command": [
+    "xcodebuild",
+    "-project",
+    "ios/FocusMate.xcodeproj",
+    "-scheme",
+    "FocusMate",
+    "-configuration",
+    "Release",
+    "-destination",
+    "platform=iOS Simulator,id=F5C2655F-70B3-4B70-AFCA-77813611A4AC",
+    "-derivedDataPath",
+    "/Users/bonseung/.codex/worktrees/w17-live-activity-design/new/.build/w18-system-verification",
+    "-parallel-testing-enabled",
+    "NO",
+    "build",
+    "CODE_SIGN_IDENTITY=-",
+    "CODE_SIGNING_ALLOWED=YES",
+    "CODE_SIGN_STYLE=Manual"
+  ]
+}

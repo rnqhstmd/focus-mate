@@ -1,0 +1,7 @@
+{
+  "--fm-ui-test-id": false,
+  "test.persistedBytes": false,
+  "test.writeAttempts": false,
+  "test.main.failNextSave": false,
+  "UITestBootstrap": false
+}

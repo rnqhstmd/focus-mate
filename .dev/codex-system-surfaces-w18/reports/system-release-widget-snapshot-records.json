@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "analytics": {
+    "weekEnd": "2026-10-18",
+    "weekStart": "2026-10-12",
+    "days": [
+      {
+        "count": 0,
+        "minutes": 0,
+        "day": "2026-10-12"
+      },
+      {
+        "count": 0,
+        "minutes": 0,
+        "day": "2026-10-13"
+      },
+      {
+        "count": 0,
+        "minutes": 0,
+        "day": "2026-10-14"
+      },
+      {
+        "count": 0,
+        "minutes": 0,
+        "day": "2026-10-15"
+      },
+      {
+        "count": 6,
+        "minutes": 150,
+        "day": "2026-10-16"
+      },
+      {
+        "count": 0,
+        "minutes": 0,
+        "day": "2026-10-17"
+      },
+      {
+        "count": 0,
+        "minutes": 0,
+        "day": "2026-10-18"
+      }
+    ],
+    "weekMinutes": 150,
+    "tags": [
+      {
+        "color": "#B49CE1",
+        "count": 3,
+        "name": "공부",
+        "minutes": 75,
+        "id": {
+          "named": {
+            "_0": "공부"
+          }
+        }
+      },
+      {
+        "minutes": 75,
+        "count": 3,
+        "name": "독서",
+        "color": "#D7B378",
+        "id": {
+          "named": {
+            "_0": "독서"
+          }
+        }
+      }
+    ],
+    "today": {
+      "count": 6,
+      "minutes": 150,
+      "day": "2026-10-16"
+    },
+    "weekCount": 6
+  },
+  "timeZoneID": "Asia/Seoul",
+  "basisDay": "2026-10-16",
+  "generatedAt": 813821027.886587,
+  "journey": {
+    "phase": "setup"
+  }
+}

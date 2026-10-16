@@ -1,0 +1,12 @@
+{
+  "normal_release_process": true,
+  "debug_bootstrap": false,
+  "shared_file_created": true,
+  "today_minutes": 150,
+  "today_count": 6,
+  "week_minutes": 150,
+  "week_count": 6,
+  "excluded_original_fields": true,
+  "actual_widget_extension_read": false,
+  "developer_program_provisioning_verified": false
+}

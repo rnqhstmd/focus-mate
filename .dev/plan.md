@@ -12,7 +12,7 @@
 | W07 | [P3] 포기·이어가기·생명주기 | journey | journey FR-13, NFR-2(Simulator) | W05 | feat/abandon-resume-lifecycle | 완료 |
 | W08 | [P4] 완료·메모 저장 모델 | records | records FR-5, NFR-1 | W00 | codex/feat-completed-record-memo | 완료 |
 | W09 | [P4] 하차 태그·요약·기록(W09a) | 통합 | journey FR-12, records FR-6(요약·기록·메모) | W05, W08 | feat/alighting-summary-records | 완료 (#23) |
-| W09b | [P4] 분석(주/월·태그·인사이트) | records | records FR-6(분석) | W09 | - | 대기 |
+| W09b | [P4] 분석(주/월·태그·인사이트) | records | records FR-6(분석), FR-7(앱·위젯 공용 집계) | W09 | - | 대기 |
 | W10 | [P5] 카드 꾸미기 | card | card FR-4, NFR-2 | W01 | codex/feat-card-customization | 완료 |
 | W11 | [P5] 마이페이지 | card | card FR-5 | W01, W08 | feat/my-page | 완료 |
 | W12 | [P5] 접근성·동작 설정 | preferences | preferences FR-3 | - | - | 폐기 |
@@ -20,6 +20,8 @@
 | W14 | [P6] 실기기 QA·출시 준비 | 통합 | journey NFR-2(실기기), preferences NFR-2 | W04, W06, W07, W09, W10, W11, W13 | - | 대기 |
 | W15 | [P3] 다이나믹 아일랜드·잠금 화면 진행 표시(Live Activity) | journey | journey FR-5 보조(2026-10-15 사용자 요청) | W05 | feat/live-activity-progress | 완료 |
 | W16 | [P3] 서울 전체 실데이터 번들(정류장·노선·버스·구간 시간) | journey | journey FR-7·FR-8·FR-6 데이터 교체(2026-10-15 사용자 요청) | W02, W06 | feat/seoul-real-route-data | 진행 |
+| W17 | Live Activity 디자인·눈금 타임라인 | journey | journey FR-14 | W15 | - | 대기 |
+| W18 | 홈 위젯(공유 기반·집중 유도·분석) | 통합 | journey FR-15, NFR-3; records FR-8, NFR-2 | W07, W08, W09b | - | 대기 |
 
 요구사항 ID는 `context/{도메인}/status.md`의 원장을 따른다. `[P2]`는 [개발 단계](../docs/DEVELOPMENT-PHASES.md)의 Phase다.
 
@@ -32,14 +34,22 @@
 | 3 | W03 · W10 · W11 | 2 |
 | 4 | W04 | 3 (W03) |
 | 5 | W05 | 4 |
-| 6 | W06 · W07 · W09 | 5 |
-| 7 | W14 | 6 |
-| 8 | W16 | 6 (W06) · 2 (W02) — W09와 동시 진행 금지(아래) |
+| 6 | W06 · W07 · W09 · W15 | 5 (W05), W09는 2 (W08)도 필요 |
+| 7 | W09b · W14 · W16 · W17 | 6 (각 작업의 의존 열 참조) |
+| 8 | W18 | 7 (W09b), 6 (W07), 2 (W08) |
 
 - W09b는 W09(W09a) 뒤에 진행한다. W14는 W09b를 기다리지 않는다(출시 게이트는 W09a로 해소).
-- 가장 긴 경로: W00 → W02 → W03 → W04 → W05 → W06/W07/W09 → W14 (7단계).
+- 가장 긴 경로: W00 → W02 → W03 → W04 → W05 → W09 → W09b → W18 (8단계). 이는 데이터 의존 그래프이며 아래 W07 선머지 운영 제약은 별도로 적용한다.
 - 같은 묶음이라도 W03·W04는 아래 Phase 0 확인이 끝나야 착수한다.
 - 묶음 2의 W08·W13은 W00이 만든 저장 섹션만 고치고 저장 파일 구조를 다시 바꾸지 않는다.
+- 폐기 W12는 실행 묶음에서 제외한다. W16·W09 동시 진행 금지와 W07 → W09 선머지 제약은 아래 결정을 유지한다.
+
+시스템 표면 후속 범위:
+- [승인 계획·AC·파일 경계](system-surfaces-plan/plan.md): 새 작업은 W17·W18 두 개다. 위젯 기반·집중 유도·분석을 W18 한 브랜치/PR의 내부 단계로 묶는다.
+- W09b는 분석 순수 집계를 생산하고 W18은 그 결과를 공유 스냅샷과 위젯으로 전달한다. 공용 집계를 만드는 별도 작업은 추가하지 않는다.
+- 현재 선행이 완료된 W17과 W09b는 표시/Live Activity 파일과 records 집계/분석 파일의 소유권을 나누면 병렬 착수할 수 있다. W18 구현·통합 착수는 W09b 완료 뒤다. 그 전에는 디자인·스키마 검토만 병행할 수 있다.
+- W17과 W18이 함께 만지는 확장 번들·공유 타입·프로젝트 등록은 담당자를 정하고 순차 통합한다. 데이터 의존이 없다는 이유로 같은 파일의 안전한 병렬 편집을 보장하지 않는다.
+- 신규 기능의 화면·상태·접근성 검증은 각 작업 AC로 수행하고, 실제 Dynamic Island·잠금 화면·위젯·VoiceOver는 실기기 증거를 별도로 남긴다. 기존 W14 범위·의존은 변경하지 않는다.
 
 묶음 5~6 진행 순서(2026-10-15 결정):
 - W04 → W05는 순차다. W05와 병렬로 돌릴 수 있는 작업은 없다(W06·W07·W09 모두 W05 선행).

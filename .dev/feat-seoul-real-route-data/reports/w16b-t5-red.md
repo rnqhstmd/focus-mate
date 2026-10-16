@@ -29,3 +29,11 @@ AC-37 lifeRouteGone700 포기 / AC-38 lifeOriginGone700 포기 / AC-39 같은 �
 - 큰 글씨 UI 테스트(LargeText, SimulatorLargeTextRecovery)는 검색어 입력 키보드가 확인 버튼 접근성에 영향을 줄 수 있음(기존 reach/isHittable 단언 유지). 실행에서 실패하면 키보드 내리기가 필요.
 - AC-45(pending 해제 후 재시도)는 pending이 끝나지 않으므로 UI로 검증 불가, 단위 테스트 담당. failed 모드(search.loadFailed)와 AC-7 overflow도 UI 대상 아님.
 - 기대 방면값 "성동구민체육센터 방면"과 검색 건수(8/2)는 uiTestFixture를 손으로 계산한 값이다. 어긋나면 픽스처 쪽 계산 확인.
+
+## 전체 실행 후 수정 (21건 중 20건 수정, 실행은 오케스트레이터)
+- ready 시드 현재 정류장은 `seoulForest-r`이라 지나는 노선이 2014-r뿐: 후보 식별자를 `time.candidate.2014-r`로 변경 (PreparationEditorUITests 헬퍼 전체 + busID 단언 "2014-r", BoardingFlowUITests 2곳, PreparationFlowUITests ready 시드 테스트 / 헬퍼에 routeID 인자 추가, 검색 경로는 기본 "2014").
+- TimeSelectionUITests: 61분에도 60분 후보가 남으므로 testChangingMinutesClearsSelectionImmediately를 "후보는 남되 선택 해제, 버튼 '버스와 도착지를 선택하세요' 비활성"으로 변경. 0건 문구는 "이 시간에 맞는 버스가 없어요".
+- JourneyMapUITests: AC26 저장 버전 5(테스트 이름 포함). AC21 경로 점·정류장 마커 수를 6으로(2014-r 5구간 + 출발, 닫는 선 없음). 마커 6은 visibleStops = 코스 정류장 전체라는 계약에 따른 추정이며 실행에서 확인 필요.
+- ProfileUITests AC23: 버튼 4개(뒤로, 카드 꾸미기, 설정, 데이터 출처).
+- 확인 필요(수정 안 함): CardCustomizationFlowTests test12_XXXL에서_도구와복원이_고정저장위로_도달한다 (:470) — 이번 변경과 무관해 보임.
+- 오케스트레이터: CardCustomizationFlowTests.open()이 큰 글자에서 메인 "카드 꾸미기" 버튼을 화면 하단 120pt 위까지 스크롤한 뒤 누르도록 수정. 저장 뒤 다시 열 때 버튼이 화면 맨 아래에 걸려 탭이 빗나갔다(main 6542996에서는 통과 — 방면 줄이 "역방향"보다 길어 레이아웃이 내려감). 단독 재실행 통과

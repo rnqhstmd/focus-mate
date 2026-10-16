@@ -48,7 +48,7 @@ final class PreparationEditorUITests: XCTestCase {
         XCTAssertEqual(payload["task"] as? String, "책 읽기")
         XCTAssertEqual(payload["sound"] as? String, "bus")
         let journey = try XCTUnwrap(payload["journey"] as? [String: Any])
-        XCTAssertEqual(journey["minutes"] as? Int, 60); XCTAssertEqual(journey["busID"] as? String, "2014")
+        XCTAssertEqual(journey["minutes"] as? Int, 60); XCTAssertEqual(journey["busID"] as? String, "2014-r")
         XCTAssertEqual(journey["busNumber"] as? String, "2014")
         XCTAssertEqual(journey["destination"] as? String, "성수동"); XCTAssertEqual(journey["stops"] as? Int, 12)
         let tag = try XCTUnwrap(payload["tag"] as? [String: Any])
@@ -243,7 +243,7 @@ final class PreparationEditorUITests: XCTestCase {
         h.app.buttons["open.preparation"].tap()
         let wheel = h.app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: timeout)); wheel.adjust(toPickerWheelValue: "60분")
-        tap(h.element("time.candidate.2014"), in: h.app); tap(h.element("time.proceed"), in: h.app)
+        tap(h.element("time.candidate.2014-r"), in: h.app); tap(h.element("time.proceed"), in: h.app)
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
     }
     private func selectTask(_ h: FocusMateUIHarness, text: String) throws {

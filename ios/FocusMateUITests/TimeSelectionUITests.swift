@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class TimeSelectionUITests: XCTestCase {
     private let timeout: TimeInterval = 5
-    private let noCandidates = "이 시간의 도착 후보가 없어요"
+    private let noCandidates = "이 시간에 맞는 버스가 없어요"
     private let needsSelection = "버스와 도착지를 선택하세요"
     private let ready = "이 여정 준비하기"
 
@@ -113,9 +113,12 @@ final class TimeSelectionUITests: XCTestCase {
 
         app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "61분")
 
-        // 대기 없이 즉시 확인한다.
-        XCTAssertEqual(candidates(in: app).count, 0)
-        XCTAssertEqual(element("time.proceed", in: app).label, noCandidates)
+        // ±1분 규칙: 61분에도 60분 후보(차이 60초)가 남지만 선택은 즉시 해제된다. 대기 없이 확인한다.
+        let remaining = element("time.candidate.2014", in: app)
+        XCTAssertTrue(remaining.exists)
+        XCTAssertFalse(remaining.isSelected)
+        XCTAssertEqual(element("time.proceed", in: app).label, needsSelection)
+        XCTAssertFalse(element("time.proceed", in: app).isEnabled)
 
         app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "60분")
         let again = element("time.candidate.2014", in: app)

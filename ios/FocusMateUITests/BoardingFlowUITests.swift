@@ -29,7 +29,7 @@ final class BoardingFlowUITests: XCTestCase {
         let wheel = h.app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
         wheel.adjust(toPickerWheelValue: "60분")
-        let bus = h.element("time.candidate.2014")
+        let bus = h.element("time.candidate.2014-r")
         XCTAssertTrue(bus.waitForExistence(timeout: timeout))
         bus.tap()
         h.element("time.proceed").tap()
@@ -145,7 +145,7 @@ final class BoardingFlowUITests: XCTestCase {
         let wheel = h.app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
         wheel.adjust(toPickerWheelValue: "60분")
-        let bus = h.element("time.candidate.2014")
+        let bus = h.element("time.candidate.2014-r")
         XCTAssertTrue(bus.waitForExistence(timeout: timeout))
         bus.tap()
         h.element("time.proceed").tap()

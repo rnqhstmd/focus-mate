@@ -99,7 +99,13 @@ struct CardTagScreen: View {
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .background { if kind.locksNavigation { NavigationPopBlocker() } }
+        .background {
+            if kind.locksNavigation { NavigationPopBlocker() }
+            else {
+                // 승차: 뒤로 버튼은 숨기지만(AC-14 시안 우선) 가장자리 스와이프 뒤로가기는 살린다. 인식·전환 중에는 막는다.
+                NavigationEdgeSwipeEnabler { [controller] in controller.phase == .ready || controller.phase == .failed }
+            }
+        }
         .onAppear {
             if kind.locksNavigation {
                 requestsCardFocus = true

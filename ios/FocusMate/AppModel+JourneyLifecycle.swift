@@ -34,11 +34,11 @@ extension AppModel: JourneyAbandoning {
     var canEndActiveJourney: Bool { routeAvailability != .loading }
 
     /// 메인 '새 여정 시작' 확정. 도달 정류장을 현재 정류장으로 두고 여정을 지운 뒤 시간 선택으로 간다.
-    /// 도착한 여정은 하차로만 끝낸다(W09 FR-8).
+    /// 도착한 여정도 시안 R34대로 새 여정으로 끝낼 수 있다(AC-21 시안 우선 변경). 도달 정류장은 도착 정류장이고 기록은 남기지 않는다.
     @discardableResult
     func confirmNewJourney() -> LifecycleActionResult {
         guard launchState == .ready(.main), path.isEmpty, let snapshot, let active = snapshot.journey.active,
-              !active.isArrived, case let .resolved(resolution) = active.reachedStation(in: routeAvailability)
+              case let .resolved(resolution) = active.reachedStation(in: routeAvailability)
         else { return .rejected }
         guard let station = resolution.station else {
             // 정리 직전에 인식된 승차가 뒤늦게 저장되지 않도록 확정값도 버린다.

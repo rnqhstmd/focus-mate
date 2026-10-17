@@ -200,15 +200,14 @@ final class AlightingFlowUITests: XCTestCase {
 
     // MARK: ④ 복원 (AC-4, 13, 14, 21)
 
-    // 깨짐: 도착 카드에 새 여정 시작이 남거나 하차하기가 없다.
-    func testAC21_도착_여정_카드에는_하차하기만_있고_새_여정_시작은_없다() throws {
+    // 깨짐: 도착 카드에 하차 버튼(시안 문구 "이전 여정 이어가기")이나 "새 여정 시작"이 없다(AC-21 시안 우선 변경, R34).
+    func testAC21_도착_여정_카드에는_하차_버튼과_새_여정_시작이_있다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
 
         let alight = h.app.buttons["open.alighting"]
         XCTAssertTrue(alight.waitForExistence(timeout: timeout))
-        XCTAssertEqual(alight.label, "하차하기")
-        XCTAssertFalse(h.element("open.preparation").exists)
-        XCTAssertFalse(h.app.buttons["새 여정 시작"].exists)
+        XCTAssertEqual(alight.label, "이전 여정 이어가기")
+        XCTAssertEqual(h.app.buttons["open.preparation"].label, "새 여정 시작")
         XCTAssertFalse(h.app.buttons["이어가기"].exists)
         XCTAssertFalse(h.element("main.resumeJourney").exists)
     }

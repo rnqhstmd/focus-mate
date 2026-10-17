@@ -20,7 +20,7 @@ struct MainHomeView: View {
         GeometryReader { geometry in
             ZStack {
                 SceneMapBackdrop(model: model, bottomInset: footerHeight + geometry.safeAreaInsets.bottom + 40,
-                                 showsStationAnnotation: model.activeJourneyCard != nil)
+                                 showsStationAnnotation: model.activeJourneyCard != nil && !isArrived)
                     .ignoresSafeArea()
                 VStack(spacing: 0) {
                     tools
@@ -39,8 +39,9 @@ struct MainHomeView: View {
                                 Spacer(minLength: 32)
                                 footer
                             }
-                            .padding(.horizontal, isIdle ? 24 : 20)
-                            .padding(.bottom, isIdle ? max(0, 28 - geometry.safeAreaInsets.bottom) : 16)
+                            .padding(.horizontal, isIdle ? 24 : isArrived ? 18 : 20)
+                            // 시안 R01·R18·R34: 맨 아래 버튼 바닥이 화면 바닥 28pt 위(홈 표시줄 안전 영역 34보다 아래까지 내려간다).
+                            .padding(.bottom, isIdle || isArrived ? 28 - geometry.safeAreaInsets.bottom : 16)
                             .frame(minHeight: scrollGeometry.size.height, alignment: .topLeading)
                         }
                         .scrollIndicators(.hidden)
@@ -56,6 +57,8 @@ struct MainHomeView: View {
     /// 시안 R01: 오른쪽 위 원형 버튼 2개(기록·마이페이지). 설정·카드 꾸미기는 마이페이지에서 연다.
     /// 진행 여정이 없는 기본 메인(R01). 진행 여정 메인(R31~R34)의 배치는 그 단계에서 맞춘다.
     private var isIdle: Bool { model.activeJourneyCard == nil }
+    /// 도착 여정 메인(시안 R34): 18pt 여백, 현재 정류장 묶음·지도 핀 없음, 카드 아래 "새 여정 시작".
+    private var isArrived: Bool { model.activeJourneyCard?.kind == .arrived }
 
     private var tools: some View {
         HStack(spacing: 11) {
@@ -82,7 +85,7 @@ struct MainHomeView: View {
             }
             // 시안 R01: 줄마다 검정 53% 받침, 흰 28pt Bold.
             VStack(alignment: .leading, spacing: -9) {
-                ForEach(Self.welcomeLines, id: \.self) { line in
+                ForEach(welcomeLines, id: \.self) { line in
                     Text(line)
                         .font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 22 : 28, weight: .bold, relativeTo: .title))
                         .foregroundStyle(.white)
@@ -94,13 +97,21 @@ struct MainHomeView: View {
             }
             .padding(.leading, -10)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Self.welcomeLines.joined(separator: " "))
+            .accessibilityLabel(welcomeLines.joined(separator: " "))
             .accessibilityAddTraits(.isHeader)
         }
         .padding(.top, 25)
     }
 
     static let welcomeLines = ["오늘은 어디에서", "출발해볼까요?"]
+
+    /// 시안 R18(하차 후 홈)·R34(도착 여정): "{정류장}에서, / 오늘은 조금 느긋하게."
+    /// 마친 여행 기록이 있거나 도착 여정이 있을 때 쓴다. 처음 쓰는 메인(R01)은 기본 문구다.
+    private var welcomeLines: [String] {
+        guard let name = model.snapshot?.currentStation?.name,
+              isArrived || (isIdle && !(model.snapshot?.records.items.isEmpty ?? true)) else { return Self.welcomeLines }
+        return ["\(name)에서,", "오늘은 조금 느긋하게."]
+    }
 
     private func greeting(at date: Date) -> String {
         switch Calendar.current.component(.hour, from: date) {
@@ -137,7 +148,10 @@ struct MainHomeView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Active journeys retain station semantics without repeating a large station panel.
-            if model.activeJourneyCard != nil {
+            if isArrived {
+                // 시안 R34에는 현재 정류장 묶음이 없다. 낭독·상태 확인용 식별자는 보이지 않는 요소로 남긴다.
+                hiddenStationSemantics
+            } else if model.activeJourneyCard != nil {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("현재 정류장").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
                         .accessibilityIdentifier("screen.main")
@@ -159,7 +173,8 @@ struct MainHomeView: View {
             }
             if model.mainMenuDestinations.contains(.preparation) {
                 if model.activeJourney != nil {
-                    startButton.buttonStyle(FMSecondaryButtonStyle())
+                    startButton.buttonStyle(FMNewJourneyButtonStyle())
+                        .padding(.top, isArrived ? -7 : 0)
                 } else {
                     startButton.buttonStyle(FMPrimaryButtonStyle())
                         .padding(.horizontal, isIdle ? -5 : 0)
@@ -171,6 +186,23 @@ struct MainHomeView: View {
                 Color.clear.preference(key: MainFooterHeight.self, value: geometry.size.height)
             }
         }
+    }
+
+    private var hiddenStationSemantics: some View {
+        ZStack {
+            Color.clear.frame(width: 1, height: 1)
+                .accessibilityElement().accessibilityLabel("현재 정류장").accessibilityIdentifier("screen.main")
+            if let station = model.snapshot?.currentStation {
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement().accessibilityLabel(station.name)
+                    .accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement().accessibilityLabel(model.currentStationBound ?? "")
+                    .accessibilityValue(model.currentStationBound ?? "").accessibilityIdentifier("main.bound")
+            }
+        }
+        .frame(width: 1, height: 1)
+        .padding(.bottom, -12)
     }
 
     private var startButton: some View {

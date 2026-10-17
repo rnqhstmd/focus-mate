@@ -33,3 +33,52 @@ struct NavigationPopBlocker: UIViewControllerRepresentable {
         }
     }
 }
+
+/// 내비 막대를 숨긴 화면에서도 화면 왼쪽 가장자리 스와이프 뒤로가기를 살린다(승차 태그, C단계 결정).
+/// 막대를 숨기면 UIKit 기본 위임이 가장자리 스와이프를 거절하므로, 보이는 동안만 위임을 바꾸고 떠날 때 되돌린다.
+/// `canBegin`이 false면(태그 인식·전환 중) 시작하지 않는다.
+struct NavigationEdgeSwipeEnabler: UIViewControllerRepresentable {
+    var canBegin: @MainActor () -> Bool = { true }
+
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) { controller.canBegin = canBegin }
+    static func dismantleUIViewController(_ controller: Controller, coordinator: ()) { controller.restore() }
+
+    final class Controller: UIViewController, UIGestureRecognizerDelegate {
+        var canBegin: @MainActor () -> Bool = { true }
+        private weak var navigation: UINavigationController?
+        private weak var savedDelegate: UIGestureRecognizerDelegate?
+        private var savedEnabled = true
+        private var installed = false
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard !installed, let navigation = navigationController,
+                  let recognizer = navigation.interactivePopGestureRecognizer else { return }
+            self.navigation = navigation
+            savedDelegate = recognizer.delegate
+            savedEnabled = recognizer.isEnabled
+            recognizer.delegate = self
+            recognizer.isEnabled = true
+            installed = true
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            restore()
+        }
+
+        func restore() {
+            guard installed else { return }
+            if let recognizer = navigation?.interactivePopGestureRecognizer {
+                recognizer.delegate = savedDelegate
+                recognizer.isEnabled = savedEnabled
+            }
+            installed = false
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            (navigation?.viewControllers.count ?? 0) > 1 && canBegin()
+        }
+    }
+}

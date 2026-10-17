@@ -293,3 +293,59 @@
 - R15: 흐린 지도가 시안보다 조금 밝다. 하단 지표·버튼 위치는 1~3pt 안.
 - R16: 창 세로 위치·높이 2~4pt 차이, 뒤 흐림 화면 동일.
 - R07·R11: 점·버스·덮개는 나오지만 시안의 현재 정류장 14pt 원은 없다. 지도 범위가 시안보다 넓다(구간 전체 맞춤).
+
+## D단계 — R34·R17·R30·R18 (+R27 스와이프 뒤로가기) (2026-10-17)
+
+근거: `diff/D.md`(R34·R17·R30·R18), `G-global.md`. R25(홈 메모 카드)와 R18의 "방금 마친 여행 기록" 카드는 새 기능이라 제외. 속도 우선 지시로 캡처 비교 2회.
+
+### 한 것
+
+**R34 도착 여정 메인** `MainHomeView`, `MainActiveJourneyView`, `ActiveJourneyCardContent`, `JourneyLifecycleText`
+- 카드 제목 "마지막 태그가 남았어요."(`arrivedTitle`), 버스 줄 오른쪽 "하차 태그 대기" 14 Bold 흰색(`awaitingAlightTag`, `ActiveJourneyCardContent.statusText`. 멈춘 여정은 같은 자리에 남은 시간 — R31 시안과 같은 구조). 낭독 라벨에 상태가 들어간다.
+- 하차 버튼 문구 "이전 여정 이어가기 →"(낭독 "이전 여정 이어가기", `alightButton`/`alightButtonLabel`). 식별자 `open.alighting`과 동작(기존 하차 흐름)은 그대로.
+- 카드(진행·도착 공용 컴포넌트): 반경 20, 테두리 없음, 안쪽 위 21·좌우 20·아래 20. 제목 21 Bold 흰색 → 할 일 17 Bold `#AAAAAA` → 버스 13 `#C1CBC3` → 노선 12 `#A6B1A8` → 51pt 흰 캡슐 버튼. 간격은 Noto 줄 높이를 뺀 17.5/14/5/25.
+- **"새 여정 시작" 노출(AC-21 시안 우선 변경)**: `mainMenuDestinations` 필터 제거, `confirmNewJourney`의 도착 여정 거부 조건 제거(도달 정류장 = 저장된 도착 정류장, 기록 없음). 누르면 기존 새 여정 확인 창. 버튼 스타일 `FMNewJourneyButtonStyle`(44, #0A0A0A 85%, 흰 21% 테두리, 13pt) — 진행 여정 공용, 카드와 간격 5.
+- 도착 여정일 때만: 좌우 여백 18, 버튼 바닥 화면 28pt 위, 현재 정류장 묶음 숨김(`screen.main`·`main.currentStation`·`main.bound`는 보이지 않는 요소로 유지), 지도 핀 없음, 제목 "{정류장}에서, / 오늘은 조금 느긋하게.".
+
+**R18 하차 후 메인**
+- 제목: 마친 기록이 있는 기본 메인이면 "{정류장}에서, / 오늘은 조금 느긋하게."(처음 메인 R01은 기본 문구). "방금 마친" 상태를 새로 두지 않고 기존 기록 유무로 정했다.
+- 기본·도착 메인의 맨 아래 버튼 바닥을 화면 바닥 28pt 위로(전에는 안전 영역 때문에 34pt). R01에도 적용된다.
+
+**R17·R30 요약** `AlightingSummaryView`, `AppModel+Alighting`, `SceneMapBackdrop`
+- 문구 "여행을 마쳤어요."(예시 제거). 글꼴: 하차 완료 12(체크 11 semibold, 간격 10, `#A6CCAF`), 제목 26 Bold 흰색, 부제 13 `#9FA6A0`, 태그 12, 할 일 21 Bold, 라벨 11 `#929B95`, 값 15 Bold, 경로 "2014번 · …" 11 `#8F9892`, 메모 머리 14/선택 11 `#858E87`. 두 항목은 첫 열 139pt 고정. 구분선 흰 15% 1pt. 간격은 시안 줄 위끝 기준에서 환산.
+- 패널: 화면 바닥 20pt 위(홈 표시줄 영역까지), 반경 26, 흰 20% 테두리, 안쪽 위 28·좌우 27, 버튼 좌우 26·아래 24, 43pt 버튼(compact). 최대 높이는 위끝 y=124까지. 내비 막대 배경 숨김.
+- 메모(펼친 모양만, R30): 칸 위 라벨 "기억하고 싶은 생각" 12 `#CCCCCC`(placeholder는 비움, 낭독 라벨 "메모" 유지), 칸 #151A16·반경 12·`#5C655F` 1pt·최소 91, 글자 13·줄 간격 20, 입력 중 바깥 3pt 금색 `#D7B378` 2pt, 글자 수 10 `#929B95`. 칸 빈 곳을 눌러도 입력 시작.
+- 지도: `AlightingSummary`에 `routeID`·`legStops`(하차 때 `RouteLegFinder`로 구간 계산, 카탈로그 없으면 nil)를 더하고, `SceneMapBackdrop(finished: true)`로 구간 선(흰 45% 2.5pt — 시안 27%는 항공 사진에서 안 보여 C단계 지나온 구간 값 사용), 지난 정류장 점 5pt `#777777`, 도착 10pt 고리, 도착 정류장의 초록 버스(`BusTopMarker` 20폭)를 그린다. 위쪽 30% 검정 막은 지웠다(덮개 중복).
+
+**R27 승차 화면 가장자리 스와이프 뒤로가기 복원** `NavigationPopBlocker.swift`, `CardTagScreen`
+- `NavigationEdgeSwipeEnabler`: 보이는 동안 `interactivePopGestureRecognizer`의 위임을 바꿔 막대 숨김 상태에서도 시작하게 하고, 떠날 때 원래 위임·활성 상태로 되돌린다. 승차 태그에만 붙이고, 태그 단계가 `ready`/`failed`일 때만 시작한다(인식·전환 중 금지). 뒤로 버튼은 계속 숨김, `test.boarding.back` 그대로. 하차는 기존 `NavigationPopBlocker` 유지.
+
+**테스트 기대값 수정(실행 안 함, 컴파일만 확인)**
+- `AlightingModelTests`: 요약 비교는 기록 값만(노선·구간 제외), `testAC21_도착_여정의_새여정_확정은_도착_정류장에서_여정을_지우고_기록은_남기지_않는다`(.done, 쓰기 1, 기록 0, 현재 정류장 서울숲 입구), `testAC21_도착_여정이어도_메뉴에_준비가_남는다`.
+- `RouteDataLifecycleModelTests.testConfirmNewJourneyAfterArrivalEndsJourneyRegardlessOfAvailability`(.done, 시도 1).
+- `ActiveJourneyCardContentTests.testAC24_…`: 제목 "마지막 태그가 남았어요.".
+- `AlightingFlowUITests.testAC21_도착_여정_카드에는_하차_버튼과_새_여정_시작이_있다`, `MainActiveJourneyCardUITests`(제목 문구, `testAC24_도착_여정은_하차_버튼과_새_여정_시작이_있다`), `NewJourneyUITests.testAC24_도착_여정에도_새_여정_시작이_있고_확인_창을_거친다`(확인 창 → 유지하기 → 쓰기 0).
+
+### 건너뛴 것(이유)
+- R18 "방금 마친 여행 기록" 카드·R25 홈 메모 카드: 새 기능.
+- R17 메모 접기/펼치기, R30 "메모 저장" 별도 버튼: 새 동작. 그래서 R17도 메모 칸이 펼쳐져 패널이 시안보다 약 140pt 높고(위끝 ≈170 vs 308), R30은 "메모 저장" 몫만큼 칸·글자 수가 시안보다 아래, 버튼과의 간격은 24.
+- R30 크기 조절 손잡이: 웹 textarea 흔적(D.md 권장대로 생략).
+- 시안 "현재 위치 · 가상 정류장": A단계처럼 "현재 위치"만.
+
+### 테스트 결과
+- build-for-testing 성공(앱·단위·UI 타깃, 오류 0). 2회차는 `xcodebuild test`로 빌드 포함.
+- PenParityCaptureTests R34·R17·R30·R18: 2회, 매번 **4개 실행, 실패 0**(각 약 65초). 캡처 `scratchpad/app/` 갱신.
+- 그 밖의 단위/UI 테스트는 실행하지 않았다(사용자 지시).
+
+### 마지막 회귀에서 확인(미실행)
+- 단위: `AlightingModelTests`(전체), `ActiveJourneyCardContentTests`, `RouteDataLifecycleModelTests`, `JourneyLifecycleModelTests`, `BoardingModelTests`(confirmNewJourney 경로)
+- UI: `AlightingFlowUITests`(전체 — 요약 메모·글자 수 포함), `MainActiveJourneyCardUITests`(전체), `NewJourneyUITests`(전체), `ActiveJourneyMainUITests`, `JourneyLifecycleSafetyUITests`, `WidgetEntryUITests`, `JourneyResumeUITests`, `BoardingFlowUITests`·`BoardingTagUITests`(가장자리 스와이프 위임 교체), `BoardingLargeTextUITests`, `LargeTextUITests`, `SimulatorLargeTextRecoveryTests`, `Phase1FlowTests`, `StorageRecoveryFlowTests`, `CardStorageFlowTests`, `RouteDataUITests`
+- `PenParityCaptureTests`: testR01_main(바닥 여백 변경), testR31_resumePrev·testR32_newConfirm·testR33_resumed(공용 카드·새 여정 버튼 변경), testR19_records
+
+### 남은 차이
+- 공통: 실제 항공 사진, Apple 로고·Legal.
+- R34: 1~2pt 안. 할 일·정류장은 데이터 차이.
+- R18: 기록 카드 없음(제외). 제목 첫 줄은 현재 정류장 전체 이름("서울숲 입구에서,").
+- R17: 메모 칸이 펼쳐진 채라 패널이 높고 지도 보이는 영역이 좁다. 지도 축척이 시안보다 넓어 구간이 작게 보이고, 선은 흰 45%(시안 27%).
+- R30: "메모 저장" 버튼·금색 초점 테두리(캡처는 키보드를 내려 초점이 없음) 외 1~3pt 안. 패널 위끝 ≈170(시안 124, 버튼 몫).
+- E단계 참고: 진행 여정 카드·"새 여정 시작" 버튼 스타일은 공용이라 R31~R33에도 이미 적용됐다. 멈춘 여정의 제목 문구·현재 정류장 묶음·좌우 여백·지도 핀·바닥 여백은 손대지 않았다(`MainHomeView.isArrived` 분기).

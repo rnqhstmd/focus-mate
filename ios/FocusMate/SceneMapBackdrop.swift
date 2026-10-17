@@ -14,6 +14,9 @@ struct SceneMapBackdrop: View {
     /// Time selection (R06): stop indices of the chosen leg. When set, the camera frames the whole leg and the
     /// map shows a thin route line, stop dots and a bus marker at the origin instead of the pin.
     var leg: [Int]? = nil
+    /// Trip summary (R17·R30): the leg is a finished trip. Thin white line (45% so it reads over aerial imagery; Pen 27%), grey passed stop dots and the bus
+    /// at the arrival stop. Requires `leg`.
+    var finished = false
     /// Shown when no stop is selected yet (first station search): Seoul Forest area.
     var fallbackCoordinate: CLLocationCoordinate2D? = nil
 
@@ -105,7 +108,7 @@ struct SceneMapBackdrop: View {
                             MapPolygon(coordinates: Self.scrimBox(around: coordinate))
                                 .foregroundStyle(FMDesign.mapScrim)
                         }
-                        if detailed {
+                        if detailed && !finished {
                             let full = fullRouteCoordinates
                             if full.count > 1 {
                                 MapPolyline(coordinates: full)
@@ -113,7 +116,10 @@ struct SceneMapBackdrop: View {
                             }
                         }
                         if route.count > 1 {
-                            if detailed {
+                            if detailed && finished {
+                                MapPolyline(coordinates: route)
+                                    .stroke(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                            } else if detailed {
                                 MapPolyline(coordinates: route)
                                     .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
                                 MapPolyline(coordinates: route)
@@ -123,7 +129,18 @@ struct SceneMapBackdrop: View {
                                     .stroke(routeColor, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                             }
                         }
-                        if detailed && showsMarks {
+                        if detailed && finished && showsMarks {
+                            ForEach(Array(route.enumerated().dropLast()), id: \.offset) { item in
+                                Annotation("", coordinate: item.element, anchor: .center) { passedDot }
+                                    .annotationTitles(.hidden)
+                            }
+                            Annotation("", coordinate: route[route.count - 1], anchor: .center) { arrivalDot }
+                                .annotationTitles(.hidden)
+                            Annotation("", coordinate: route[route.count - 1], anchor: .bottom) {
+                                BusTopMarker(color: busColor, width: 20).padding(.bottom, 6)
+                            }
+                            .annotationTitles(.hidden)
+                        } else if detailed && showsMarks {
                             ForEach(Array(route.enumerated().dropFirst()), id: \.offset) { item in
                                 Annotation("", coordinate: item.element, anchor: .center) {
                                     stopDot(isLast: item.offset == route.count - 1)
@@ -212,7 +229,21 @@ struct SceneMapBackdrop: View {
 
     /// R06·R07 bus marker at the origin: the green bus seen from above.
     private var busMarker: some View {
-        BusTopMarker(color: routeColor == FMDesign.routeBranch ? Color(hex: 0x2E9E4F) : routeColor, width: 24)
+        BusTopMarker(color: busColor, width: 24)
+    }
+
+    private var busColor: Color { routeColor == FMDesign.routeBranch ? Color(hex: 0x2E9E4F) : routeColor }
+
+    /// R17 passed stop: 5pt #777777 with a #0A0A0A rim.
+    private var passedDot: some View {
+        Circle().fill(FMDesign.stopPassed).frame(width: 5, height: 5)
+            .overlay { Circle().strokeBorder(FMDesign.stopStroke, lineWidth: 1) }
+    }
+
+    /// R17 arrival stop: 10pt #0A0A0A ring in the route colour.
+    private var arrivalDot: some View {
+        Circle().fill(FMDesign.stopStroke).frame(width: 10, height: 10)
+            .overlay { Circle().strokeBorder(routeColor, lineWidth: 2) }
     }
 }
 

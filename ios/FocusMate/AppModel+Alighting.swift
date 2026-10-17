@@ -4,6 +4,9 @@ import Foundation
 struct AlightingSummary: Equatable {
     let recordID, task, destinationName: String
     let minutes: Int
+    /// 요약 지도(시안 R17)에 그릴 노선과 구간 정류장 색인. 정류장 데이터가 없으면 nil이고 지도는 도착 정류장만 보인다.
+    var routeID: String? = nil
+    var legStops: [Int]? = nil
     var minutesText: String { ProfileTimeText.display(minutes: minutes) }
 }
 
@@ -37,8 +40,19 @@ extension AppModel: JourneyAlighting, ArrivalConfirming {
                                                                 timeZone: recordClock.timeZone()),
               saveHandlingFailure(result.snapshot) else { return false }
         let record = result.record
+        let journey = snapshot.journey.active
+        let leg = journey.flatMap { journey in
+            routeCatalog.flatMap { catalog in
+                catalog.routeIndex(id: journey.busID).flatMap { route in
+                    catalog.stopIndex(id: journey.originStopID).flatMap { origin in
+                        RouteLegFinder.leg(route: route, originStop: origin, minutes: journey.minutes, in: catalog)
+                    }
+                }
+            }
+        }
         alightingSummary = AlightingSummary(recordID: record.id, task: record.task,
-                                            destinationName: record.to, minutes: record.minutes)
+                                            destinationName: record.to, minutes: record.minutes,
+                                            routeID: leg == nil ? nil : journey?.busID, legStops: leg?.stopIndices)
         return true
     }
 
@@ -63,8 +77,7 @@ extension AppModel: JourneyAlighting, ArrivalConfirming {
         return .done
     }
 
-    /// 메인 메뉴. 도착 여정이 있으면 새 여정 진입(여행 준비)을 뺀다(AC-21).
-    var mainMenuDestinations: [Destination] {
-        activeJourney?.isArrived == true ? Destination.mainMenu.filter { $0 != .preparation } : Destination.mainMenu
-    }
+    /// 메인 메뉴. 시안 R34대로 도착 여정이 있어도 "새 여정 시작"(여행 준비)을 보인다(AC-21 시안 우선 변경).
+    /// 누르면 진행 여정과 같은 새 여정 확인 창을 거친다.
+    var mainMenuDestinations: [Destination] { Destination.mainMenu }
 }

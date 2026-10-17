@@ -50,7 +50,7 @@ final class ActiveJourneyCardContentTests: XCTestCase {
     func testAC24_도착_여정은_arrived_카드로_이어가기와_남은_시간이_없다() throws {
         let card = ActiveJourneyCardContent(journey: departed(elapsed: 1500))
         XCTAssertEqual(card.kind, .arrived)
-        XCTAssertEqual(card.title, "도착한 여정이 있어요")
+        XCTAssertEqual(card.title, "마지막 태그가 남았어요.")
         XCTAssertEqual(card.routeText, "독서 · 서울숲 입구까지")
         XCTAssertNil(card.remainingText)
         XCTAssertFalse(card.showsResume)

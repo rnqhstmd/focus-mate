@@ -178,7 +178,10 @@ final class AlightingModelTests: XCTestCase {
         XCTAssertNil(saved.journey.active)
         XCTAssertNil(model.activeJourney)
         let summary = AlightingSummary(recordID: "journey-1", task: "논문", destinationName: "서울숲 입구", minutes: 25)
-        XCTAssertEqual(model.alightingSummary, summary)
+        // 지도용 노선·구간(routeID·legStops)은 정류장 데이터 상태에 따르므로 기록 값만 비교한다.
+        XCTAssertEqual(model.alightingSummary.map {
+            AlightingSummary(recordID: $0.recordID, task: $0.task, destinationName: $0.destinationName, minutes: $0.minutes)
+        }, summary)
         XCTAssertEqual(model.alightingSummary?.minutesText, "25 min")
         XCTAssertEqual(record.id, "journey-1")
     }
@@ -362,26 +365,32 @@ final class AlightingModelTests: XCTestCase {
         XCTAssertEqual(model.path, [])
     }
 
-    // 깨짐: 도착 여정의 새 여정 확정이 쓰기를 하거나 .done이면 실패.
+    // 깨짐: 도착 여정의 새 여정 확정이 거부되거나, 기록을 남기거나, 도착 정류장이 아닌 곳에 서면 실패.
+    // AC-21 시안 우선 변경(R34): 도착 여정도 새 여정 확인으로 정리한다.
     @MainActor
-    func testAC21_도착_여정의_새여정_확정은_rejected이고_쓰기가_없다() throws {
+    func testAC21_도착_여정의_새여정_확정은_도착_정류장에서_여정을_지우고_기록은_남기지_않는다() throws {
         let probe = LifecycleProbe()
         let model = try makeModel(active: active(), probe: probe)
 
-        XCTAssertEqual(model.confirmNewJourney(), .rejected)
+        XCTAssertEqual(model.confirmNewJourney(), .done)
 
-        XCTAssertEqual(probe.attempts, 0)
-        XCTAssertNotNil(model.activeJourney)
+        XCTAssertEqual(probe.writes.count, 1)
+        let saved = try lastSaved(probe)
+        XCTAssertNil(saved.journey.active)
+        XCTAssertEqual(saved.records.items.count, 0)
+        XCTAssertEqual(saved.currentStation?.name, "서울숲 입구")
+        XCTAssertNil(model.activeJourney)
     }
 
-    // 깨짐: 도착 여정인데 메뉴에 준비가 남거나, 도착이 아닌데 준비가 빠지면 실패.
+    // 깨짐: 진행 여정 상태와 상관없이 메뉴에서 준비가 빠지면 실패.
+    // AC-21 시안 우선 변경(R34): 도착 여정이어도 메뉴에 준비("새 여정 시작")가 남는다.
     @MainActor
-    func testAC21_도착_여정이면_메뉴에서_준비가_빠진다() throws {
+    func testAC21_도착_여정이어도_메뉴에_준비가_남는다() throws {
         let arrived = try makeModel(active: active(), probe: LifecycleProbe())
         let moving = try makeModel(active: active(elapsed: 600), probe: LifecycleProbe())
         let none = try makeModel(active: nil, probe: LifecycleProbe())
 
-        XCTAssertEqual(arrived.mainMenuDestinations, [.records, .settings, .profile])
+        XCTAssertEqual(arrived.mainMenuDestinations, [.preparation, .records, .settings, .profile])
         XCTAssertEqual(moving.mainMenuDestinations, [.preparation, .records, .settings, .profile])
         XCTAssertEqual(none.mainMenuDestinations, [.preparation, .records, .settings, .profile])
     }

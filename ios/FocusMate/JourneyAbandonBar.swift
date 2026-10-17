@@ -29,7 +29,9 @@ struct JourneyAbandonBar: View {
                             .background {
                                 Circle().fill(Color(hex: 0xD13A42)).overlay(Circle().fill(Color.white.opacity(0.19)))
                             }
-                            .contentShape(Circle())
+                            // 누름 영역은 46pt 정사각형 전체. 원 모양만 받으면 원 밖 모서리 터치(실패 안내가 뜬 뒤 UI 테스트의
+                            // 자동 탭 지점 포함)가 버튼에 닿지 않아 다시 포기할 수 없었다.
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     // 정류장 데이터를 읽는 중에는 도달 정류장을 정할 수 없다(AC-43).

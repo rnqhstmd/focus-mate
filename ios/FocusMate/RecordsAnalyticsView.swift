@@ -155,6 +155,8 @@ struct RecordsAnalyticsView: View {
                         .padding(.top, 8)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("\(tag.name), \(tag.minutes)분 · \(tag.count)회 · \(Int((tag.share * 100).rounded()))%")
+                        // 표시 전용 행: 직접 그린 라벨로 바꿔도 낭독 종류는 정적 글자로 유지(누를 수 있는 태그 버튼과 구분).
+                        .accessibilityAddTraits(.isStaticText)
                         .accessibilityIdentifier(tag.id == .remainder ? "analytics.tag.remainder" : "analytics.composition.\(tag.name)")
                     }
                 }

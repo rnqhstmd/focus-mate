@@ -101,7 +101,8 @@ final class AlightingFlowUITests: XCTestCase {
     }
 
     // 깨짐: 확인 뒤 하차 태그로 가지 않거나, 카드에 초점이 없거나, 뒤로가기가 보이거나,
-    // 카드 탭만으로 저장·하차 처리가 되거나, 터치 안내가 없거나, LCD에 카드 번호·옛 문구가 나온다.
+    // 카드 탭만으로 저장·하차 처리가 되거나, 터치 안내가 없거나, LCD 상태 값이 카드 이름이 아니다.
+    // 시안 R29: 인식 뒤 LCD에 "하차 완료"가 보이는 것은 시안 표시다(옛 "하차 완료 텍스트 금지" 기대 삭제).
     func testAC6_7_8_9_21_하차_태그는_카드에_초점이_있고_뒤로가_없으며_탭만으로는_완료되지_않고_활성화하면_카드_이름이_보인다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "alightPaused1499")
         resumeFromMain(h)
@@ -129,7 +130,6 @@ final class AlightingFlowUITests: XCTestCase {
         activateCard(h)
 
         XCTAssertTrue(h.waitForValue("alighting.lcdStatus", "집중동행카드"), h.value("alighting.lcdStatus") ?? "nil")
-        XCTAssertFalse(h.app.staticTexts["하차 완료"].exists)
         XCTAssertFalse(h.element("alighting.lcdStatus").label.contains("하차 완료"))
     }
 

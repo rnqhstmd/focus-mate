@@ -493,3 +493,31 @@
 - R39: 1~2pt 안. 직접 고르기 견본 바탕이 시안보다 살짝 밝다.
 - R40: 사진·배치·퍼센트는 데이터 차이. 시안에 없는 슬라이더가 보인다(유지 결정). 손잡이 위치는 사진 배치에 따름.
 - R42: 카드 글자·알약 위치가 시안과 1pt 안으로 맞았다(보정 효과).
+
+## 전체 회귀
+
+전체 테스트 1회(`reports/full-test.log`, `.build/full.xcresult`)에서 실패 12건. 분류: (a) 바뀐 규칙·화면 때문에 낡은 기대값, (b) 시안 작업으로 생긴 앱 회귀, (c) 원래 불안정하던 테스트.
+
+| # | 테스트 | 분류 | 원인 | 조치 |
+|---|---|---|---|---|
+| 1 | `JourneyLifecycleModelTests.testAC21_도착_여정의_새여정_확정은_rejected…` | (a) | AC-21 변경으로 도착 여정도 새 여정 확정 가능(.done) | 기대값을 뒤집고 이름을 `testAC21_도착_여정의_새여정_확정은_done이고_한번_저장하고_시간선택으로_간다`로 바꿈(쓰기 1, 저장 여정 nil, 경로 [.time]) |
+| 2 | `JourneyMapAccessibilityUITests.testAC32_…` | (a) | 시안 R15: 일시정지 중 따라가기·테마 버튼이 화면에서 빠짐. 없는 요소의 `isEnabled`를 읽다가 실패 | AC34와 같은 방식으로 "없거나 비활성" 확인 |
+| 3 | `JourneyMapAccessibilityUITests.testAC38_…` | (a) | 저장 실패로 일시정지되면 따라가기·테마가 사라지고 "현재 정류장으로"가 생김 | 겹침 검사 대상을 resume·`journey.recenter`·지표 3개로 바꿈 |
+| 4 | `RecordsAnalyticsUITests.testAC3_…` | (b) | 범례 행을 `.combine`에서 `.ignore`+직접 라벨로 바꾸면서 요소 종류가 staticText에서 other로 바뀜 | `RecordsAnalyticsView` 범례 행에 `.accessibilityAddTraits(.isStaticText)`를 붙임 |
+| 5 | `CardIssuanceFlowTests.testAC16_…번호가_노출되지_않는다` | (a) | BR-4 변경으로 발급 카드에 "FM · 0000 0000"이 보임(`FM ·` 접두 텍스트 1건) | `testAC16_완료_화면의_카드에는_시안_형식_번호만_보이고_원본_ID는_노출되지_않는다`로 바꿈. 8자리 연속 숫자는 0건, `FM ·` 텍스트는 시안 형식만 허용 |
+| 6 | `BoardingTagUITests.testU4_AC5_…번호_비노출` | (a) | 시안 R27의 태그 영역 문구 "카드를 여기에"를 옛 문구로 보고 금지함 | 이 단언을 지우고 이름을 `…원본_카드ID_비노출`로 바꿈("FM-" 원본 ID 금지는 유지) |
+| 7 | `JourneyAbandonUITests.testAC20_실패_뒤_재시도하면_포기가_완료된다` | (b) | 포기 버튼(R16 직접 그린 X)의 누름 모양이 `Circle()`. 실패 안내가 뜬 뒤 XCUITest가 가운데 대신 (344.6, 66.6) 모서리를 눌렀고, 원 밖이라 버튼에 닿지 않음(합성 이벤트 좌표로 확인. 좌표로 가운데를 누르면 열림) | `JourneyAbandonBar` X 버튼의 `contentShape`를 46pt 정사각형으로 바꿈(모양은 그대로) |
+| 8 | `CardCustomizationFlowTests.test12_XXXL…` | (c) | 본문 ScrollView 프레임이 고정 저장 버튼(safeAreaInset) 밑까지 이어짐. XXXL에서 저장 버튼이 두 줄(137pt)로 커지면 helper가 끄는 시작점(본문 80%)이 저장 영역에 떨어져 스크롤이 0이 됨(12회 모두 프레임 불변을 출력해 확인). 사진 조작 단계에서는 60% 끌기가 좁은 창을 지나쳐 위아래로만 오감 | 테스트 helper 수정: `scrollBody`는 저장 버튼 위로 보이는 본문 안에서만 끌고, `reach`는 방향이 뒤집히면 끄는 거리를 절반으로 줄임(최소 15%) |
+| 9 | `ActiveJourneyMainUITests.testNewJourneySaveFailure…` | (b) | 메인 하단 여백 `28 - safeAreaInsets.bottom`. 저장 실패 안내(RootView 아래 inset)가 있으면 inset에 그 높이가 더해져 큰 음수가 되고, "새 여정 시작"이 안내 뒤로 숨어 누를 수 없음 | `MainHomeView`: 저장 실패 안내가 있으면 하단 여백 16(평소에는 시안 값 그대로) |
+| 10 | `AlightingFlowUITests.testAC20_요약_저장_실패…` | (b) | 요약 패널 최대 높이에 `safeAreaInsets.bottom`을 더하고 바닥 container 안전 영역을 무시함. 키보드가 뜨면 패널과 "마치기" 버튼이 키보드 뒤(y 679, 키보드 위끝 539)에 남아, 누르면 키보드 글자가 입력됨("집중 잘됨ㅍ") | `AlightingSummaryView`: 메모 입력 중(`memoFocused`)에는 바닥 확장을 하지 않음(`bottomExtension = 0`, `ignoresSafeArea([])`) |
+| 11 | `AlightingFlowUITests.testAC5_10_15_17_…` | (b) | 10과 같은 원인 | 10과 같은 수정 |
+| 12 | `AlightingFlowUITests.testAC6_7_8_9_21_…` | (a) | 시안 R29: 인식 뒤 LCD에 "하차 완료"가 보임. 테스트는 이 문구가 없어야 한다고 기대함 | `staticTexts["하차 완료"]` 부재 단언을 지움(LCD 값=카드 이름, lcdStatus 라벨 확인은 유지) |
+
+### 재실행 결과(실패 메서드만, `-only-testing` 메서드 단위, FM-W19, 병렬 끔)
+1. `reports/rerun1.log`(`.build/rerun1.xcresult`): 실패 12건 + 공유 코드 확인 3건(`AlightingFlowUITests.testAC18` 메모 200자, `StationSaveFailureUITests.testReadySeedWithWriteFailureShowsStorageSaveFailureOnMain`, `PenParityCaptureTests.testR30_summaryMemo`) = 15개 → **13 통과 / 2 실패**(포기 재시도 #7, XXXL #8). 312초(빌드 포함). R30 캡처는 수정 전과 같음.
+2. #7 원인 진단 단독 실행 4회(각 약 60~90초, 디버그 출력은 모두 제거함).
+3. `reports/rerun2.log`: #7과 포기 버튼을 쓰는 `testAC15_계속_여행_뒤_포커스…`·`testAC21_포기_버튼_연타…`, #8과 같은 helper를 쓰는 `test04` → **#7 통과**, AC15·AC21·test04 통과. #8은 사진 단계 `cardCustomization.x`에서 실패(1차 helper 수정만으로는 부족). 206초.
+4. 진단 실행 1회(#8, 프레임 출력) 뒤 helper를 2차로 고침.
+5. `reports/rerun3.log`: #8 + 같은 helper를 쓰는 `test05` → **2/2 통과**. 447초(test05 자체가 약 330초, 전체 회귀 때와 같음).
+
+최종: **실패 12건 모두 통과.** 함께 돌린 확인용 테스트 7건(AC18, StationSaveFailure, R30, 포기 AC15·AC21, CardCustomization test04·test05)도 통과. 커밋하지 않았다.

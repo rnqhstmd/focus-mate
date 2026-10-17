@@ -41,7 +41,9 @@ struct MainHomeView: View {
                             }
                             .padding(.horizontal, isIdle ? 24 : 18)
                             // 시안 R01·R18·R31·R34: 맨 아래 버튼 바닥이 화면 바닥 28pt 위(홈 표시줄 안전 영역 34보다 아래까지 내려간다).
-                            .padding(.bottom, 28 - geometry.safeAreaInsets.bottom)
+                            // 저장 실패 안내(RootView의 아래 inset)가 있으면 안전 영역에 그 높이가 더해지므로 음수 여백을 쓰지 않는다 —
+                            // 쓰면 "새 여정 시작"이 안내 뒤로 숨는다.
+                            .padding(.bottom, model.saveFailure == nil ? 28 - geometry.safeAreaInsets.bottom : 16)
                             .frame(minHeight: scrollGeometry.size.height, alignment: .topLeading)
                         }
                         .scrollIndicators(.hidden)

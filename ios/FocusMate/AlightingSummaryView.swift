@@ -29,7 +29,9 @@ struct AlightingSummaryView: View {
     /// 간격 값은 시안 줄 위끝 간격에서 Noto 줄 높이(1.45em)의 위아래 여유를 뺀 것이다.
     private func content(_ summary: AlightingSummary) -> some View {
         GeometryReader { proxy in
-            let maxPanel = max(240, proxy.size.height + proxy.safeAreaInsets.bottom - 20
+            // 메모 입력 중(키보드)에는 바닥 안전 영역을 넘어 내리지 않는다 — 넘기면 패널과 '마치기' 버튼이 키보드 뒤로 숨는다.
+            let bottomExtension = memoFocused ? 0 : proxy.safeAreaInsets.bottom
+            let maxPanel = max(240, proxy.size.height + bottomExtension - 20
                                - max(0, 124 - proxy.safeAreaInsets.top))
             ZStack(alignment: .bottom) {
                 SceneMapBackdrop(model: model, bottomInset: sheetHeight + 24, routeID: summary.routeID,
@@ -116,7 +118,7 @@ struct AlightingSummaryView: View {
                 })
                 .padding(.horizontal, 12).padding(.bottom, 20)
             }
-            .ignoresSafeArea(.container, edges: .bottom)
+            .ignoresSafeArea(memoFocused ? [] : .container, edges: .bottom)
             .onPreferenceChange(SummarySheetHeightKey.self) { sheetHeight = $0 }
             .onPreferenceChange(SummaryBodyHeightKey.self) { bodyHeight = $0 }
             .onPreferenceChange(SummaryActionHeightKey.self) { actionHeight = $0 }

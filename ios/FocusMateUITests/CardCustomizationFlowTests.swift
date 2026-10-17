@@ -509,24 +509,40 @@ final class CardCustomizationFlowTests: XCTestCase {
             }
             return target.isHittable && viewport.contains(target.frame)
         }
+        // 방향이 뒤집히면(지나침) 끄는 거리를 절반으로 줄인다 — 큰 글자에서 조작이 커 보이는 창이 좁으면 같은 거리로는 오가기만 한다.
+        var span: CGFloat = 0.6
+        var lastUp: Bool?
         for _ in 0..<12 {
             if reachable() { break }
             let lowerBound = visibleBody().minY
             let upperBound = visibleBody().maxY
+            let up: Bool
             if target.frame.maxY > upperBound {
-                try scrollBody(body, contentUp: true)
+                up = true
             } else if target.frame.minY < lowerBound {
-                try scrollBody(body, contentUp: false)
+                up = false
             } else {
-                try scrollBody(body, contentUp: target.frame.midY >= body.frame.midY)
+                up = target.frame.midY >= body.frame.midY
             }
+            if let lastUp, lastUp != up { span = max(0.15, span / 2) }
+            lastUp = up
+            try scrollBody(body, contentUp: up, span: span)
         }
         XCTAssertTrue(reachable(), "본문/조작 도달 실패: " + target.identifier)
     }
-    private func scrollBody(_ body: XCUIElement, contentUp: Bool) throws {
+    private func scrollBody(_ body: XCUIElement, contentUp: Bool, span: CGFloat = 0.6) throws {
         XCTAssertTrue(body.waitForExistence(timeout: timeout))
-        let start = body.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: contentUp ? 0.8 : 0.2))
-        let end = body.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: contentUp ? 0.2 : 0.8))
+        // 본문 ScrollView 프레임은 고정 저장 버튼(safeAreaInset) 아래까지 이어진다. 큰 글자에서 저장 영역이 커지면
+        // 본문 프레임 기준 80% 지점이 저장 영역 위에 떨어져 끌어도 스크롤되지 않으므로, 저장 위 보이는 본문 안에서만 끈다.
+        let save = XCUIApplication().descendants(matching: .any)[helperID("save")]
+        let bottom = save.exists ? min(body.frame.maxY, save.frame.minY) : body.frame.maxY
+        let height = max(1, bottom - body.frame.minY)
+        func point(_ fraction: CGFloat) -> XCUICoordinate {
+            body.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: body.frame.width * 0.02, dy: height * fraction))
+        }
+        let start = point(contentUp ? 0.5 + span / 2 : 0.5 - span / 2)
+        let end = point(contentUp ? 0.5 - span / 2 : 0.5 + span / 2)
         start.press(forDuration: 0.01, thenDragTo: end)
     }
     private func confirmation(_ h: FocusMateUIHarness) throws {

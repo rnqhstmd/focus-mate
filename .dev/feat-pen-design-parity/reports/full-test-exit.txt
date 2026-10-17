@@ -1,0 +1,6 @@
+exit=65 sec=2284
+Test case 'PreparationFlowUITests.testRelaunchAfterSavingStationOpensMainAndNeverShowsSearchAgain()' passed on 'Clone 1 of FM-W19 - FocusMateUITests-Runner (70687)' (24.736 seconds)
+Test case 'AlightingFlowUITests.testAC79_하차하면_현재_정류장은_저장된_도착_정류장이다()' passed on 'Clone 3 of FM-W19 - FocusMateUITests-Runner (71652)' (19.285 seconds)
+Test case 'PreparationFlowUITests.testReturningFromPreparationKeepsSelectionAndItSurvivesLeavingToMainInSameRun()' passed on 'Clone 1 of FM-W19 - FocusMateUITests-Runner (70687)' (32.472 seconds)
+Test case 'PreparationFlowUITests.testSelectionIsNotPersistedAcrossRelaunchAndStoredBytesStayUnchanged()' passed on 'Clone 1 of FM-W19 - FocusMateUITests-Runner (70687)' (35.261 seconds)
+Test case 'PreparationFlowUITests.testTappingDisabledConfirmDoesNotOpenBoardingPass()' passed on 'Clone 1 of FM-W19 - FocusMateUITests-Runner (70687)' (26.392 seconds)

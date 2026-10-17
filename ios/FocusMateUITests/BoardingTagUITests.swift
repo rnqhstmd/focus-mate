@@ -79,8 +79,9 @@ final class BoardingTagUITests: XCTestCase {
 
     // MARK: - AC-5
 
-    // 깨짐: LCD 상표/시각/상태, 낭독 라벨이 빠지거나 카드 번호·옛 안내 문구가 보인다.
-    func testU4_AC5_승차_태그_화면_초기_요소와_번호_비노출() throws {
+    // 깨짐: LCD 상표/시각/상태, 낭독 라벨이 빠지거나 원본 카드 ID·옛 안내 문구가 보인다.
+    // 시안 우선 변경: 카드 번호는 "FM · 0000 0000"으로 보일 수 있고(BR-4), 태그 영역 문구 "카드를 여기에"는 시안 R27 표시다.
+    func testU4_AC5_승차_태그_화면_초기_요소와_원본_카드ID_비노출() throws {
         let h = launchBoarding()
         waitForBoarding(h)
 
@@ -100,7 +101,6 @@ final class BoardingTagUITests: XCTestCase {
 
         let texts = h.app.staticTexts.allElementsBoundByIndex.map(\.label)
         XCTAssertEqual(texts.filter { $0.contains("FM-") }.count, 0, texts.joined(separator: ","))
-        XCTAssertFalse(h.app.staticTexts["카드를 여기에"].exists)
         XCTAssertFalse(h.app.staticTexts["눌러서 태그하기"].exists)
     }
 

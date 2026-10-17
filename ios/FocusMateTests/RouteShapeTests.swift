@@ -94,8 +94,6 @@ final class RouteShapeTests: XCTestCase {
         XCTAssertEqual(start.nextName, journey.stops[1].name)
         let middle = JourneyStopProgress(journey: journey, nextStopIndex: 3)
         XCTAssertEqual([middle.passed, middle.total], [2, 5])
-        XCTAssertEqual(JourneyMapDisplay.nextStopText(middle.nextName), "다음 · \(journey.stops[3].name)")
-        XCTAssertEqual(JourneyMapDisplay.progressCountText(passed: 2, total: 5), "2/5 정류장")
 
         // 컨트롤러: 600초(구간 300초 × 2) = 정류장 2에 도달, 다음은 3.
         let map = JourneyMapController(journey: journey, status: .running, elapsedSeconds: 600, reduceMotion: true)

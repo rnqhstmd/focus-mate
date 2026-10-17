@@ -49,8 +49,7 @@ struct JourneyMapView: View {
                 .allowsHitTesting(false)
                 .accessibilityElement()
                 .accessibilityLabel(JourneyMapDisplay.mapLabel)
-                .accessibilityValue(JourneyMapDisplay.mapValue(next: map.nextStop.name,
-                                                               destination: map.destinationStop.name))
+                .accessibilityValue(JourneyMapDisplay.mapValue(destination: map.destinationStop.name))
                 .accessibilityIdentifier("journey.map")
         }
     }
@@ -89,19 +88,6 @@ struct JourneyMapView: View {
                     Circle().fill(FMDesign.stopStroke).frame(width: 16, height: 16)
                         .overlay(Circle().strokeBorder(routeColor, lineWidth: 2.5))
                         .overlay(Circle().fill(.white).frame(width: 6, height: 6))
-                }
-                .annotationTitles(.hidden)
-            }
-            // 다음 정류장 이름표: 점 바로 아래 작은 검은 라벨.
-            if showsMarks && map.state.showsStops && !map.bus.isArrived {
-                Annotation("", coordinate: map.nextStop.point.coordinate, anchor: .top) {
-                    Text(map.nextStop.name)
-                        .font(FontCatalog.fixed(11, weight: .semibold)).foregroundStyle(.white)
-                        .lineLimit(1).fixedSize()
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 4))
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(FMDesign.ctaStroke, lineWidth: 1))
-                        .padding(.top, 11)
                 }
                 .annotationTitles(.hidden)
             }

@@ -73,8 +73,6 @@ struct JourneyTimerView: View {
                             .foregroundStyle(Color(hex: 0xBBBBBB))
                         recenterButton(map).padding(.top, 49).padding(.horizontal, 8)
                         Color.clear.frame(height: 9)
-                    } else if controller.status == .running {
-                        progressChip(map).padding(.horizontal, 16)
                     }
                     bottomInfo(map)
                 }
@@ -197,28 +195,6 @@ struct JourneyTimerView: View {
         .accessibilityLabel(label)
         .accessibilityValue(value ?? "")
         .accessibilityIdentifier(id)
-    }
-
-    /// 지표 위 작은 진행 칩: "다음 · 정류장명"과 "지난 수/전체 정류장". 시안 칩 스타일(검정 75%·#444444 테두리·Noto).
-    /// 큰 글자에서도 한 줄로 두고 글자 크기를 제한해 지표를 밀어내지 않게 한다.
-    private func progressChip(_ map: JourneyMapController) -> some View {
-        let progress = map.stopProgress
-        return HStack(spacing: 8) {
-            Text(JourneyMapDisplay.nextStopText(progress.nextName))
-                .font(FontCatalog.text(12, weight: .semibold, relativeTo: .caption)).foregroundStyle(.white)
-                .lineLimit(1).truncationMode(.tail)
-            Text(JourneyMapDisplay.progressCountText(passed: progress.passed, total: progress.total))
-                .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.hintText)
-                .lineLimit(1).fixedSize()
-        }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(Color.black.opacity(0.75), in: Capsule())
-        .overlay(Capsule().strokeBorder(FMDesign.ctaStroke, lineWidth: 1))
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(JourneyMapDisplay.progressLabel)
-        .accessibilityValue(JourneyMapDisplay.progressAccessibilityValue(progress))
-        .accessibilityIdentifier("journey.progress")
     }
 
     private func bottomInfo(_ map: JourneyMapController) -> some View {

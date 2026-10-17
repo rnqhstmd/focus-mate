@@ -70,7 +70,8 @@ final class PreparationFlowUITests: XCTestCase {
         }
         XCTAssertTrue(element("screen.preparation", in: app).waitForExistence(timeout: timeout))
 
-        app.navigationBars.buttons.firstMatch.tap()
+        // 준비(R07)는 시스템 내비 막대 대신 시트의 × 닫기로 돌아간다.
+        element("preparation.close", in: app).tap()
 
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
     }
@@ -85,7 +86,8 @@ final class PreparationFlowUITests: XCTestCase {
         element("time.proceed", in: app).tap()
         XCTAssertTrue(element("screen.preparation", in: app).waitForExistence(timeout: timeout))
 
-        app.navigationBars.buttons.firstMatch.tap()
+        // 준비(R07)는 시스템 내비 막대 대신 시트의 × 닫기로 돌아간다.
+        element("preparation.close", in: app).tap()
 
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")

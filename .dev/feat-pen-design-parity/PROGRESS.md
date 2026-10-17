@@ -152,3 +152,63 @@
 - R04·R05·R26: 면책 문구 몫(약 30pt)만큼 패널 윗변이 낮다. 패널 안 요소 크기·간격은 1~2pt 안이다. 출발 핀 위치는 지도 중심에 따라 정해져 시안(y≈131)보다 조금 아래에 온다.
 - R06: "노선 한 바퀴 보기"가 없다. 카메라가 위에서 내려다보는 시점(.rect)이라 시안의 비스듬한 시점과 다르다. 버스 표식은 시안의 버스 그림 대신 노선색 둥근 사각형이다.
 - 노선 종류 색(마을 `#53B332` 등)은 0단계에서 정한 제안값 그대로다.
+
+## B단계 — R07·R08·R09·R10·R11 (2026-10-17)
+
+근거: `diff/B.md`, `diff/G-global.md`. R21(지도 실패 배너)은 새 기능이라 제외. 캡처 비교 2회(시안 좌표와 캡처 pt 환산 대조).
+
+### 한 것
+
+**R07/R08 준비** `PreparationView`
+- 시스템 뒤로 버튼·내비 막대를 숨기고, 제목 줄 오른쪽에 × 닫기(`preparation.close`, 22pt 글리프·44pt 터치, `model.goBack()` → 시간 화면)를 뒀다. 상단 노선 캡슐("지선 2014 · 성수동")을 지웠다.
+- 시트: 지도 위에 떠 있는 고정 높이 443 패널(좌우 12, 화면 바닥에서 20, 반경 28, `#0A0A0A`, 흰 20% 테두리). 태그 선택 여부와 무관하게 높이가 같다. 안쪽 여백 위 24·좌우 17·아래 28, 간격 16. 큰 글자에서는 전체 높이 + 스크롤(기존 수준 유지).
+- 태그 칩: 한 줄 가로 스크롤(`LazyHGrid` 2행 → `HStack`). 칩 높이 40, 아이콘 16(태그색)·간격 6·이름 14 SemiBold 흰색, 채움 13%/선택 33%, 테두리 53%/선택 100%. + 버튼 40 원, `#1A1A1A`, 흰 33% 테두리, 18pt.
+- 할 일 입력칸: 높이 48, `#141414`, 반경 14, 16 Regular. 테두리는 항상 태그색(편집 중 1.5pt).
+- 소리 칩: 높이 52 캡슐 `#1A1A1A`, 흰 20% 테두리, 아이콘 18 + 14 Regular. 소리 없음 아이콘은 시안의 스피커+×(lucide volume-x)를 `VolumeXShape`로 직접 그렸다.
+- 승차권 보기: 높이 52, 16 SemiBold, 테두리 없음. 비활성 `#252525`/`#888888`, 활성 흰 바탕/`#0A0A0A`.
+- **소리 기본값을 "버스" → "소리 없음"으로 바꿨다**(`PreparationDraft.sound = .none`).
+- 지도: 소리 시트를 열어도 지도를 유지한다(R10). 태그 시트는 순검정 배경(R09). 고른 구간 `leg`를 `SceneMapBackdrop`에 넘긴다(`AppModel.legStopIndices(for:)` 추가).
+
+**R09 태그 만들기 / R10 소리 선택**
+- 시스템 `.sheet` 두 개를 준비 화면 위에 뜨는 커스텀 시트(`FloatingSheet`: 좌우 12, 바닥 20, 반경 28, 높이 403, 모달 낭독 + VoiceOver escape 닫기)로 바꿨다. 열려 있는 동안 준비 시트는 투명·터치 불가·낭독 숨김이다(상태 유지용으로 계층에는 남김). 닫으면 기존처럼 + 버튼/소리 칩으로 접근성 포커스를 돌린다. 시스템 시트의 아래로 끌어 닫기는 없어졌다(×로 닫음).
+- R09: 순검정 카드, 흰 19% 테두리. 제목 20 Bold, × 23 얇게. 미리보기 57 높이·반경 16·아이콘+"새 태그" 19 Bold 견본색. 라벨 11 `#AAAAAA`. 이름칸 높이 47·`#111111`·반경 20·견본색 2pt 테두리·자리글 15 `#757575`. 아이콘/색 칸 43 높이·반경 12, 선택 흰 9%+흰 테두리, 미선택 `#111111`+`#444444`. 색 견본은 시안 저채도 값(`swatch`: `#D7B378 #82AAF2 #B49CE1 #91B9AB #D596A6`)으로 분리했다(칩 강조색 `tint`는 그대로). "태그 저장"은 `FMPrimaryButtonStyle(.compact)`.
+- R10: 여백 위 22·좌우 17·아래 28, 간격 14. 제목 20 Bold. 셀 84 고정 높이·반경 16, 미선택 `#141414`+흰 13%, 선택 `#262626`+흰 2pt, 글자 13 Regular 흰색, 아이콘 22 light. 미리 듣기 44 높이·15 Regular·흰 20% 테두리, 소리 저장 52 높이·15 SemiBold `#0A0A0A`.
+
+**R11 승차권** `BoardingPassView`, `BoardingPassContent`
+- 노치 티켓 카드·`BoardMap` 이미지·상단 캡슐·시트 밖 버튼을 지우고, 지도(`SceneMapBackdrop`, 출발 정류장·노선·구간) 위 떠 있는 시트로 바꿨다(좌우 12, 바닥 20, 반경 28, 흰 20% 테두리). 시스템 뒤로 버튼을 숨기고 시트 안 "‹ 승차권" 머리줄(`board.back`)을 뒀다.
+- **규칙 변경(시안 우선)**: 노선 배지(노선 종류 색, 버스 아이콘 + 종류 10pt `#B5B5BA` + 번호 20 Bold, `board.bus` 낭독 "지선 2014")와 여행 시간("60 min", `board.minutes`)을 화면에 표시한다.
+- 출발/도착 두 열 가운데 정렬(라벨 10 `#B5B5BA`, 값 16 Bold). 구분선 2개(흰 9%/12%). 통계 3열 "여행 시간 / 정류장 / 이동 거리"(값 13 Bold). 거리 표기는 승차권에서만 "6.6 km"(공백). 라벨 "거리" → "이동 거리".
+- "탑승 지금"·"날짜" 행과 `boardingText`·`dateText`·`stationFontSize`(글자 수별 크기 규칙)를 지웠다. `BoardingPassContent.init(details:)`로 단순화(now·timeZone 인자 제거), `busKind/busNumber/minutesText/taskLine` 추가.
+- 태그·할 일은 한 줄 "독서 · 책 한 챕터 읽기" 15 Regular 왼쪽 정렬. `board.tag`/`board.task`는 값만 담은 숨은 요소로 유지.
+- "버스에 탑승하기 →"를 시트 안 맨 아래로 옮겼다(좌우 16, compact 흰 알약).
+- `BoardMap`·`TicketDots` 이미지 자산은 이제 쓰지 않는다(삭제는 하지 않음).
+
+**테스트 기대값 수정(실행 안 함)**
+- `BoardingPassContentTests`: init 변경, 날짜·승차·글꼴 크기 테스트 6개 삭제, 거리 "6.6 km", `taskLine`, 새 테스트 `testAC3_화면에_노선_배지와_여행_시간을_표시한다`. 옛 `testAC3_화면_필드에는_버스_번호와_여행_시간이_없다` 삭제.
+- `PreparationDraftTests`(초기값 테스트) `.none`, `PreparationModelTests.test유효_W02로_처음_진입한_준비는_초기값이고_확정할_수_없다` 2곳 `.none`.
+- `PreparationEditorUITests`: AC1 이름 `testAC1_InitialHubHasNoTagOrTaskAndNoSound`·"소리 없음", AC4(`board.back`, sound "none"), AC10(`preparation.close`, "소리 없음"), AC14(기본 선택 none, 취소 후 "소리 없음"), AC17(미리 듣기 전에 버스 선택), AC23("소리 없음").
+- `BoardingFlowUITests`: 승차/날짜 검사 삭제, 번호 노출 금지 검사 → `board.bus` "지선 2014"·`board.minutes` "60 min" 확인, 승차권→준비 `board.back`, 준비→시간 `preparation.close`.
+- `PreparationFlowUITests`: 준비→시간 뒤로 2곳을 `preparation.close`로.
+
+### 건너뛴 것(이유)
+- R21 지도 실패 배너: 새 기능(BRIEF 범위).
+- 태그·소리 아이콘의 lucide 선형 모양(학사모·가방·연필·버스 정면·지하철 정면·나무 2그루): 자산 추가가 필요해 SF Symbols 가는 굵기로 근사했다. 소리 없음(스피커+×)만 직접 그렸다.
+- 시트 끌어 닫기 제스처: 커스텀 시트로 바꾸며 뺐다(× 버튼·VoiceOver escape로 닫음).
+
+### 테스트 결과
+- build-for-testing 성공(앱·단위·UI 타깃 컴파일, 오류 0), 마지막 수정 뒤 1회 더 확인.
+- PenParityCaptureTests R07·R08·R09·R10·R11: 2회 실행, 매번 **5개 실행, 실패 0**(각 약 2분 20초). 그 밖에 지도 원인 확인용 R07 단독 2회. 캡처는 `scratchpad/app/` 갱신.
+- 그 밖의 단위/UI 테스트는 실행하지 않았다(사용자 지시).
+
+### 마지막 회귀에서 확인(미실행)
+- 단위: `BoardingPassContentTests`(전체), `PreparationDraftTests`(초기값 테스트), `PreparationModelTests.test유효_W02로_처음_진입한_준비는_초기값이고_확정할_수_없다`
+- UI: `PreparationEditorUITests`(전체 — 시트 방식 교체로 AC5·AC9·AC24·AC20·AC19 포함), `BoardingFlowUITests.testConfirmOpensBoardingPassWithValuesBoardsToTagScreenAndBackWritesNothing`, `BoardingFlowUITests.testU3_인식_후_뒤로가면_전환이_취소되고_수정해_재인식하면_교체되며_메인에_안내가_뜬다`, `PreparationFlowUITests.testRapidDoubleTapOnProceedPushesPreparationOnlyOnce`, `PreparationFlowUITests.testReturningFromPreparationKeepsSelectionAndItSurvivesLeavingToMainInSameRun`, `BoardingLargeTextUITests`, `LargeTextUITests`, `SimulatorLargeTextRecoveryTests`, `DesignSyncRulerUITests`(준비 진입)
+- `PenParityCaptureTests`: testR27_boardTag, testR42_boardCustom 등 준비·승차권을 지나는 캡처
+
+### 남은 차이
+- 공통: 실제 항공 사진(시안은 3D 일러스트), Apple 로고·Legal 노출.
+- **R07·R08·R10·R11 지도**: 구간 색인(`leg`, 13개)은 넘어가는 것을 진단 글자로 확인했고 카메라도 구간 전체로 잡힌다. 그런데 캡처에는 정류장 점·버스 표식·밝은 노선선(R06 표현)이 나오지 않고 노선선만 보인다. 같은 `SceneMapBackdrop`이 시간 화면(R06, 선택 후 leg가 바뀌는 경우)에서는 점·표식을 그리므로, 처음부터 leg가 있는 채로 나타날 때 Map 주석이 안 그려지는 것으로 보인다. 원인 미확정 — 다음 지도 단계(C)에서 볼 것. 시안의 남은 구간 흰 44% 선·현재 정류장 14pt 원도 없다.
+- R07/R08: 시트·칩·하단 줄 위치는 1~2pt 안. 칩 아이콘 모양(SF vs lucide).
+- R09: 요소 위치 1~3pt 안. 아이콘 모양 차이.
+- R10: 위치 1pt 안. 셀 아이콘 모양 차이(나무 1그루, 지하철 모양).
+- R11: 시트 높이 시안 384 대비 약 1~3pt 안으로 맞춤(2회차 수치 조정). 배지 버스 아이콘은 SF `bus`라 시안 선형 아이콘보다 두껍다. 배지 녹색은 `FMDesign.routeColor(kind:)`(#168445) 사용.

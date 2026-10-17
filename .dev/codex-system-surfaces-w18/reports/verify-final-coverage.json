@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-16T05:03:00.592097+00:00",
+  "first_full_ui": {
+    "passed": 270,
+    "failed": 47,
+    "exit": 65
+  },
+  "isolated_retest": {
+    "passed": 83,
+    "failed": 0,
+    "exit": 0
+  },
+  "unchanged_ui_pass_coverage": 234,
+  "combined_latest_case_coverage": 317,
+  "unresolved_failures": 0,
+  "source_changed_since_full": [
+    "ios/FocusMateUITests/UITestLaunchSupport.swift"
+  ],
+  "baseline_files": 1094,
+  "single_full_run_all_pass": false,
+  "note": "Complete first run plus isolated helper-dependent rerun; not a fresh single 317/0 run."
+}

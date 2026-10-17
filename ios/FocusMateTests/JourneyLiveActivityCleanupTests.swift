@@ -100,4 +100,19 @@ final class JourneyLiveActivityCleanupTests: XCTestCase {
         XCTAssertEqual(gateway.count(.update), 0)
         XCTAssertEqual(gateway.activeActivities.count, 0)
     }
+    // 깨짐: 재실행 정리의 일시정지 갱신에서 저장 여정의 총 시간을 누락한다.
+    func testW17_재실행_정리는_기존활동에_총3600초를_보강한다() throws {
+        let gateway = RecordingLiveActivityGateway(existing: [
+            LiveActivityHandle(id: "old-1", journeyID: "journey-1")
+        ])
+        let journey = BoardingFixtures.journey(minutes: 60, phase: .departed, elapsedSeconds: 600)
+
+        JourneyLiveActivityCleanup.atLaunch(gateway: gateway, journey: journey)
+
+        let request = try XCTUnwrap(gateway.entries.first { $0.op == .update }?.request)
+        let data = try JSONEncoder().encode(request.state)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["totalSeconds"] as? Int, 3600)
+    }
+
 }

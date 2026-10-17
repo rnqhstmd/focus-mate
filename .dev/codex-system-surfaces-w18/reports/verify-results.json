@@ -1,0 +1,68 @@
+[
+  {
+    "kind": "node",
+    "action": "test",
+    "command": "npm test",
+    "start": "2026-10-16T03:14:33.388454+00:00",
+    "end": "2026-10-16T03:14:41.499723+00:00",
+    "seconds": 8.11,
+    "exit": 0,
+    "warnings": 0,
+    "log": ".dev/codex-system-surfaces-w18/reports/verify-node-test.log"
+  },
+  {
+    "kind": "node",
+    "action": "build",
+    "command": "npm run build",
+    "start": "2026-10-16T03:14:41.500023+00:00",
+    "end": "2026-10-16T03:14:41.732169+00:00",
+    "seconds": 0.23,
+    "exit": 0,
+    "warnings": 0,
+    "log": ".dev/codex-system-surfaces-w18/reports/verify-node-build.log"
+  },
+  {
+    "kind": "ios-swiftui",
+    "action": "test",
+    "command": "python3 scripts/check-ios.py test",
+    "start": "2026-10-16T03:14:41.733171+00:00",
+    "end": "2026-10-16T04:41:44.973882+00:00",
+    "seconds": 5223.22,
+    "exit": 65,
+    "warnings": 0,
+    "log": ".dev/codex-system-surfaces-w18/reports/verify-ios-swiftui-test.log"
+  },
+  {
+    "kind": "ios-swiftui",
+    "action": "build",
+    "command": "python3 scripts/check-ios.py build",
+    "start": "2026-10-16T04:41:44.974497+00:00",
+    "end": "2026-10-16T04:41:48.876462+00:00",
+    "seconds": 3.9,
+    "exit": 0,
+    "warnings": 0,
+    "log": ".dev/codex-system-surfaces-w18/reports/verify-ios-swiftui-build.log"
+  },
+  {
+    "kind": "python-scripts",
+    "action": "test",
+    "command": "python3 -m unittest discover -s scripts/tests -t scripts",
+    "start": "2026-10-16T04:41:48.876734+00:00",
+    "end": "2026-10-16T04:41:50.522325+00:00",
+    "seconds": 1.65,
+    "exit": 0,
+    "warnings": 0,
+    "log": ".dev/codex-system-surfaces-w18/reports/verify-python-scripts-test.log"
+  },
+  {
+    "kind": "python-scripts",
+    "action": "build",
+    "command": "python3 -m compileall -q scripts/route_data scripts/build_route_data.py",
+    "start": "2026-10-16T04:41:50.522581+00:00",
+    "end": "2026-10-16T04:41:50.564890+00:00",
+    "seconds": 0.04,
+    "exit": 0,
+    "warnings": 0,
+    "log": ".dev/codex-system-surfaces-w18/reports/verify-python-scripts-build.log"
+  }
+]

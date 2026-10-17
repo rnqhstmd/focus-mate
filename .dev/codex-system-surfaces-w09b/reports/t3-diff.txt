@@ -1,0 +1,514 @@
+
+# ios/FocusMate/RecordsAnalyticsView.swift
+import SwiftUI
+
+@MainActor
+struct RecordsAnalyticsView: View {
+    @Bindable var model: AppModel
+    let onOpenRecord: (String) -> Void
+    @State private var browser: RecordsAnalyticsBrowser?
+    @State private var observedAt: Date
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.dismiss) private var dismiss
+
+    init(model: AppModel, selectedDay: String, onOpenRecord: @escaping (String) -> Void) {
+        self.model = model
+        self.onOpenRecord = onOpenRecord
+        _browser = State(initialValue: try? RecordsAnalyticsBrowser(selectedDay: selectedDay, calendar: Calendar(identifier: .gregorian)))
+        _observedAt = State(initialValue: model.recordClock.now())
+    }
+
+    private var calendar: Calendar { Calendar(identifier: .gregorian) }
+    private var timeZone: TimeZone { model.recordClock.timeZone() }
+    private var today: String { (try? RecordsAnalytics.today(now: observedAt, calendar: calendar, timeZone: timeZone)) ?? "" }
+    private var content: RecordsAnalyticsLoad {
+        guard let browser else { return .unavailable }
+        return RecordsAnalyticsAdapter.load(section: model.snapshot?.records, period: browser.period, selectedTag: browser.selectedTag,
+                                           now: observedAt, calendar: calendar, timeZone: timeZone)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("여행 분석").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.analytics")
+                if let browser {
+                    toolbar(browser)
+                    Text(periodTitle(browser.period)).font(.title3.weight(.semibold)).accessibilityIdentifier("analytics.range")
+                }
+                switch content {
+                case .unavailable:
+                    Text("기록을 불러올 수 없어요").accessibilityIdentifier("analytics.unavailable")
+                    Button("기록으로 돌아가기") { dismiss() }
+                case .available(let value):
+                    analysis(value)
+                }
+            }
+            .padding(24)
+        }
+        .navigationTitle("분석").navigationBarTitleDisplayMode(.inline)
+        .onAppear { refresh() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
+    }
+
+    private func refresh() {
+        observedAt = model.recordClock.now()
+        if case .available(let value) = content { browser?.reconcileTags(available: value.computation.report.tags) }
+    }
+
+    private func editBrowser(_ action: (inout RecordsAnalyticsBrowser) throws -> Void) {
+        guard var next = browser else { return }
+        do { try action(&next); browser = next } catch { browser = nil }
+    }
+
+    private func toolbar(_ state: RecordsAnalyticsBrowser) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                periodButton("주간", kind: .week, state: state)
+                periodButton("월간", kind: .month, state: state)
+            }
+            HStack {
+                Button { editBrowser { _ = try $0.move(by: -1, today: today, calendar: calendar) } } label: {
+                    Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+                }.accessibilityLabel("이전 기간").accessibilityIdentifier("analytics.previous")
+                Spacer()
+                Button(state.period.kind == .week ? "이번 주" : "이번 달") {
+                    observedAt = model.recordClock.now()
+                    editBrowser { try $0.returnToToday(today: today, calendar: calendar) }
+                }.frame(minHeight: 44).accessibilityIdentifier("analytics.today")
+                Spacer()
+                Button { editBrowser { _ = try $0.move(by: 1, today: today, calendar: calendar) } } label: {
+                    Image(systemName: "chevron.right").frame(minWidth: 44, minHeight: 44)
+                }
+                .disabled((try? RecordsAnalytics.shift(period: state.period, by: 1, today: today, calendar: calendar)) == nil)
+                .accessibilityLabel("다음 기간").accessibilityIdentifier("analytics.next")
+            }
+        }
+    }
+
+    private func periodButton(_ title: String, kind: AnalyticsPeriodKind, state: RecordsAnalyticsBrowser) -> some View {
+        Button(title) { editBrowser { try $0.setKind(kind, calendar: calendar) } }
+            .buttonStyle(.bordered).frame(maxWidth: .infinity, minHeight: 44)
+            .tint(state.period.kind == kind ? .white : .gray)
+            .accessibilityAddTraits(state.period.kind == kind ? .isSelected : [])
+            .accessibilityIdentifier("analytics.period.\(kind.rawValue)")
+    }
+
+    @ViewBuilder private func analysis(_ value: RecordsAnalyticsContent) -> some View {
+        let computation = value.computation
+        let report = computation.report
+        summary(report)
+        if report.totals.count == 0 {
+            Text(value.hasAnyEligibleRecords ? "이 기간에는 마친 여행이 없어요" : "첫 여행을 마치면 집중 기록을 분석해드려요")
+                .foregroundStyle(.secondary).accessibilityIdentifier("analytics.empty")
+        }
+        Divider()
+        Text("태그별 여행 시간 · 전체 기간").font(.headline)
+        if !report.tags.isEmpty {
+            let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16)) : AnyLayout(HStackLayout(alignment: .center, spacing: 18))
+            layout {
+                donut(report)
+                VStack(spacing: 8) {
+                    ForEach(report.tags, id: \.id) { tag in
+                        Button { browser?.selectTag(tag.name, available: report.tags) } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                RoundedRectangle(cornerRadius: 2).fill(color(tag.color)).frame(width: 4, height: 28).accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(tag.name).font(.subheadline.weight(.semibold))
+                                    Text("\(tag.minutes)분 · \(tag.count)회 · \(Int((tag.share * 100).rounded()))%")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }.frame(minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(computation.effectiveTag == tag.name ? .isSelected : [])
+                        .accessibilityIdentifier("analytics.tag.\(tag.name)")
+                    }
+                }
+            }
+        }
+        Text(comparisonText(report.comparison)).font(.footnote).foregroundStyle(.secondary)
+        HStack {
+            Text(computation.effectiveTag.map { "\($0) 활동" } ?? "전체 활동").font(.headline)
+            Spacer()
+            if computation.effectiveTag != nil {
+                Button("전체 보기") { browser?.selectTag(nil, available: report.tags) }
+                    .accessibilityIdentifier("analytics.clearTag")
+            }
+        }
+        dailyChart(computation.filteredDays)
+        Text("마친 시간대 · 표시 시간대 기준").font(.headline)
+        if computation.insights.needsMoreTimeBandRecords { Text("기록이 더 필요해요").font(.footnote).foregroundStyle(.secondary) }
+        ForEach(computation.insights.timeBands, id: \.band) { band in
+            metricRow(bandName(band.band), minutes: band.minutes, count: band.count)
+        }
+        Text("자주 탄 노선").font(.headline)
+        ForEach(Array(computation.insights.routes.enumerated()), id: \.offset) { _, route in
+            metricRow("\(route.bus) · \(route.from) → \(route.to)", minutes: route.minutes, count: route.count)
+        }
+        Text("여행 길이").font(.headline)
+        ForEach(computation.insights.lengths, id: \.band) { length in
+            metricRow(lengthName(length.band), minutes: length.minutes, count: length.count)
+        }
+        Text("최장 연속 \(computation.insights.longestStreak)일 · 전체 기간").font(.headline)
+        Text("최근 여행").font(.headline)
+        ForEach(value.recent, id: \.id) { record in recordButton(record, memo: false) }
+        Text("메모 회고 · \(value.memoCount)회").font(.headline)
+        ForEach(value.recentMemos, id: \.id) { record in recordButton(record, memo: true) }
+    }
+
+    private func summary(_ report: RecordsAnalyticsReport) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(ProfileTimeText.display(minutes: report.totals.minutes)).font(.largeTitle.weight(.semibold).monospacedDigit())
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 16) {
+                stat("완료한 여행", "\(report.totals.count)회")
+                stat("여행한 날", "\(report.totals.activeDays)일")
+                stat("평균 여행 시간", "\(report.totals.averageMinutes)분")
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("전체 기간 \(report.totals.minutes)분 · \(report.totals.count)회 · \(report.totals.activeDays)일 · 평균 \(report.totals.averageMinutes)분")
+        .accessibilityIdentifier("analytics.summary")
+    }
+
+    private func stat(_ name: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) { Text(value).font(.title3.bold()); Text(name).font(.caption).foregroundStyle(.secondary) }
+    }
+
+    private func donut(_ report: RecordsAnalyticsReport) -> some View {
+        ZStack {
+            Circle().stroke(.white.opacity(0.1), lineWidth: 17)
+            ForEach(Array(report.tags.enumerated()), id: \.offset) { index, tag in
+                let start = report.tags.prefix(index).reduce(0.0) { $0 + $1.share }
+                Circle().trim(from: start, to: min(1, start + tag.share)).stroke(color(tag.color), lineWidth: 17).rotationEffect(.degrees(-90))
+            }
+            VStack(spacing: 3) {
+                Text(ProfileTimeText.display(minutes: report.totals.minutes)).font(.headline)
+                Text("합계").font(.caption).foregroundStyle(.secondary)
+            }
+        }.frame(width: 140, height: 140).padding(9).accessibilityHidden(true)
+    }
+
+    private func dailyChart(_ days: [AnalyticsDayTotal]) -> some View {
+        let maximum = max(1, days.map(\.minutes).max() ?? 0)
+        return ScrollView(.horizontal) {
+            HStack(alignment: .bottom, spacing: 10) {
+                ForEach(days, id: \.day) { day in
+                    VStack(spacing: 6) {
+                        Spacer(minLength: 0)
+                        VStack(spacing: 0) {
+                            if day.minutes == 0 { Capsule().fill(.white.opacity(0.2)).frame(height: 2) }
+                            ForEach(day.tags, id: \.id) { tag in
+                                Rectangle().fill(color(tag.color)).frame(height: 90 * Double(tag.minutes) / Double(maximum))
+                            }
+                        }.frame(width: 22)
+                        Text(String(day.day.suffix(2))).font(.caption2)
+                    }
+                    .frame(width: 28, height: 120).opacity(day.isFuture ? 0.35 : 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(day.day), \(day.minutes)분, \(day.count)회" + (day.isFuture ? ", 미래 날짜" : "") + day.tags.map { ", \($0.name) \($0.minutes)분" }.joined())
+                }
+            }
+        }
+    }
+
+    private func metricRow(_ name: String, minutes: Int, count: Int) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) { Text(name); Spacer(minLength: 12); Text("\(minutes)분 · \(count)회").foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 3) { Text(name); Text("\(minutes)분 · \(count)회").foregroundStyle(.secondary) }
+        }.font(.subheadline).accessibilityElement(children: .ignore).accessibilityLabel("\(name), \(minutes)분, \(count)회")
+    }
+
+    private func recordButton(_ record: RecordSnapshot, memo: Bool) -> some View {
+        Button { onOpenRecord(record.id) } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(memo ? record.memo : record.task).font(.subheadline.weight(.medium)).multilineTextAlignment(.leading)
+                Text("\(record.tag) · \(record.minutes)분 · \(record.date)").font(.caption).foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(12).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(memo ? record.memo : record.task), \(record.tag), \(record.minutes)분, 기록과 메모 열기")
+        .accessibilityIdentifier("analytics.\(memo ? "memo" : "recent").\(record.id)")
+    }
+
+    private func periodTitle(_ period: AnalyticsPeriod) -> String {
+        period.kind == .month ? String(period.startDay.prefix(7)).replacingOccurrences(of: "-", with: "년 ") + "월" : "\(period.startDay) – \(period.endDay)"
+    }
+    private func comparisonText(_ value: AnalyticsComparison) -> String {
+        guard value.changePercent != nil else { return "비교할 이전 기록이 아직 없어요" }
+        return value.deltaMinutes == 0 ? "이전 같은 기간과 같아요" : "이전 같은 기간보다 \(abs(value.deltaMinutes))분 \(value.deltaMinutes > 0 ? "더" : "덜") 집중했어요"
+    }
+    private func color(_ hex: String) -> Color {
+        let value = UInt32(hex.dropFirst(), radix: 16) ?? 0xBFC6C1
+        return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
+    }
+    private func bandName(_ band: AnalyticsTimeBand) -> String {
+        switch band { case .dawn: "새벽 0–5시"; case .morning: "오전 5–12시"; case .afternoon: "오후 12–18시"; case .evening: "저녁 18–24시" }
+    }
+    private func lengthName(_ band: AnalyticsLengthBand) -> String {
+        switch band { case .upTo30: "1–30분"; case .from31To60: "31–60분"; case .from61To120: "61–120분"; case .from121To240: "121–240분"; case .from241To360: "241–360분" }
+    }
+}
+
+# ios/FocusMateUITests/RecordsAnalyticsUITests.swift
+import Foundation
+import XCTest
+
+@MainActor
+final class RecordsAnalyticsUITests: XCTestCase {
+    private let timeout: TimeInterval = 5
+
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+    }
+
+    // 깨짐: 분석 진입이 없거나 주/월 이동이 미래 기간을 허용한다.
+    func testAC1_분석은_선택월로_열리고_현재주와월의_미래이동을_차단한다() {
+        let h = FocusMateUIHarness.launch(seed: "analytics")
+        openAnalytics(h)
+        XCTAssertTrue(h.element("analytics.period.month").isSelected)
+        assertSummary(h, minutes: 150, count: 6)
+        XCTAssertFalse(h.element("analytics.next").isEnabled)
+        h.tap("analytics.period.week")
+        XCTAssertTrue(h.element("analytics.period.week").isSelected)
+        XCTAssertFalse(h.element("analytics.next").isEnabled)
+        h.tap("analytics.previous")
+        XCTAssertTrue(h.element("analytics.next").isEnabled)
+        assertSummary(h, minutes: 0, count: 0)
+        h.tap("analytics.today")
+        assertSummary(h, minutes: 150, count: 6)
+        XCTAssertFalse(h.element("analytics.next").isEnabled)
+    }
+
+    // 깨짐: 태그 필터가 전체 합계를 바꾸거나 기간 이동 후 사라진 태그를 유지한다.
+    func testAC3_기록없는기간으로_이동하면_이전태그를_해제하고_전체로_돌아온다() {
+        let h = FocusMateUIHarness.launch(seed: "analytics")
+        openAnalytics(h)
+        h.tap("analytics.tag.독서")
+        XCTAssertTrue(h.element("analytics.tag.독서").isSelected)
+        XCTAssertTrue(h.element("analytics.clearTag").exists)
+        assertSummary(h, minutes: 150, count: 6)
+        h.tap("analytics.previous")
+        XCTAssertFalse(h.element("analytics.clearTag").exists)
+        XCTAssertFalse(h.element("analytics.tag.독서").exists)
+        assertSummary(h, minutes: 0, count: 0)
+        h.tap("analytics.today")
+        XCTAssertFalse(h.element("analytics.tag.독서").isSelected)
+        assertSummary(h, minutes: 150, count: 6)
+    }
+
+    // 깨짐: 분석의 메모 선택이 기존 편집기를 열지 않거나 저장 후 분석이 이전 메모를 보여준다.
+    func testAC5_분석메모에서_기존편집기로_돌아가_저장하면_재진입에_최신메모를_읽는다() {
+        let h = FocusMateUIHarness.launch(seed: "analytics")
+        openAnalytics(h)
+        let memo = h.element("analytics.memo.analytics-1")
+        reveal(memo, in: h.app)
+        XCTAssertTrue(memo.label.contains("회고 1"))
+        memo.tap()
+        let field = h.app.textFields["recordMemo.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: timeout))
+        XCTAssertFalse(h.element("screen.analytics").exists)
+        XCTAssertEqual(field.value as? String, "회고 1")
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
+        field.typeText("새 회고")
+        h.tap("recordMemo.save")
+        XCTAssertTrue(h.waitUntil { !h.element("recordMemo.field").exists })
+        XCTAssertTrue(h.element("screen.records").exists)
+        h.tap("records.analytics.open")
+        XCTAssertTrue(h.element("screen.analytics").waitForExistence(timeout: timeout))
+        let updated = h.element("analytics.memo.analytics-1")
+        reveal(updated, in: h.app)
+        XCTAssertTrue(updated.label.contains("새 회고"))
+        XCTAssertFalse(updated.label.contains("회고 1"))
+    }
+
+    // 깨짐: 빈 자료를 접근 불가로 처리하거나 최대 글자에서 기간 조작·기록 복귀가 막힌다.
+    func testAC6_AC7_큰글자의_빈분석에서도_기간조작과_기록복귀가_가능하다() {
+        let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        openAnalytics(h)
+        assertSummary(h, minutes: 0, count: 0)
+        XCTAssertTrue(h.element("analytics.empty").exists)
+        h.tap("analytics.period.week")
+        XCTAssertFalse(h.element("analytics.next").isEnabled)
+        h.tap("analytics.previous")
+        h.tap("analytics.today")
+        assertSummary(h, minutes: 0, count: 0)
+        h.app.navigationBars.firstMatch.buttons.firstMatch.tap()
+        XCTAssertTrue(h.element("screen.records").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("records.empty").exists)
+    }
+
+    private func openAnalytics(_ h: FocusMateUIHarness) {
+        h.tap("open.records")
+        XCTAssertTrue(h.element("screen.records").waitForExistence(timeout: timeout))
+        h.tap("records.analytics.open")
+        XCTAssertTrue(h.element("screen.analytics").waitForExistence(timeout: timeout))
+    }
+
+    private func assertSummary(_ h: FocusMateUIHarness, minutes: Int, count: Int,
+                               file: StaticString = #filePath, line: UInt = #line) {
+        let summary = h.element("analytics.summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: timeout), file: file, line: line)
+        let text = summary.label + " " + ((summary.value as? String) ?? "")
+        XCTAssertNotNil(text.range(of: "(?<![0-9])\(minutes)분", options: .regularExpression),
+                        "합계 분 누락: \(text)", file: file, line: line)
+        XCTAssertNotNil(text.range(of: "(?<![0-9])\(count)회", options: .regularExpression),
+                        "합계 횟수 누락: \(text)", file: file, line: line)
+    }
+
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<8 {
+            if element.exists && element.isHittable { return }
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.exists && element.isHittable, "분석 항목에 도달할 수 없음")
+    }
+}
+
+# ios/FocusMateUITests/RecordsAnalyticsVisualCaptureTests.swift
+import XCTest
+
+/// 승인 시안과 직접 대조할 네이티브 화면 수집 도구. 기능 RED나 시각 합격 판정이 아니다.
+@MainActor
+final class RecordsAnalyticsVisualCaptureTests: XCTestCase {
+    func testCapture_분석요약과_인사이트의_실제네이티브화면을_첨부한다() {
+        continueAfterFailure = false
+        let h = FocusMateUIHarness.launch(seed: "analytics")
+        h.tap("open.records")
+        h.tap("records.analytics.open")
+        XCTAssertTrue(h.element("screen.analytics").waitForExistence(timeout: 5))
+
+        let normal = XCTAttachment(screenshot: h.app.screenshot())
+        normal.name = "w09b-analysis-normal"
+        normal.lifetime = .keepAlways
+        add(normal)
+
+        h.app.swipeUp()
+        h.app.swipeUp()
+        let insights = XCTAttachment(screenshot: h.app.screenshot())
+        insights.name = "w09b-analysis-insights"
+        insights.lifetime = .keepAlways
+        add(insights)
+    }
+}
+diff --git a/ios/FocusMate/RecordsView.swift b/ios/FocusMate/RecordsView.swift
+index ef130bc..046ef1f 100644
+--- a/ios/FocusMate/RecordsView.swift
++++ b/ios/FocusMate/RecordsView.swift
+@@ -7,6 +7,9 @@ struct RecordsView: View {
+     let services: JourneyServices
+     @State private var browser: RecordsBrowser
+     @State private var editing: EditingMemo?
++    @State private var showsAnalytics = false
++    @State private var pendingAnalyticsRecordID: String?
++    @Environment(\.scenePhase) private var scenePhase
+ 
+     private struct EditingMemo: Identifiable { let id: String; let memo: String }
+ 
+@@ -24,6 +27,9 @@ struct RecordsView: View {
+         ScrollView {
+             VStack(alignment: .leading, spacing: 20) {
+                 Text("기록").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
++                Button("분석 보기") { refreshBrowserToday(); showsAnalytics = true }
++                    .buttonStyle(.bordered).frame(minHeight: 44)
++                    .accessibilityIdentifier("records.analytics.open")
+                 yearBar
+                 Text(RecordsCalendar.summary(year: browser.year, records: records, today: browser.today).text)
+                     .foregroundStyle(.secondary).accessibilityIdentifier("records.summary")
+@@ -33,6 +39,15 @@ struct RecordsView: View {
+             .padding(24)
+         }
+         .navigationTitle("기록").navigationBarTitleDisplayMode(.inline)
++        .navigationDestination(isPresented: $showsAnalytics) {
++            RecordsAnalyticsView(model: model, selectedDay: browser.selectedDay.key) { id in
++                guard records.contains(where: { $0.id.utf16.elementsEqual(id.utf16) }) else { return }
++                pendingAnalyticsRecordID = id
++                showsAnalytics = false
++            }
++            .onDisappear { openPendingAnalyticsRecord() }
++        }
++        .onChange(of: scenePhase) { _, phase in if phase == .active { refreshBrowserToday() } }
+         .sheet(item: $editing) { item in
+             RecordMemoEditor(model: model, recordID: item.id, memo: item.memo) { editing = nil }
+         }
+@@ -41,6 +56,28 @@ struct RecordsView: View {
+         #endif
+     }
+ 
++    private func refreshBrowserToday() {
++        let today = RecordDay.from(model.recordClock.now(), timeZone: timeZone)
++        guard today != browser.today else { return }
++        var updated = RecordsBrowser(today: today)
++        updated.select(min(browser.selectedDay, today))
++        browser = updated
++    }
++
++    private func openPendingAnalyticsRecord() {
++        guard let id = pendingAnalyticsRecordID else { return }
++        pendingAnalyticsRecordID = nil
++        guard let record = records.first(where: { $0.id.utf16.elementsEqual(id.utf16) }),
++              let day = RecordDay(key: record.date) else { return }
++        refreshBrowserToday()
++        guard browser.select(day) else { return }
++        let dated = RecordsCalendar.records(on: day, in: records)
++        if let index = dated.firstIndex(where: { $0.id.utf16.elementsEqual(id.utf16) }) {
++            while browser.listLimit <= index { browser.showMore() }
++        }
++        editing = EditingMemo(id: record.id, memo: record.memo)
++    }
++
+     private var yearBar: some View {
+         HStack(spacing: 12) {
+             Button { browser.moveYear(by: -1, records: records) } label: {
+diff --git a/ios/FocusMate/UITestBootstrap.swift b/ios/FocusMate/UITestBootstrap.swift
+index a3f76ff..07c7778 100644
+--- a/ios/FocusMate/UITestBootstrap.swift
++++ b/ios/FocusMate/UITestBootstrap.swift
+@@ -373,7 +373,7 @@ struct UITestBootstrap {
+         tagColor: "#12ABef", task: "책 한 챕터 읽기", minutes: 25, sound: "빗소리", from: "성수역", to: "서울숲 입구", memo: "")
+ 
+     /// W09 기록 화면 시드. 실행한 날의 정오(로컬)를 기준으로 만들어 날짜 경계에 흔들리지 않는다. 진행 여정은 없다.
+-    private static let recordSeeds: Set<String> = ["recordsMemo", "recordsTwoYears"]
++    private static let recordSeeds: Set<String> = ["recordsMemo", "recordsTwoYears", "analytics"]
+ 
+     private static func recordSnapshot(_ name: String) -> AppSnapshot? {
+         var calendar = Calendar(identifier: .gregorian)
+@@ -391,6 +391,15 @@ struct UITestBootstrap {
+         }
+         let items: [RecordSnapshot?]
+         switch name {
++        case "analytics":
++            let start = calendar.startOfDay(for: now)
++            let formatter = ISO8601DateFormatter()
++            items = (0..<6).map { index in
++                RecordSnapshot(id: "analytics-\(index)", completedAt: formatter.string(from: start),
++                    date: RecordDay.from(start, timeZone: .current).key, bus: "2014", tag: index.isMultiple(of: 2) ? "독서" : "공부",
++                    tagColor: index.isMultiple(of: 2) ? "#D7B378" : "#B49CE1", task: "집중 기록 \(index)", minutes: 25,
++                    sound: "버스", from: "성수역", to: "서울숲 입구", memo: (1...4).contains(index) ? "회고 \(index)" : "")
++            }
+         case "recordsMemo":
+             items = (0..<12).map { record("records-memo-\($0)", at: noon.addingTimeInterval(Double(-60 * $0)),
+                                           memo: $0 == 1 ? "집중 잘됨" : "") }
+diff --git a/ios/FocusMateUITests/UITestLaunchSupport.swift b/ios/FocusMateUITests/UITestLaunchSupport.swift
+index c011d53..c3f2b42 100644
+--- a/ios/FocusMateUITests/UITestLaunchSupport.swift
++++ b/ios/FocusMateUITests/UITestLaunchSupport.swift
+@@ -151,7 +151,12 @@ extension FocusMateUIHarness {
+     func tap(_ identifier: String, timeout: TimeInterval = FocusMateUIHarness.timeout) {
+         let target = element(identifier)
+         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing: \(identifier)")
+-        target.tap()
++        let buttons = app.buttons.matching(identifier: identifier)
++        if buttons.count == 1 {
++            buttons.element.tap()
++        } else {
++            target.tap()
++        }
+     }
+ 
+     /// 다음 저장 1건을 실패시키고 곧바로 action을 실행한다(수동 시계에는 자율 쓰기가 없어 결정적이다).

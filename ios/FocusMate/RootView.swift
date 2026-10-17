@@ -12,6 +12,7 @@ struct RootView: View {
     @State private var announceSavedCard = false
     @State private var confirmsNewJourney = false
     @State private var mainActionFailed = false
+    @Environment(\.scenePhase) private var widgetScenePhase
     @AccessibilityFocusState private var cardFocus: Bool
     private enum RecoveryFocus: Hashable { case error, confirmation, failure }
     @AccessibilityFocusState private var recoveryFocus: RecoveryFocus?
@@ -42,6 +43,25 @@ struct RootView: View {
             .newJourneyConfirmation(isPresented: $confirmsNewJourney) { apply(model.confirmNewJourney()) }
         }
         .onChange(of: model.path) { _, _ in mainActionFailed = false }
+        .onOpenURL { applyWidgetDecision(model.handleWidgetURL($0)) }
+        .onChange(of: model.launchState) { _, _ in
+            if let decision = model.consumePendingWidgetURL() { applyWidgetDecision(decision) }
+        }
+        .onChange(of: showsCustomization) { _, _ in updateWidgetEntryBlock() }
+        .onChange(of: confirmsNewJourney) { _, _ in updateWidgetEntryBlock() }
+        .onChange(of: widgetScenePhase) { _, phase in
+            if phase == .active { model.refreshWidgetSnapshotIfEligible() }
+        }
+        .onAppear {
+            updateWidgetEntryBlock()
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if testBootstrap != nil, let index = arguments.firstIndex(of: "--fm-ui-widget-url"),
+               arguments.indices.contains(index + 1), let url = URL(string: arguments[index + 1]) {
+                applyWidgetDecision(model.handleWidgetURL(url))
+            }
+            #endif
+        }
         .safeAreaInset(edge: .bottom) {
             if savedCardNotice {
                 Text("카드 외형을 저장했어요.")
@@ -120,6 +140,13 @@ struct RootView: View {
             }
         }
         #endif
+    }
+
+    private func updateWidgetEntryBlock() {
+        model.setWidgetEntryBlocked(showsCustomization || confirmsNewJourney)
+    }
+    private func applyWidgetDecision(_ decision: WidgetNavigationDecision) {
+        if decision == .confirmNewJourney { confirmsNewJourney = true }
     }
 
     /// 화면 분기는 `presentedRoute`만 쓴다. `launchState`는 로딩·실패 판단에만 쓴다.

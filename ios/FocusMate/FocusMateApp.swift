@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 @main @MainActor
 struct FocusMateApp: App {
@@ -25,7 +26,7 @@ struct FocusMateApp: App {
             testBootstrap = bootstrap
             let model = bootstrap.map {
                 AppModel(store: $0.modelStore, soundPreview: $0.makeSoundPreview(), routeData: $0.makeRouteCatalogStore())
-            } ?? AppModel(store: LocalSnapshotStore(fileURL: operationalURL))
+            } ?? AppModel(store: LocalSnapshotStore(fileURL: operationalURL), widgetPublisher: Self.makeWidgetPublisher())
             _model = State(initialValue: model)
             if let bootstrap {
                 let recorder = bootstrap.makeFeedbackRecorder()
@@ -46,7 +47,7 @@ struct FocusMateApp: App {
                 _issuance = State(initialValue: Self.makeIssuance(for: model))
             }
             #else
-            let model = AppModel(store: LocalSnapshotStore(fileURL: operationalURL))
+            let model = AppModel(store: LocalSnapshotStore(fileURL: operationalURL), widgetPublisher: Self.makeWidgetPublisher())
             _model = State(initialValue: model)
             _issuance = State(initialValue: Self.makeIssuance(for: model))
             #endif
@@ -85,6 +86,15 @@ struct FocusMateApp: App {
     /// UI 테스트면 진동·낭독을 기록기로 바꿔 진단에 노출한다.
     private var journeyServices: JourneyServices { testServices ?? .live() }
     #endif
+
+    private static func makeWidgetPublisher() -> WidgetSnapshotPublisher {
+        WidgetSnapshotPublisher(store: WidgetSnapshotStore(containerURL: {
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.focusmate.prototype")
+        }), now: { Date() }, calendar: Calendar(identifier: .gregorian), timeZone: { .current }, reload: {
+            WidgetCenter.shared.reloadTimelines(ofKind: "FocusMate.FocusPrompt")
+            WidgetCenter.shared.reloadTimelines(ofKind: "FocusMate.Analytics")
+        })
+    }
 
     private static func makeIssuance(for model: AppModel) -> CardIssuanceController {
         CardIssuanceController(issuer: model, haptics: CoreHapticsIssuancePlayer(), announcer: SystemAccessibilityAnnouncer())

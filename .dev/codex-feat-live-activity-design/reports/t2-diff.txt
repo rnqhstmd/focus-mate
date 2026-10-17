@@ -1,0 +1,645 @@
+diff --git a/ios/FocusMateTests/JourneyActivityDisplayTests.swift b/ios/FocusMateTests/JourneyActivityDisplayTests.swift
+index 9b9f4e8..8b879ac 100644
+--- a/ios/FocusMateTests/JourneyActivityDisplayTests.swift
++++ b/ios/FocusMateTests/JourneyActivityDisplayTests.swift
+@@ -64,8 +64,8 @@ final class JourneyActivityDisplayTests: XCTestCase {
+         XCTAssertEqual(accessibilityText(status: .arrived), "343번 간선 버스, 도착지 서울역, 도착")
+     }
+ 
+-    // 깨짐: 모델에 카드 id·이름·할 일·태그·소리·출발지·progress 같은 필드를 추가하거나 7개 중 하나를 빼면 실패한다.
+-    func testV15_AC30_표시_데이터_모델_필드는_정확히_7가지다() {
++    // 깨짐: 승인된 totalSeconds 외에 카드·할 일·태그 등 민감 정보를 표시 데이터에 추가한다.
++    func testW17_AC30_표시_데이터는_총시간만_추가한_8필드로_제한한다() {
+         let attributes = JourneyActivityAttributes(
+             journeyID: "j-1", busNumber: "343", busKind: "간선", destinationName: "서울역"
+         )
+@@ -77,7 +77,7 @@ final class JourneyActivityDisplayTests: XCTestCase {
+         XCTAssertEqual(
+             labels,
+             ["journeyID", "busNumber", "busKind", "destinationName",
+-             "status", "endDate", "pausedRemainingSeconds"]
++             "status", "endDate", "pausedRemainingSeconds", "totalSeconds"]
+         )
+     }
+ 
+@@ -158,20 +158,20 @@ final class JourneyActivityDisplayTests: XCTestCase {
+         XCTAssertEqual(content, .fixed("도착했어요"))
+     }
+ 
+-    // 깨짐: 일시정지 라벨에 남은 시간 문구가 빠지면 실패한다.
+-    func testV15_위젯_일시정지_접근성_라벨은_남은_시간을_읽는다() {
++    // 깨짐: 일시정지 summary가 시간 요소와 별개로 남은 시간을 합성하여 중복 낭독한다.
++    func testW17_위젯_일시정지_summary는_별도시간을_중복하지_않는다() {
+         let label = JourneyActivityDisplay.accessibilityLabel(
+             attributes: widgetAttributes, state: widgetState(.paused, paused: 3000), isStale: false
+         )
+-        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지, 남은 시간 50분 0초")
++        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지")
+     }
+ 
+-    // 깨짐: stale이 일시정지 라벨을 "도착"으로 덮으면 실패한다.
+-    func testV15_위젯_stale이어도_일시정지_접근성_라벨은_같다() {
++    // 깨짐: stale이 일시정지 summary를 도착으로 덮거나 남은 시간을 중복 합성한다.
++    func testW17_stale이어도_일시정지_summary는_상태만_한번_제공한다() {
+         let label = JourneyActivityDisplay.accessibilityLabel(
+             attributes: widgetAttributes, state: widgetState(.paused, paused: 3000), isStale: true
+         )
+-        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지, 남은 시간 50분 0초")
++        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 일시정지")
+     }
+ 
+     // 깨짐: stale 운행이 "운행 중"으로 읽히면 실패한다.
+@@ -251,4 +251,81 @@ final class JourneyActivityDisplayTests: XCTestCase {
+         let status = JourneyActivityDisplay.displayStatus(state: widgetState(.arrived), isStale: false)
+         XCTAssertEqual(status, .arrived)
+     }
++    // MARK: W17 T2 1차 — 기존 공개 API의 정규화·단일 시간 소유
++
++    // 깨짐: 종료시각 없는 running을 운행 중 심볼 상태로 남겨 만료 시간과 모순시킨다.
++    func testW17_종료시각없는_running의_표시상태는_도착이다() {
++        let status = JourneyActivityDisplay.displayStatus(
++            state: widgetState(.running), isStale: false
++        )
++
++        XCTAssertEqual(status, .arrived)
++    }
++
++    // 깨짐: 종료시각 없는 running을 접근성에서 운행 중으로 설명한다.
++    func testW17_종료시각없는_running의_접근성은_도착이다() {
++        let label = JourneyActivityDisplay.accessibilityLabel(
++            attributes: widgetAttributes, state: widgetState(.running), isStale: false
++        )
++
++        XCTAssertEqual(label, "343번 간선 버스, 도착지 서울역, 도착")
++    }
++
++    // 깨짐: 긴 이름을 축약하거나, 일시정지 summary에 18:42를 다시 합성한다.
++    func testW17_일시정지_summary는_긴한글이름_전체와_상태만_보존한다() {
++        let attributes = JourneyActivityAttributes(
++            journeyID: "long-journey", busNumber: "서울도심순환심야광역급행12345",
++            busKind: "심야광역급행", destinationName: "서울특별시성동구성수동복합문화체육센터정문앞"
++        )
++
++        let label = JourneyActivityDisplay.accessibilityLabel(
++            attributes: attributes, state: widgetState(.paused, paused: 1122), isStale: false
++        )
++
++        XCTAssertEqual(label, "서울도심순환심야광역급행12345번 심야광역급행 버스, 도착지 서울특별시성동구성수동복합문화체육센터정문앞, 일시정지")
++    }
++
++    // 호환 회귀. 깨짐: 정상 running의 긴 노선·목적지를 접근성에서도 축약한다.
++    func testW17_호환_running_접근성은_긴한글이름을_축약하지_않는다() {
++        let attributes = JourneyActivityAttributes(
++            journeyID: "long-journey", busNumber: "서울도심순환심야광역급행12345",
++            busKind: "심야광역급행", destinationName: "서울특별시성동구성수동복합문화체육센터정문앞"
++        )
++
++        let label = JourneyActivityDisplay.accessibilityLabel(
++            attributes: attributes,
++            state: widgetState(.running, endDate: Date(timeIntervalSince1970: 1_791_883_122)),
++            isStale: false
++        )
++
++        XCTAssertEqual(label, "서울도심순환심야광역급행12345번 심야광역급행 버스, 도착지 서울특별시성동구성수동복합문화체육센터정문앞, 운행 중")
++    }
++
++    // 호환 회귀. 깨짐: 장시간을 시 단위로 바꾸거나 분·초 경계의 0패딩을 잃는다.
++    func testW17_호환_정지시간은_5초부터360분까지_분초를_유지한다() {
++        let examples: [(Int, String)] = [
++            (5, "0:05"), (599, "9:59"), (5999, "99:59"),
++            (7200, "120:00"), (21600, "360:00")
++        ]
++
++        for (seconds, expected) in examples {
++            XCTAssertEqual(JourneyActivityDisplay.pausedTime(seconds: seconds), expected)
++        }
++    }
++
++    // 호환 회귀. 깨짐: stale 입력에서 정지 고정 시간을 도착 문구·countdown으로 바꾼다.
++    func testW17_호환_stale정지도_모든길이의_고정시간을_유지한다() {
++        let examples: [(Int, String)] = [
++            (5, "0:05"), (599, "9:59"), (5999, "99:59"),
++            (7200, "120:00"), (21600, "360:00")
++        ]
++
++        for (seconds, expected) in examples {
++            let content = JourneyActivityDisplay.timeContent(
++                state: widgetState(.paused, paused: seconds), isStale: true, now: widgetNow
++            )
++            XCTAssertEqual(content, .fixed(expected))
++        }
++    }
++
+ }
+diff --git a/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift b/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift
+index 9f4a09a..91820bb 100644
+--- a/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift
++++ b/ios/FocusMateWidgets/JourneyLiveActivityWidget.swift
+@@ -2,80 +2,141 @@ import ActivityKit
+ import SwiftUI
+ import WidgetKit
+ 
+-/// 여행 진행 표시(잠금 화면·다이나믹 아일랜드). 문구·시간 선택은 `JourneyActivityDisplay`가 정하고 여기서는 그리기만 한다.
++private enum JourneyActivityPalette {
++    static let charcoal = Color(red: 0.08, green: 0.085, blue: 0.09)
++    static let paper = Color(red: 0.95, green: 0.945, blue: 0.92)
++}
++
++/// 시간·상태는 같은 presentation에서 읽고 실제 시간 진행은 시스템 renderer에 맡긴다.
+ struct JourneyLiveActivityWidget: Widget {
+     var body: some WidgetConfiguration {
+         ActivityConfiguration(for: JourneyActivityAttributes.self) { context in
+-            JourneyLockScreenView(context: context)
+-                .activityBackgroundTint(Color.black.opacity(0.8))
+-                .activitySystemActionForegroundColor(.white)
++            let presentation = JourneyActivityDisplay.presentation(state: context.state, isStale: context.isStale, now: .now)
++            JourneyLockScreenView(attributes: context.attributes, presentation: presentation)
++                .activityBackgroundTint(JourneyActivityPalette.charcoal)
++                .activitySystemActionForegroundColor(JourneyActivityPalette.paper)
+         } dynamicIsland: { context in
+-            DynamicIsland {
++            let presentation = JourneyActivityDisplay.presentation(state: context.state, isStale: context.isStale, now: .now)
++            let summary = JourneyActivityDisplay.accessibilitySummary(attributes: context.attributes, presentation: presentation)
++            return DynamicIsland {
+                 DynamicIslandExpandedRegion(.leading) {
+-                    Label(context.attributes.busNumber, systemImage: "bus.fill").font(.headline)
++                    Text(JourneyActivityDisplay.busTitle(busNumber: context.attributes.busNumber, busKind: context.attributes.busKind))
++                        .font(.headline).lineLimit(1).minimumScaleFactor(0.8)
++                        .accessibilityLabel(summary)
+                 }
+                 DynamicIslandExpandedRegion(.trailing) {
+-                    JourneyActivityTimeText(context: context).font(.title3.monospacedDigit())
++                    VStack(alignment: .trailing, spacing: 2) {
++                        JourneyActivityTimeText(presentation: presentation)
++                            .font(.title2.weight(.semibold).monospacedDigit())
++                        Text(presentation.status == .running ? "남은 집중 시간" : JourneyActivityDisplay.statusName(presentation.status))
++                            .font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)
++                    }
+                 }
+                 DynamicIslandExpandedRegion(.bottom) {
+-                    HStack {
+-                        Text(context.attributes.destinationName).lineLimit(1)
+-                        Spacer()
+-                        Text(statusName(context))
+-                    }
+-                    .font(.subheadline)
+-                    .foregroundStyle(.secondary)
++                    JourneyActivityTimeline(destination: context.attributes.destinationName, presentation: presentation)
++                        .padding(.top, 6).accessibilityHidden(true)
+                 }
+             } compactLeading: {
+-                Image(systemName: "bus.fill")
+-                    .accessibilityLabel(JourneyActivityDisplay.compactAccessibilityLabel(busNumber: context.attributes.busNumber))
++                Image(systemName: presentation.statusSymbol)
++                    .foregroundStyle(JourneyActivityPalette.paper)
++                    .accessibilityLabel(summary)
+             } compactTrailing: {
+-                JourneyActivityTimeText(context: context).monospacedDigit().frame(maxWidth: 56)
++                JourneyActivityTimeText(presentation: presentation)
++                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
++                    .lineLimit(1).minimumScaleFactor(0.75).frame(maxWidth: 64)
+             } minimal: {
+-                JourneyActivityTimeText(context: context).monospacedDigit()
++                Image(systemName: presentation.statusSymbol)
++                    .foregroundStyle(JourneyActivityPalette.paper)
++                    .accessibilityLabel(summary)
++                    .accessibilityValue(presentation.status == .arrived ? Text("") : JourneyActivityTimeText.text(presentation.time))
+             }
++            .keylineTint(JourneyActivityPalette.paper)
+         }
+     }
+ }
+ 
+-private func statusName(_ context: ActivityViewContext<JourneyActivityAttributes>) -> String {
+-    JourneyActivityDisplay.statusName(JourneyActivityDisplay.displayStatus(state: context.state, isStale: context.isStale))
+-}
+-
+-private struct JourneyLockScreenView: View {
+-    let context: ActivityViewContext<JourneyActivityAttributes>
++struct JourneyLockScreenView: View {
++    let attributes: JourneyActivityAttributes
++    let presentation: JourneyActivityPresentation
+ 
+     var body: some View {
+-        // 설명(버스·도착지·상태)과 카운트다운을 따로 둔다. 하나로 합치면 운행 중 남은 시간이 읽히지 않는다.
+-        HStack(spacing: 12) {
++        HStack(spacing: 16) {
+             HStack(spacing: 12) {
+-                Image(systemName: "bus.fill").font(.title2)
+-                VStack(alignment: .leading, spacing: 2) {
+-                    Text(JourneyActivityDisplay.busTitle(busNumber: context.attributes.busNumber,
+-                                                         busKind: context.attributes.busKind)).font(.headline)
+-                    Text(context.attributes.destinationName).font(.subheadline).lineLimit(1)
++                Image(systemName: presentation.statusSymbol).font(.title2)
++                VStack(alignment: .leading, spacing: 4) {
++                    Text(JourneyActivityDisplay.busTitle(busNumber: attributes.busNumber, busKind: attributes.busKind))
++                        .font(.headline).lineLimit(1)
++                    Text(attributes.destinationName).font(.subheadline).lineLimit(1)
++                    Text(JourneyActivityDisplay.statusName(presentation.status)).font(.caption).foregroundStyle(.secondary)
+                 }
+-                Spacer()
+-                Text(statusName(context)).font(.caption)
++                Spacer(minLength: 4)
+             }
+             .accessibilityElement(children: .ignore)
+-            .accessibilityLabel(JourneyActivityDisplay.accessibilityLabel(attributes: context.attributes,
+-                                                                         state: context.state, isStale: context.isStale))
+-            JourneyActivityTimeText(context: context).font(.title2.monospacedDigit())
++            .accessibilityLabel(JourneyActivityDisplay.accessibilitySummary(attributes: attributes, presentation: presentation))
++            JourneyActivityTimeText(presentation: presentation)
++                .font(.title2.weight(.semibold).monospacedDigit())
++                .lineLimit(1).minimumScaleFactor(0.7)
+         }
+-        .foregroundStyle(.white)
+-        .padding(16)
++        .foregroundStyle(JourneyActivityPalette.paper)
++        .padding(18)
+     }
+ }
+ 
+-/// 운행 중은 시스템 카운트다운, 일시정지·만료는 정적 문자열.
+-private struct JourneyActivityTimeText: View {
+-    let context: ActivityViewContext<JourneyActivityAttributes>
++struct JourneyActivityTimeline: View {
++    let destination: String
++    let presentation: JourneyActivityPresentation
+ 
+     var body: some View {
+-        switch JourneyActivityDisplay.timeContent(state: context.state, isStale: context.isStale, now: .now) {
++        VStack(spacing: 8) {
++            if presentation.progress != .hidden {
++                HStack(spacing: 10) {
++                    // 이 심볼은 여정 표시다. 진행 위치는 시스템 막대의 채움만 나타낸다.
++                    Image(systemName: presentation.statusSymbol).font(.system(size: 16, weight: .medium))
++                    VStack(spacing: 4) {
++                        HStack(alignment: .bottom, spacing: 0) {
++                            ForEach(0..<25, id: \.self) { index in
++                                Rectangle().fill(JourneyActivityPalette.paper.opacity(index.isMultiple(of: 6) ? 0.8 : 0.35))
++                                    .frame(width: 1, height: index.isMultiple(of: 6) ? 9 : 4)
++                                if index != 24 { Spacer(minLength: 1) }
++                            }
++                        }
++                        switch presentation.progress {
++                        case .timer(let range):
++                            ProgressView(timerInterval: range, countsDown: false)
++                                .progressViewStyle(.linear).labelsHidden()
++                        case .fixed(let fraction):
++                            ProgressView(value: fraction).progressViewStyle(.linear)
++                        case .hidden: EmptyView()
++                        }
++                    }
++                }
++            }
++            HStack(alignment: .firstTextBaseline, spacing: 8) {
++                Text(presentation.status == .running ? "출발" : JourneyActivityDisplay.statusName(presentation.status))
++                    .foregroundStyle(.secondary)
++                Spacer(minLength: 8)
++                Text(destination).lineLimit(1).truncationMode(.tail)
++            }
++            .font(.caption)
++        }
++        .tint(JourneyActivityPalette.paper)
++        .foregroundStyle(JourneyActivityPalette.paper)
++    }
++}
++
++struct JourneyActivityTimeText: View {
++    let presentation: JourneyActivityPresentation
++
++    static func text(_ content: JourneyActivityTimeContent) -> Text {
++        switch content {
+         case .countdown(let range): Text(timerInterval: range, countsDown: true, showsHours: false)
+-        case .fixed(let text): Text(text)
++        case .fixed(let value): Text(value)
+         }
+     }
++
++    var body: some View {
++        Self.text(presentation.time)
++            .accessibilityHint(Text("남은 집중 시간"))
++            .accessibilityHidden(presentation.status == .arrived)
++    }
+ }
+diff --git a/ios/Shared/JourneyActivityDisplay.swift b/ios/Shared/JourneyActivityDisplay.swift
+index 6536551..51ba3c6 100644
+--- a/ios/Shared/JourneyActivityDisplay.swift
++++ b/ios/Shared/JourneyActivityDisplay.swift
+@@ -50,15 +50,75 @@ extension JourneyActivityDisplay {
+ 
+     /// 만료된 운행 중 카드는 도착으로 보인다. 일시정지는 만료가 없으므로 그대로다.
+     static func displayStatus(state: JourneyActivityAttributes.ContentState, isStale: Bool) -> JourneyActivityStatus {
+-        state.status == .running && isStale ? .arrived : state.status
++        state.status == .running && (isStale || state.endDate == nil) ? .arrived : state.status
+     }
+ 
+     /// 카드 전체 설명. 만료된 운행 중 카드는 도착으로 읽는다.
+     static func accessibilityLabel(attributes: JourneyActivityAttributes,
+                                    state: JourneyActivityAttributes.ContentState, isStale: Bool) -> String {
+         let status = displayStatus(state: state, isStale: isStale)
+-        return accessibilityDescription(busNumber: attributes.busNumber, busKind: attributes.busKind,
+-                                        destination: attributes.destinationName, status: status,
+-                                        pausedRemainingSeconds: state.pausedRemainingSeconds)
++        return "\(attributes.busNumber)번 \(attributes.busKind) 버스, 도착지 \(attributes.destinationName), \(statusName(status))"
++    }
++}
++
++
++/// 시스템 진행 표시와 정적 정지 진행을 구분한다.
++enum JourneyActivityProgressContent: Equatable {
++    case timer(ClosedRange<Date>)
++    case fixed(Double)
++    case hidden
++}
++
++struct JourneyActivityPresentation: Equatable {
++    let status: JourneyActivityStatus
++    let time: JourneyActivityTimeContent
++    let progress: JourneyActivityProgressContent
++    let statusSymbol: String
++}
++
++extension JourneyActivityDisplay {
++    static func presentation(state: JourneyActivityAttributes.ContentState, isStale: Bool, now: Date) -> JourneyActivityPresentation {
++        let status = displayStatus(state: state, isStale: isStale)
++        let symbol: String
++        switch status {
++        case .running: symbol = "bus.fill"
++        case .paused: symbol = "pause.fill"
++        case .arrived: symbol = "checkmark"
++        }
++        let progress: JourneyActivityProgressContent
++        if let fraction = progressFraction(state: state, isStale: isStale, now: now) {
++            if status == .paused {
++                progress = .fixed(fraction)
++            } else if let end = state.endDate, let total = state.totalSeconds {
++                progress = .timer(end.addingTimeInterval(-Double(total))...end)
++            } else {
++                progress = .hidden
++            }
++        } else {
++            progress = .hidden
++        }
++        return JourneyActivityPresentation(status: status, time: timeContent(state: state, isStale: isStale, now: now),
++                                           progress: progress, statusSymbol: symbol)
++    }
++
++    static func remainingSeconds(state: JourneyActivityAttributes.ContentState, isStale: Bool, now: Date) -> Int {
++        switch displayStatus(state: state, isStale: isStale) {
++        case .paused: return max(0, state.pausedRemainingSeconds ?? 0)
++        case .running:
++            guard let end = state.endDate else { return 0 }
++            return max(0, Int(ceil(end.timeIntervalSince(now))))
++        case .arrived: return 0
++        }
++    }
++
++    static func progressFraction(state: JourneyActivityAttributes.ContentState, isStale: Bool, now: Date) -> Double? {
++        guard let total = state.totalSeconds, total > 0,
++              displayStatus(state: state, isStale: isStale) != .arrived else { return nil }
++        let remaining = remainingSeconds(state: state, isStale: isStale, now: now)
++        return min(1, max(0, 1 - Double(remaining) / Double(total)))
++    }
++
++    static func accessibilitySummary(attributes: JourneyActivityAttributes, presentation: JourneyActivityPresentation) -> String {
++        "\(attributes.busNumber)번 \(attributes.busKind) 버스, 도착지 \(attributes.destinationName), \(statusName(presentation.status))"
+     }
+ }
+
+# NEW ios/FocusMateTests/JourneyActivityPresentationTests.swift
+import Foundation
+import XCTest
+@testable import FocusMate
+
+final class JourneyActivityPresentationTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_791_882_000)
+
+    private func state(
+        _ status: JourneyActivityStatus = .running,
+        end: Date? = nil, paused: Int? = nil, total: Int? = 1800
+    ) -> JourneyActivityAttributes.ContentState {
+        JourneyActivityAttributes.ContentState(
+            status: status, endDate: end, pausedRemainingSeconds: paused, totalSeconds: total
+        )
+    }
+
+    // 깨짐: 잔여/총 시간을 진행률로 그대로 반환하거나 전체 시간으로 나누지 않는다.
+    func testW17_잔여1122초의_진행률은_0점3766667이다() throws {
+        let input = state(end: Date(timeIntervalSince1970: 1_791_883_122))
+
+        let value = try XCTUnwrap(JourneyActivityDisplay.progressFraction(state: input, isStale: false, now: now))
+
+        XCTAssertEqual(value, 0.3766667, accuracy: 0.000001)
+    }
+
+    // 깨짐: 종료 근처에도 시작 진행률을 고정하거나 잔여초를 잘못 계산한다.
+    func testW17_잔여135초의_진행률은_0점925다() throws {
+        let input = state(end: Date(timeIntervalSince1970: 1_791_882_135))
+
+        let value = try XCTUnwrap(JourneyActivityDisplay.progressFraction(state: input, isStale: false, now: now))
+
+        XCTAssertEqual(value, 0.925, accuracy: 0.000001)
+    }
+
+    // 깨짐: 진행 막대를 now...end로 만들어 현재 잔여 시간 전체를 새 세션으로 취급한다.
+    func testW17_running_진행막대는_종료에서총1800초를뺀_날짜범위다() {
+        let input = state(end: Date(timeIntervalSince1970: 1_791_883_122))
+
+        let result = JourneyActivityDisplay.presentation(state: input, isStale: false, now: now)
+
+        XCTAssertEqual(result.progress, .timer(
+            Date(timeIntervalSince1970: 1_791_881_322)...Date(timeIntervalSince1970: 1_791_883_122)
+        ))
+        XCTAssertEqual(result.time, .countdown(
+            Date(timeIntervalSince1970: 1_791_882_000)...Date(timeIntervalSince1970: 1_791_883_122)
+        ))
+    }
+
+    // 깨짐: now가 60초 이동해도 잔여를 시작 표본1122초로 고정한다.
+    func testW17_60초후_잔여는1062초다() {
+        let input = state(end: Date(timeIntervalSince1970: 1_791_883_122))
+
+        let result = JourneyActivityDisplay.remainingSeconds(
+            state: input, isStale: false, now: Date(timeIntervalSince1970: 1_791_882_060)
+        )
+
+        XCTAssertEqual(result, 1062)
+    }
+
+    // 깨짐: 관찰 시각이 지나도 진행률을 고정하거나 날짜 기반 진행 범위를 이동시킨다.
+    func testW17_60초후_진행률은0점41이며_진행날짜범위는_유지된다() throws {
+        let input = state(end: Date(timeIntervalSince1970: 1_791_883_122))
+        let observed = Date(timeIntervalSince1970: 1_791_882_060)
+
+        let fraction = try XCTUnwrap(JourneyActivityDisplay.progressFraction(state: input, isStale: false, now: observed))
+        let result = JourneyActivityDisplay.presentation(state: input, isStale: false, now: observed)
+
+        XCTAssertEqual(fraction, 0.41, accuracy: 0.000001)
+        XCTAssertEqual(result.progress, .timer(
+            Date(timeIntervalSince1970: 1_791_881_322)...Date(timeIntervalSince1970: 1_791_883_122)
+        ))
+    }
+
+    // 깨짐: stale을 정지보다 우선하거나 정지 중 진행 채움을 계속 움직인다.
+    func testW17_stale정지의_진행채움은300초후에도_0점3766667이다() throws {
+        let input = state(.paused, paused: 1122)
+
+        let result = JourneyActivityDisplay.presentation(
+            state: input, isStale: true, now: Date(timeIntervalSince1970: 1_791_882_300)
+        )
+
+        XCTAssertEqual(result.status, .paused)
+        XCTAssertEqual(result.time, .fixed("18:42"))
+        guard case .fixed(let fraction) = result.progress else {
+            XCTFail("정지 진행 채움은 fixed여야 한다")
+            return
+        }
+        XCTAssertEqual(fraction, 0.3766667, accuracy: 0.000001)
+        let sampled = try XCTUnwrap(JourneyActivityDisplay.progressFraction(state: input, isStale: true, now: now))
+        XCTAssertEqual(sampled, 0.3766667, accuracy: 0.000001)
+    }
+
+    // 깨짐: 정지 남은 시간에서 관찰 시각300초를 차감하거나 stale 때문에0을 반환한다.
+    func testW17_stale정지의_잔여1122초는300초후에도_유지된다() {
+        let input = state(.paused, paused: 1122)
+
+        let result = JourneyActivityDisplay.remainingSeconds(
+            state: input, isStale: true, now: Date(timeIntervalSince1970: 1_791_882_300)
+        )
+
+        XCTAssertEqual(result, 1122)
+    }
+
+    // 깨짐: 잔여가 총 시간보다 클 때 음수 진행률을 그대로 반환한다.
+    func testW17_잔여1900초는_진행률0으로_제한한다() throws {
+        let input = state(.paused, paused: 1900)
+
+        let result = try XCTUnwrap(JourneyActivityDisplay.progressFraction(state: input, isStale: false, now: now))
+
+        XCTAssertEqual(result, 0, accuracy: 0.000001)
+    }
+
+    // 깨짐: 음수 잔여로 진행률이1을 넘거나 진행률을 숨긴다.
+    func testW17_잔여음수5초는_진행률1로_제한한다() throws {
+        let input = state(.paused, paused: -5)
+
+        let result = try XCTUnwrap(JourneyActivityDisplay.progressFraction(state: input, isStale: false, now: now))
+
+        XCTAssertEqual(result, 1, accuracy: 0.000001)
+    }
+
+    // 깨짐: 소수 잔여초를 버림하여 종료까지 남은 시간을1초 짧게 표시한다.
+    func testW17_잔여1점2초는_2초로_올림한다() {
+        let input = state(end: Date(timeIntervalSince1970: 1_791_882_001.2))
+
+        let result = JourneyActivityDisplay.remainingSeconds(state: input, isStale: false, now: now)
+
+        XCTAssertEqual(result, 2)
+    }
+
+    // 호환 회귀. 깨짐: nil/0/음수 총 시간에서 허위 진행률·진행 막대를 제공한다.
+    func testW17_호환_유효하지않은총시간은_진행을숨기고_시간을보존한다() {
+        let totals: [Int?] = [nil, 0, -1]
+        for total in totals {
+            let input = state(end: Date(timeIntervalSince1970: 1_791_883_122), total: total)
+
+            let result = JourneyActivityDisplay.presentation(state: input, isStale: false, now: now)
+
+            XCTAssertEqual(result.status, .running)
+            XCTAssertEqual(result.time, .countdown(
+                Date(timeIntervalSince1970: 1_791_882_000)...Date(timeIntervalSince1970: 1_791_883_122)
+            ))
+            XCTAssertEqual(result.progress, .hidden)
+            XCTAssertNil(JourneyActivityDisplay.progressFraction(state: input, isStale: false, now: now))
+        }
+    }
+
+    // 호환 회귀. 깨짐: 만료·도착·종료누락 중 하나에서 문구·상태·진행이 서로 어긋난다.
+    func testW17_호환_missingend_stale_arrived는_도착으로_정규화한다() {
+        let examples: [(JourneyActivityAttributes.ContentState, Bool)] = [
+            (state(), false),
+            (state(end: Date(timeIntervalSince1970: 1_791_883_122)), true),
+            (state(.arrived), false)
+        ]
+        for (input, stale) in examples {
+            let result = JourneyActivityDisplay.presentation(state: input, isStale: stale, now: now)
+
+            XCTAssertEqual(result.status, .arrived)
+            XCTAssertEqual(result.time, .fixed("도착했어요"))
+            XCTAssertEqual(result.progress, .hidden)
+        }
+    }
+
+    // 호환 회귀. 깨짐: 장시간 정지 표시가 시간 단위로 바뀌거나 stale을 도착으로 덮는다.
+    func testW17_호환_장시간정지는_120분과360분을_유지한다() {
+        let examples: [(Int, String)] = [(7200, "120:00"), (21600, "360:00")]
+        for (remaining, expected) in examples {
+            let input = state(.paused, paused: remaining, total: nil)
+
+            let result = JourneyActivityDisplay.presentation(state: input, isStale: true, now: now)
+
+            XCTAssertEqual(result.status, .paused)
+            XCTAssertEqual(result.time, .fixed(expected))
+            XCTAssertEqual(result.progress, .hidden)
+        }
+    }
+
+    // 호환 회귀. 깨짐: summary가 긴 이름을 축약하거나 별도 시간 요소와 시간을 중복한다.
+    func testW17_호환_장시간정지summary는_전체이름과_상태만_제공한다() {
+        let attributes = JourneyActivityAttributes(
+            journeyID: "long-journey", busNumber: "서울도심순환심야광역급행12345",
+            busKind: "심야광역급행", destinationName: "서울특별시성동구성수동복합문화체육센터정문앞"
+        )
+        for remaining in [7200, 21600] {
+            let result = JourneyActivityDisplay.presentation(
+                state: state(.paused, paused: remaining, total: nil), isStale: true, now: now
+            )
+
+            let summary = JourneyActivityDisplay.accessibilitySummary(attributes: attributes, presentation: result)
+
+            XCTAssertEqual(summary, "서울도심순환심야광역급행12345번 심야광역급행 버스, 도착지 서울특별시성동구성수동복합문화체육센터정문앞, 일시정지")
+        }
+    }
+}
+
+# NEW ios/FocusMateWidgets/JourneyLiveActivityPreviews.swift
+#if DEBUG
+import ActivityKit
+import SwiftUI
+import WidgetKit
+
+private let previewJourney = JourneyActivityAttributes(journeyID: "preview", busNumber: "143", busKind: "간선", destinationName: "서울숲")
+
+#Preview("확장 · 운행/정지/장시간", as: .dynamicIsland(.expanded), using: previewJourney) {
+    JourneyLiveActivityWidget()
+} contentStates: {
+    JourneyActivityAttributes.ContentState(status: .running, endDate: .now.addingTimeInterval(1122), pausedRemainingSeconds: nil, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .paused, endDate: nil, pausedRemainingSeconds: 1122, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .running, endDate: .now.addingTimeInterval(135), pausedRemainingSeconds: nil, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .arrived, endDate: nil, pausedRemainingSeconds: nil, totalSeconds: 1800)
+}
+
+#Preview("Compact · 시간 경계", as: .dynamicIsland(.compact), using: previewJourney) {
+    JourneyLiveActivityWidget()
+} contentStates: {
+    JourneyActivityAttributes.ContentState(status: .running, endDate: .now.addingTimeInterval(5), pausedRemainingSeconds: nil, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .paused, endDate: nil, pausedRemainingSeconds: 599, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .paused, endDate: nil, pausedRemainingSeconds: 5999, totalSeconds: 7200)
+    JourneyActivityAttributes.ContentState(status: .paused, endDate: nil, pausedRemainingSeconds: 7200, totalSeconds: 7200)
+    JourneyActivityAttributes.ContentState(status: .running, endDate: .now.addingTimeInterval(21600), pausedRemainingSeconds: nil, totalSeconds: 21600)
+}
+
+#Preview("Minimal · 상태", as: .dynamicIsland(.minimal), using: previewJourney) {
+    JourneyLiveActivityWidget()
+} contentStates: {
+    JourneyActivityAttributes.ContentState(status: .running, endDate: .now.addingTimeInterval(1122), pausedRemainingSeconds: nil, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .paused, endDate: nil, pausedRemainingSeconds: 1122, totalSeconds: 1800)
+    JourneyActivityAttributes.ContentState(status: .arrived, endDate: nil, pausedRemainingSeconds: nil)
+}
+
+#Preview("잠금 · 긴 한국어", as: .content, using: JourneyActivityAttributes(journeyID: "long", busNumber: "서울도심순환12345", busKind: "심야광역급행", destinationName: "서울특별시성동구성수동복합문화체육센터정문앞")) {
+    JourneyLiveActivityWidget()
+} contentStates: {
+    JourneyActivityAttributes.ContentState(status: .running, endDate: .now.addingTimeInterval(21600), pausedRemainingSeconds: nil, totalSeconds: 21600)
+    JourneyActivityAttributes.ContentState(status: .paused, endDate: nil, pausedRemainingSeconds: 1122, totalSeconds: nil)
+}
+#endif

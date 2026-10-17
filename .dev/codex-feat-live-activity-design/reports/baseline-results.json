@@ -1,0 +1,27 @@
+[
+  {
+    "type": "node",
+    "action": "test",
+    "command": [
+      "npm",
+      "test"
+    ],
+    "exit_code": 0,
+    "seconds": 8.2,
+    "warnings": 0,
+    "log": "/Users/bonseung/.codex/worktrees/w17-live-activity-design/new/.dev/codex-feat-live-activity-design/baseline-node-test.log"
+  },
+  {
+    "type": "node",
+    "action": "build",
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "exit_code": 0,
+    "seconds": 0.2,
+    "warnings": 0,
+    "log": "/Users/bonseung/.codex/worktrees/w17-live-activity-design/new/.dev/codex-feat-live-activity-design/baseline-node-build.log"
+  }
+]

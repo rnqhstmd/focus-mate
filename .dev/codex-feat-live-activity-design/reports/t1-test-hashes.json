@@ -1,0 +1,6 @@
+{
+  "ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift": "b5387d8a263664b27c7fc3fa3f645d437b91ed86d0eabc73b3ca33ae254cb305",
+  "ios/FocusMateTests/JourneyLiveActivitySyncTests.swift": "7cc81b04afdd2259dc5fe24f92c22f9273193724e270d661497de811efacad72",
+  "ios/FocusMateTests/JourneyLiveActivityCleanupTests.swift": "2ba761584056187315704fa892c18e51ddf07a4f116a81bbdff4108fb2dfe102",
+  "ios/FocusMateTests/JourneyActivityContentStateCodableTests.swift": "ea3fa8d20af6cbb060c67b98a8e3e0cf3ed5e600790802ee642911bf19e90fd5"
+}

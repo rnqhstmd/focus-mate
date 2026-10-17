@@ -1,0 +1,293 @@
+diff --git a/ios/FocusMate/JourneyLiveActivityPolicy.swift b/ios/FocusMate/JourneyLiveActivityPolicy.swift
+index 495506c..bbfed01 100644
+--- a/ios/FocusMate/JourneyLiveActivityPolicy.swift
++++ b/ios/FocusMate/JourneyLiveActivityPolicy.swift
+@@ -32,19 +32,19 @@ enum JourneyLiveActivityPolicy {
+     }
+ 
+     /// 운행 중은 종료 시각에 만료되고, 일시정지는 만료가 없다(BR-5). 도착은 종료 대상이라 요청이 없다.
+-    static func request(status: JourneyTimerController.Status, remainingSeconds: Int, now: Date) -> JourneyActivityRequest? {
++    static func request(status: JourneyTimerController.Status, remainingSeconds: Int, now: Date, totalSeconds: Int? = nil) -> JourneyActivityRequest? {
+         switch status {
+         case .running:
+             let endDate = now.addingTimeInterval(TimeInterval(remainingSeconds))
+-            return JourneyActivityRequest(state: .init(status: .running, endDate: endDate, pausedRemainingSeconds: nil),
++            return JourneyActivityRequest(state: .init(status: .running, endDate: endDate, pausedRemainingSeconds: nil, totalSeconds: totalSeconds),
+                                           staleDate: endDate)
+-        case .paused: return pausedRequest(remainingSeconds: remainingSeconds)
++        case .paused: return pausedRequest(remainingSeconds: remainingSeconds, totalSeconds: totalSeconds)
+         case .arrived: return nil
+         }
+     }
+ 
+-    static func pausedRequest(remainingSeconds: Int) -> JourneyActivityRequest {
+-        JourneyActivityRequest(state: .init(status: .paused, endDate: nil, pausedRemainingSeconds: max(0, remainingSeconds)),
++    static func pausedRequest(remainingSeconds: Int, totalSeconds: Int? = nil) -> JourneyActivityRequest {
++        JourneyActivityRequest(state: .init(status: .paused, endDate: nil, pausedRemainingSeconds: max(0, remainingSeconds), totalSeconds: totalSeconds),
+                                staleDate: nil)
+     }
+ 
+@@ -62,6 +62,6 @@ enum JourneyLiveActivityPolicy {
+         let (reuseID, endIDs) = appearPlan(existing: existing, journeyID: journey.id)
+         let remaining = journey.totalSeconds - journey.progress.elapsedSeconds
+         return JourneyLaunchPlan(endIDs: endIDs,
+-                                 pausedUpdate: reuseID.map { .init(id: $0, request: pausedRequest(remainingSeconds: remaining)) })
++                                 pausedUpdate: reuseID.map { .init(id: $0, request: pausedRequest(remainingSeconds: remaining, totalSeconds: journey.totalSeconds)) })
+     }
+ }
+diff --git a/ios/FocusMate/JourneyLiveActivitySync.swift b/ios/FocusMate/JourneyLiveActivitySync.swift
+index 754be65..f87a607 100644
+--- a/ios/FocusMate/JourneyLiveActivitySync.swift
++++ b/ios/FocusMate/JourneyLiveActivitySync.swift
+@@ -10,6 +10,7 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
+         let pausedRemainingSeconds: Int?
+     }
+ 
++    private let totalSeconds: Int
+     private let attributes: JourneyActivityAttributes
+     private let gateway: LiveActivityGateway
+     private let now: @MainActor () -> Date
+@@ -20,6 +21,7 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
+     private var lastSent: SentKey?
+ 
+     init(journey: JourneySnapshot, gateway: LiveActivityGateway, now: @escaping @MainActor () -> Date = { Date() }) {
++        totalSeconds = journey.totalSeconds
+         attributes = JourneyLiveActivityPolicy.attributes(for: journey)
+         self.gateway = gateway
+         self.now = now
+@@ -28,7 +30,7 @@ final class JourneyLiveActivitySync: JourneyTimerObserving {
+     func timerDidChange(status: JourneyTimerController.Status, remainingSeconds: Int) {
+         reconcileOnce()
+         guard !startFailed else { return }
+-        guard let request = JourneyLiveActivityPolicy.request(status: status, remainingSeconds: remainingSeconds, now: now()) else {
++        guard let request = JourneyLiveActivityPolicy.request(status: status, remainingSeconds: remainingSeconds, now: now(), totalSeconds: totalSeconds) else {
+             if let activityID { gateway.end(id: activityID) }
+             activityID = nil
+             return
+diff --git a/ios/FocusMateTests/JourneyLiveActivityCleanupTests.swift b/ios/FocusMateTests/JourneyLiveActivityCleanupTests.swift
+index 9444334..7171006 100644
+--- a/ios/FocusMateTests/JourneyLiveActivityCleanupTests.swift
++++ b/ios/FocusMateTests/JourneyLiveActivityCleanupTests.swift
+@@ -100,4 +100,19 @@ final class JourneyLiveActivityCleanupTests: XCTestCase {
+         XCTAssertEqual(gateway.count(.update), 0)
+         XCTAssertEqual(gateway.activeActivities.count, 0)
+     }
++    // 깨짐: 재실행 정리의 일시정지 갱신에서 저장 여정의 총 시간을 누락한다.
++    func testW17_재실행_정리는_기존활동에_총3600초를_보강한다() throws {
++        let gateway = RecordingLiveActivityGateway(existing: [
++            LiveActivityHandle(id: "old-1", journeyID: "journey-1")
++        ])
++        let journey = BoardingFixtures.journey(minutes: 60, phase: .departed, elapsedSeconds: 600)
++
++        JourneyLiveActivityCleanup.atLaunch(gateway: gateway, journey: journey)
++
++        let request = try XCTUnwrap(gateway.entries.first { $0.op == .update }?.request)
++        let data = try JSONEncoder().encode(request.state)
++        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++        XCTAssertEqual(object["totalSeconds"] as? Int, 3600)
++    }
++
+ }
+diff --git a/ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift b/ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift
+index a54590f..b19cb03 100644
+--- a/ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift
++++ b/ios/FocusMateTests/JourneyLiveActivityPolicyTests.swift
+@@ -156,9 +156,10 @@ final class JourneyLiveActivityPolicyTests: XCTestCase {
+         let plan = JourneyLiveActivityPolicy.launchPlan(existing: [handle("a", "j-1")], journey: departed())
+ 
+         XCTAssertEqual(plan.endIDs, [])
+-        XCTAssertEqual(plan.pausedUpdate, JourneyLaunchPlan.PausedUpdate(
+-            id: "a", request: JourneyLiveActivityPolicy.pausedRequest(remainingSeconds: 3000)
+-        ))
++        XCTAssertEqual(plan.pausedUpdate?.id, "a")
++        XCTAssertEqual(plan.pausedUpdate?.request.state.status, .paused)
++        XCTAssertNil(plan.pausedUpdate?.request.state.endDate)
++        XCTAssertNil(plan.pausedUpdate?.request.staleDate)
+         XCTAssertEqual(plan.pausedUpdate?.request.state.pausedRemainingSeconds, 3000)
+     }
+ 
+@@ -198,4 +199,18 @@ final class JourneyLiveActivityPolicyTests: XCTestCase {
+         XCTAssertEqual(running, paused)
+         XCTAssertEqual(running.pausedUpdate?.request.state.pausedRemainingSeconds, 3000)
+     }
++    // 깨짐: launch 계획이 잔여 1122초를 총 시간으로 쓰거나 총 시간을 누락한다.
++    func testW17_launch계획은_30분여정의_총1800초를_전달한다() throws {
++        let journey = F.journey(id: "j-1", minutes: 30, phase: .departed, elapsedSeconds: 678)
++
++        let plan = JourneyLiveActivityPolicy.launchPlan(
++            existing: [handle("a", "j-1")], journey: journey
++        )
++
++        let request = try XCTUnwrap(plan.pausedUpdate?.request)
++        let data = try JSONEncoder().encode(request.state)
++        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++        XCTAssertEqual(object["totalSeconds"] as? Int, 1800)
++    }
++
+ }
+diff --git a/ios/FocusMateTests/JourneyLiveActivitySyncTests.swift b/ios/FocusMateTests/JourneyLiveActivitySyncTests.swift
+index 3bcf283..ed3309f 100644
+--- a/ios/FocusMateTests/JourneyLiveActivitySyncTests.swift
++++ b/ios/FocusMateTests/JourneyLiveActivitySyncTests.swift
+@@ -22,6 +22,7 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
+ 
+     func makeRig(
+         existing: [LiveActivityHandle] = [],
++        minutes: Int = 60,
+         elapsed: Int = 0,
+         paused: Bool = false,
+         autoStart: Bool = true,
+@@ -31,7 +32,7 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
+         let saver = FakeProgressSaver(results: results)
+         let gateway = RecordingLiveActivityGateway(existing: existing)
+         let journey = BoardingFixtures.journey(
+-            minutes: 60, busID: "421", busNumber: "343", busKind: "간선", phase: .departed, elapsedSeconds: elapsed, paused: paused
++            minutes: minutes, busID: "421", busNumber: "343", busKind: "간선", phase: .departed, elapsedSeconds: elapsed, paused: paused
+         )
+         let start = base
+         let sync = try XCTUnwrap(JourneyLiveActivitySync(
+@@ -46,6 +47,70 @@ final class JourneyLiveActivitySyncTests: XCTestCase {
+                    sync: sync, journey: journey, base: start)
+     }
+ 
++    // MARK: W17 총 시간 전달
++
++    private func totalSecondsJSON(_ request: JourneyActivityRequest) throws -> Int? {
++        let data = try JSONEncoder().encode(request.state)
++        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
++        return object["totalSeconds"] as? Int
++    }
++
++    // 깨짐: 실행 요청에서 총 시간을 누락하거나 잔여 1122초를 총 시간으로 전달한다.
++    func testW17_실행_시작은_30분의_총1800초를_전달한다() throws {
++        let rig = try makeRig(minutes: 30, elapsed: 678)
++
++        rig.controller.appear()
++
++        let request = try XCTUnwrap(rig.gateway.entries.first?.request)
++        XCTAssertEqual(request.state.status, .running)
++        XCTAssertEqual(try totalSecondsJSON(request), 1800)
++    }
++
++    // 깨짐: 일시정지 요청에서 총 시간을 버리거나 잔여 시간으로 덮어쓴다.
++    func testW17_일시정지는_남은1122초와_총1800초를_전달한다() throws {
++        let rig = try makeRig(minutes: 30)
++        rig.controller.appear()
++        rig.clock.advance(by: .seconds(678), notify: false)
++
++        rig.controller.pause()
++
++        let request = try XCTUnwrap(rig.gateway.entries.last?.request)
++        XCTAssertEqual(request.state.status, .paused)
++        XCTAssertEqual(request.state.pausedRemainingSeconds, 1122)
++        XCTAssertEqual(try totalSecondsJSON(request), 1800)
++    }
++
++    // 깨짐: 재개 요청에서 총 시간을 누락하거나 일시정지 300초를 총 시간에 더한다.
++    func testW17_300초_정지후_재개도_총1800초를_전달한다() throws {
++        let rig = try makeRig(minutes: 30)
++        rig.controller.appear()
++        rig.clock.advance(by: .seconds(678), notify: false)
++        rig.controller.pause()
++        rig.clock.advance(by: .seconds(300), notify: false)
++
++        rig.controller.resume()
++
++        let request = try XCTUnwrap(rig.gateway.entries.last?.request)
++        XCTAssertEqual(request.state.status, .running)
++        XCTAssertEqual(request.state.endDate, Date(timeIntervalSince1970: 1_791_884_100))
++        XCTAssertEqual(try totalSecondsJSON(request), 1800)
++    }
++
++    // 깨짐: 기존 활동 재사용 갱신에 총 시간을 보강하지 않는다.
++    func testW17_기존활동_재사용은_60분의_총3600초를_보강한다() throws {
++        let rig = try makeRig(
++            existing: [LiveActivityHandle(id: "old-1", journeyID: "journey-1")],
++            minutes: 60, elapsed: 600
++        )
++
++        rig.controller.appear()
++
++        XCTAssertEqual(rig.gateway.count(.start), 0)
++        XCTAssertEqual(rig.gateway.entries.last?.op, .update)
++        let request = try XCTUnwrap(rig.gateway.entries.last?.request)
++        XCTAssertEqual(try totalSecondsJSON(request), 3600)
++    }
++
+     // MARK: AC-1
+ 
+     // 깨짐: 진입 시 start를 안 하거나 2번 하거나, endDate/staleDate/속성(버스·종류·목적지·journeyID)이 틀리면 실패한다.
+diff --git a/ios/Shared/JourneyActivityAttributes.swift b/ios/Shared/JourneyActivityAttributes.swift
+index b6271fa..1cc9123 100644
+--- a/ios/Shared/JourneyActivityAttributes.swift
++++ b/ios/Shared/JourneyActivityAttributes.swift
+@@ -14,6 +14,15 @@ struct JourneyActivityAttributes: ActivityAttributes {
+         var endDate: Date?
+         /// 일시정지에만 있다. 멈춘 남은 초.
+         var pausedRemainingSeconds: Int?
++        /// 진행 막대의 전체 집중 시간. 이전 활동에는 없을 수 있다.
++        var totalSeconds: Int?
++
++        init(status: JourneyActivityStatus, endDate: Date?, pausedRemainingSeconds: Int?, totalSeconds: Int? = nil) {
++            self.status = status
++            self.endDate = endDate
++            self.pausedRemainingSeconds = pausedRemainingSeconds
++            self.totalSeconds = totalSeconds
++        }
+     }
+ 
+     let journeyID: String
+
+import Foundation
+import XCTest
+@testable import FocusMate
+
+final class JourneyActivityContentStateCodableTests: XCTestCase {
+    private func roundTrip(_ json: String) throws -> [String: Any] {
+        let state = try JSONDecoder().decode(
+            JourneyActivityAttributes.ContentState.self, from: Data(json.utf8)
+        )
+        let data = try JSONEncoder().encode(state)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    // 깨짐: 실행 상태의 총 시간을 디코딩 또는 인코딩 중 버린다.
+    func testW17_실행_JSON왕복은_총1800초를_보존한다() throws {
+        let object = try roundTrip(
+            #"{"status":"running","endDate":813576522,"totalSeconds":1800}"#
+        )
+
+        XCTAssertEqual(object["totalSeconds"] as? Int, 1800)
+        XCTAssertEqual(object["status"] as? String, "running")
+    }
+
+    // 깨짐: 일시정지 상태의 총 시간을 누락하거나 고정 잔여로 대체한다.
+    func testW17_일시정지_JSON왕복은_총3600초를_보존한다() throws {
+        let object = try roundTrip(
+            #"{"status":"paused","pausedRemainingSeconds":1122,"totalSeconds":3600}"#
+        )
+
+        XCTAssertEqual(object["totalSeconds"] as? Int, 3600)
+        XCTAssertEqual(object["pausedRemainingSeconds"] as? Int, 1122)
+    }
+
+    // 깨짐: 총 시간이 없는 이전 실행 상태를 복원하지 못하거나 임의 총 시간을 만든다.
+    func testW17_legacy_총시간누락_JSON은_시간과_상태를_보존한다() throws {
+        let object = try roundTrip(#"{"status":"running","endDate":813576522}"#)
+
+        XCTAssertEqual(object["status"] as? String, "running")
+        XCTAssertEqual(object["endDate"] as? Double, 813576522)
+        XCTAssertTrue(object["totalSeconds"] == nil || object["totalSeconds"] is NSNull)
+    }
+
+    // 깨짐: 명시적 null 총 시간의 이전 정지 상태를 거절하거나 잔여 시간을 잃는다.
+    func testW17_legacy_총시간null_JSON은_정지잔여를_보존한다() throws {
+        let object = try roundTrip(
+            #"{"status":"paused","pausedRemainingSeconds":1122,"totalSeconds":null}"#
+        )
+
+        XCTAssertEqual(object["status"] as? String, "paused")
+        XCTAssertEqual(object["pausedRemainingSeconds"] as? Int, 1122)
+        XCTAssertTrue(object["totalSeconds"] == nil || object["totalSeconds"] is NSNull)
+    }
+}

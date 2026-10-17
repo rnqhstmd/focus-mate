@@ -7,6 +7,10 @@ struct RecordsView: View {
     let services: JourneyServices
     @State private var browser: RecordsBrowser
     @State private var editing: EditingMemo?
+    @State private var showsAnalytics = false
+    @State private var widgetEntry: WidgetAnalyticsEntry?
+    @State private var pendingAnalyticsRecordID: String?
+    @Environment(\.scenePhase) private var scenePhase
 
     private struct EditingMemo: Identifiable { let id: String; let memo: String }
 
@@ -24,6 +28,9 @@ struct RecordsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("기록").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
+                Button("분석 보기") { widgetEntry = nil; refreshBrowserToday(); showsAnalytics = true }
+                    .buttonStyle(.bordered).frame(minHeight: 44)
+                    .accessibilityIdentifier("records.analytics.open")
                 yearBar
                 Text(RecordsCalendar.summary(year: browser.year, records: records, today: browser.today).text)
                     .foregroundStyle(.secondary).accessibilityIdentifier("records.summary")
@@ -33,12 +40,51 @@ struct RecordsView: View {
             .padding(24)
         }
         .navigationTitle("기록").navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $showsAnalytics) {
+            RecordsAnalyticsView(model: model, selectedDay: widgetEntry?.day ?? browser.selectedDay.key, initialTag: widgetEntry?.tag, initialKind: widgetEntry?.kind) { id in
+                guard records.contains(where: { $0.id.utf16.elementsEqual(id.utf16) }) else { return }
+                pendingAnalyticsRecordID = id
+                showsAnalytics = false
+            }
+            .id(widgetEntry.map { "\($0.day)|\($0.kind.rawValue)|\($0.tag ?? "")" } ?? "records")
+            .onDisappear { openPendingAnalyticsRecord() }
+        }
+        .onAppear {
+            if let entry = model.consumeWidgetAnalyticsEntry() {
+                widgetEntry = entry
+                if let day = RecordDay(key: entry.day) { _ = browser.select(day) }
+                showsAnalytics = true
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { refreshBrowserToday() } }
         .sheet(item: $editing) { item in
             RecordMemoEditor(model: model, recordID: item.id, memo: item.memo) { editing = nil }
         }
         #if DEBUG
         .overlay(alignment: .bottomLeading) { diagnostics }
         #endif
+    }
+
+    private func refreshBrowserToday() {
+        let today = RecordDay.from(model.recordClock.now(), timeZone: timeZone)
+        guard today != browser.today else { return }
+        var updated = RecordsBrowser(today: today)
+        updated.select(min(browser.selectedDay, today))
+        browser = updated
+    }
+
+    private func openPendingAnalyticsRecord() {
+        guard let id = pendingAnalyticsRecordID else { return }
+        pendingAnalyticsRecordID = nil
+        guard let record = records.first(where: { $0.id.utf16.elementsEqual(id.utf16) }),
+              let day = RecordDay(key: record.date) else { return }
+        refreshBrowserToday()
+        guard browser.select(day) else { return }
+        let dated = RecordsCalendar.records(on: day, in: records)
+        if let index = dated.firstIndex(where: { $0.id.utf16.elementsEqual(id.utf16) }) {
+            while browser.listLimit <= index { browser.showMore() }
+        }
+        editing = EditingMemo(id: record.id, memo: record.memo)
     }
 
     private var yearBar: some View {

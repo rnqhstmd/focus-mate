@@ -1,0 +1,25 @@
+{
+  "question": {
+    "version": 1,
+    "question_set_id": "90969c13-0814-4728-b5f5-ec40c0b84236",
+    "phase": "implement",
+    "questions": [
+      {
+        "id": "w17_rgr_tasks",
+        "header": "RGR 태스크",
+        "question": "W17을 T1 데이터·동기화(AC1~3), T2 표시·접근성(AC1~5)의 두 묶음으로 순차 진행할까요?",
+        "options": [
+          {
+            "label": "승인",
+            "description": "기준선 통과 후 두 묶음을 RED → 구현 → 검증 순서로 진행합니다."
+          },
+          {
+            "label": "수정 요청",
+            "description": "태스크 구성을 조정합니다."
+          }
+        ]
+      }
+    ]
+  },
+  "answer_digest": "96a636d267cc6d12d5b2e41e4db8d07b788e8b1e2584d461271b8c47159af95a"
+}

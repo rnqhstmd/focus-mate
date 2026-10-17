@@ -1,0 +1,58 @@
+{
+  "generatedAt": 813820803.167161,
+  "analytics": {
+    "days": [
+      {
+        "day": "2026-10-12",
+        "minutes": 0,
+        "count": 0
+      },
+      {
+        "day": "2026-10-13",
+        "minutes": 0,
+        "count": 0
+      },
+      {
+        "day": "2026-10-14",
+        "minutes": 0,
+        "count": 0
+      },
+      {
+        "day": "2026-10-15",
+        "minutes": 0,
+        "count": 0
+      },
+      {
+        "day": "2026-10-16",
+        "minutes": 0,
+        "count": 0
+      },
+      {
+        "day": "2026-10-17",
+        "minutes": 0,
+        "count": 0
+      },
+      {
+        "day": "2026-10-18",
+        "minutes": 0,
+        "count": 0
+      }
+    ],
+    "tags": [],
+    "weekEnd": "2026-10-18",
+    "weekMinutes": 0,
+    "weekCount": 0,
+    "weekStart": "2026-10-12",
+    "today": {
+      "day": "2026-10-16",
+      "minutes": 0,
+      "count": 0
+    }
+  },
+  "timeZoneID": "Asia/Seoul",
+  "journey": {
+    "phase": "setup"
+  },
+  "version": 1,
+  "basisDay": "2026-10-16"
+}

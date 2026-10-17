@@ -1,0 +1,20 @@
+{
+  "mp4": {
+    "audio_tracks": 0,
+    "decoded_frame_count": 96,
+    "duration_seconds": 1.6,
+    "height": 1560,
+    "nominal_fps": 60,
+    "reader_completed": true,
+    "width": 720
+  },
+  "visual_review": "Encoded MP4 closed/open/end frames checked: upright, centered, monochrome; original shape preserved.",
+  "gif": {
+    "width": 360,
+    "height": 780,
+    "encoded_frame_count": 28,
+    "duration_ms": 1600,
+    "source_sample_fps": 25,
+    "loop": 0
+  }
+}

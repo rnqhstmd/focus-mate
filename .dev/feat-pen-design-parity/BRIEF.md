@@ -28,7 +28,7 @@ main 앱의 기존 화면을 designs/focus-mate.pen "개선 R01~R42" 시안과 �
 - 작업 경로: /Users/bonseung/projects/focus-mate/next-step-w19 만. next-step, next-step-w12 절대 금지. git stash 금지. 커밋은 하지 않는다(오케스트레이터가 함).
 - 시뮬레이터: FM-W19 (UDID D1E8B30B-81E0-45F4-B3D5-ED9559500342)만. derivedData: next-step-w19/.build
 - xcodebuild 동시 실행 금지(한 번에 하나).
-- 테스트는 focused만(`-only-testing:`), 전체 테스트 실행 금지. 바꾼 화면의 기존 UI 테스트 + 단위 테스트 중 영향받는 것 + PenParityCaptureTests의 해당 화면 캡처.
+- **테스트는 최소로(사용자 지시: 오래 걸림)**: 반복 확인은 빌드 + 바꾼 화면의 PenParityCaptureTests 개별 메서드만. 기존 UI/단위 테스트는 바꾼 문구·식별자·규칙을 직접 참조하는 테스트 메서드만 골라 **한 번의 xcodebuild 호출로 묶어 단계 끝에 1회**. 넓은 스위트·같은 테스트 반복 실행 금지. 전체 회귀는 맨 마지막에 오케스트레이터가 1회.
 - 캡처 재실행 후 scratchpad/app/<R..>.png를 시안과 직접 비교해 남은 차이를 고친다(최소 1회 반복).
 - 상태바 9:41 고정: `xcrun simctl status_bar D1E8B30B-81E0-45F4-B3D5-ED9559500342 override --time 9:41` (재부팅 후 재적용)
 - Xcode synced folder라 새 Swift/리소스 파일은 pbxproj 수정 없이 ios/FocusMate/ 아래 두면 된다(폰트는 Info.plist UIAppFonts 확인).

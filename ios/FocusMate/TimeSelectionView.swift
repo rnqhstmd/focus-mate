@@ -1,120 +1,190 @@
 import SwiftUI
 
-/// 저장된 현재 정류장에서 출발하는 시간·버스·도착지 선택 화면.
+/// 저장된 현재 정류장에서 출발하는 시간·버스·도착지 선택 화면(시안 R04·R05·R26·R06).
 @MainActor
 struct TimeSelectionView: View {
     @Bindable var model: AppModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var panelHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+
+    private var selectedCandidate: RouteCandidate? {
+        model.journeyCandidates.first { $0.routeID == model.journeyPlan.selectedRouteID }
+    }
 
     var body: some View {
         GeometryReader { geometry in
+            let maxPanel = geometry.size.height * (dynamicTypeSize.isAccessibilitySize ? 0.85 : 0.78)
             ZStack(alignment: .bottom) {
                 SceneMapBackdrop(model: model,
-                                 bottomInset: max(panelHeight, geometry.size.height * (dynamicTypeSize.isAccessibilitySize ? 0.85 : 0.73) + 12) + 28,
-                                 routeID: model.journeyPlan.selectedRouteID)
+                                 bottomInset: max(panelHeight, 120) + 8,
+                                 routeID: model.journeyPlan.selectedRouteID,
+                                 labelsOrigin: true,
+                                 leg: selectedCandidate?.leg.stopIndices)
                     .ignoresSafeArea()
-                LinearGradient(colors: [.clear, FMDesign.background.opacity(0.5), FMDesign.background],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea().allowsHitTesting(false)
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
                     if !dynamicTypeSize.isAccessibilitySize {
-                        origin.padding(.horizontal, 22).padding(.top, 12)
+                        ZStack(alignment: .topLeading) {
+                            originSummary
+                            if let selectedCandidate { routeChip(selectedCandidate) }
+                        }
+                        .padding(.leading, 16).padding(.top, -2)
                     }
                     Spacer(minLength: 16)
-                    VStack(spacing: 16) {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 16) {
-                                if dynamicTypeSize.isAccessibilitySize { origin }
-                                Text("시간부터 골라볼까요?")
-                                    .font(FontCatalog.text(24, weight: .bold, relativeTo: .title2))
-                                    .multilineTextAlignment(.center).frame(maxWidth: .infinity)
-                                    .accessibilityIdentifier("screen.time")
-                                duration.frame(maxWidth: .infinity)
-                                MinuteRuler(value: minutes, range: JourneyPlanner.minuteRange)
-                                Text("눈금을 좌우로 밀어 1분씩 선택하세요")
-                                    .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
-                                    .frame(maxWidth: .infinity)
-                                candidates
-                            }
-                        }
-                        .scrollIndicators(.hidden)
-                        .accessibilityIdentifier("time.contentScroll")
-                        Button(model.journeyProceedState.title) { model.proceedToPreparation() }
-                            .buttonStyle(FMPrimaryButtonStyle(size: .compact))
-                            .disabled(!model.journeyProceedState.isEnabled)
-                            .accessibilityIdentifier("time.proceed")
-                    }
-                    .fmPanel()
-                    .frame(maxHeight: geometry.size.height * (dynamicTypeSize.isAccessibilitySize ? 0.85 : 0.73))
-                    .padding(.horizontal, 12).padding(.bottom, 12)
-                    .background {
-                        GeometryReader { panel in
-                            Color.clear.preference(key: TimePanelHeightKey.self, value: panel.size.height)
-                        }
-                    }
+                    panel(maxHeight: maxPanel)
                 }
+                .ignoresSafeArea(.container, edges: .bottom)
             }
             .foregroundStyle(FMDesign.primary)
             .onPreferenceChange(TimePanelHeightKey.self) { panelHeight = $0 }
         }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private func panel(maxHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                content
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: TimeContentHeightKey.self, value: proxy.size.height)
+                        }
+                    }
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: contentHeight > 0 ? min(contentHeight, max(120, maxHeight - 110)) : nil)
+            .onPreferenceChange(TimeContentHeightKey.self) { contentHeight = $0 }
+            .accessibilityIdentifier("time.contentScroll")
+            Button(model.journeyProceedState.title) { model.proceedToPreparation() }
+                .buttonStyle(FMPrimaryButtonStyle(size: .compact))
+                .disabled(!model.journeyProceedState.isEnabled)
+                .accessibilityIdentifier("time.proceed")
+                .padding(.horizontal, 20).padding(.top, 20)
+        }
+        .padding(.top, 13).padding(.bottom, 15)
+        .frame(maxWidth: .infinity)
+        .background(FMDesign.panel, in: RoundedRectangle(cornerRadius: 28))
+        .overlay { RoundedRectangle(cornerRadius: 28).strokeBorder(FMDesign.panelStroke, lineWidth: 1) }
+        .clipShape(RoundedRectangle(cornerRadius: 28))
+        .padding(.horizontal, 12)
+        .background {
+            GeometryReader { panel in
+                Color.clear.preference(key: TimePanelHeightKey.self, value: panel.size.height)
+            }
+        }
+        .padding(.bottom, 20)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Button { model.goBack() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .regular))
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("뒤로")
+                .accessibilityIdentifier("time.back")
+                Text("시간부터 골라볼까요?")
+                    .font(FontCatalog.text(18, weight: .bold, relativeTo: .title3))
+                    .padding(.leading, 12)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("screen.time")
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 19).padding(.trailing, 20)
+            if dynamicTypeSize.isAccessibilitySize { origin.padding(.horizontal, 20).padding(.top, 8) }
+            duration.frame(maxWidth: .infinity).padding(.top, 7)
+            MinuteRuler(value: minutes, range: JourneyPlanner.minuteRange)
+                .padding(.horizontal, 19).padding(.top, 8)
+            Text("눈금을 좌우로 밀어 1분씩 선택하세요")
+                .font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.hintText)
+                .frame(maxWidth: .infinity).padding(.top, 1)
+            candidates.padding(.top, 11)
+        }
     }
 
     private var duration: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if model.journeyPlan.minutes >= 60 {
-                Text("\(model.journeyPlan.minutes / 60)").font(FontCatalog.fixed(40, weight: .semibold))
-                Text("h").font(FontCatalog.text(18, relativeTo: .title3))
-            }
-            Text("\(model.journeyPlan.minutes >= 60 ? model.journeyPlan.minutes % 60 : model.journeyPlan.minutes)")
-                .font(FontCatalog.fixed(40, weight: .semibold))
-            Text("min").font(FontCatalog.text(18, relativeTo: .title3))
+        Text("\(model.journeyPlan.minutes) min")
+            .font(FontCatalog.text(32, weight: .bold, relativeTo: .largeTitle))
+            .monospacedDigit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("선택한 여행 시간")
+            .accessibilityValue("\(model.journeyPlan.minutes)")
+            .accessibilityIdentifier("time.minutesLabel")
+    }
+
+    /// 출발 정류장은 지도 표식(시각)으로 보인다. 지도는 낭독에서 빠지므로 같은 정보를 보이지 않는 요소로 둔다.
+    @ViewBuilder private var originSummary: some View {
+        if let station = model.snapshot?.currentStation {
+            Color.clear.frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityLabel(["출발 정류장", model.currentStationBound].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityValue(station.name)
+                .accessibilityIdentifier("time.origin")
         }
-        .monospacedDigit()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("선택한 여행 시간")
-        .accessibilityValue("\(model.journeyPlan.minutes)")
-        .accessibilityIdentifier("time.minutesLabel")
+    }
+
+    /// R06 왼쪽 위 노선 칩: 반투명 검정 판 위 노선 배지(높이 38).
+    private func routeChip(_ candidate: RouteCandidate) -> some View {
+        RouteBadge(kind: candidate.busKind, number: candidate.busNumber, height: 38)
+            .padding(6)
+            .background(Color(hex: 0x080808).opacity(0.79), in: RoundedRectangle(cornerRadius: 14))
+            .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.145), lineWidth: 1) }
+            .accessibilityHidden(true)
+            .accessibilityIdentifier("time.routeChip")
     }
 
     @ViewBuilder private var origin: some View {
         if let station = model.snapshot?.currentStation {
             VStack(alignment: .leading, spacing: 4) {
-                Label("출발", systemImage: "mappin.circle.fill")
-                    .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
-                Text(station.name).font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 20 : 18, weight: .bold, relativeTo: .title3))
+                Text("출발 정류장").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+                Text(station.name).font(FontCatalog.text(20, weight: .bold, relativeTo: .title3))
                     .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
                 if let bound = model.currentStationBound {
-                    Text(bound).font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 15 : 13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
+                    Text(bound).font(FontCatalog.text(15, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                         .accessibilityIdentifier("time.bound")
                 }
             }
-            .padding(dynamicTypeSize.isAccessibilitySize ? 12 : 0)
-            .background(dynamicTypeSize.isAccessibilitySize ? FMDesign.panel.opacity(0.85) : .clear,
-                        in: RoundedRectangle(cornerRadius: 16))
+            .padding(12)
+            .background(FMDesign.panel.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
         }
     }
 
     @ViewBuilder private var candidates: some View {
         if model.journeyCandidates.isEmpty {
             Text("이 시간에 도착하는 버스가 없어요.\n눈금을 움직여 다른 시간을 골라보세요.")
-                .font(FontCatalog.text(15, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(Color(hex: 0xC5D0C8))
+                .lineSpacing(5)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, minHeight: 83)
+                .background(Color(hex: 0x151B17), in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 21).padding(.top, 15)
         } else if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(model.journeyCandidates) { candidateButton($0) }
             }
             .fixedSize(horizontal: false, vertical: true)
-            .padding(3)
+            .padding(.horizontal, 20)
         } else {
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 10) {
-                    ForEach(model.journeyCandidates) { candidateButton($0) }
+            ScrollViewReader { reader in
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(model.journeyCandidates) { candidateButton($0).id($0.routeID) }
+                    }
                 }
-                .padding(3)
+                .contentMargins(.horizontal, 21, for: .scrollContent)
+                .scrollIndicators(.hidden)
+                .onChange(of: model.journeyPlan.selectedRouteID) { _, routeID in
+                    guard let routeID else { return }
+                    if reduceMotion { reader.scrollTo(routeID, anchor: .trailing) }
+                    else { withAnimation(.easeInOut(duration: 0.3)) { reader.scrollTo(routeID, anchor: .trailing) } }
+                }
             }
-            .scrollIndicators(.hidden)
         }
     }
 
@@ -124,28 +194,33 @@ struct TimeSelectionView: View {
 
     private func candidateButton(_ candidate: RouteCandidate) -> some View {
         let isSelected = model.journeyPlan.selectedRouteID == candidate.routeID
+        let large = dynamicTypeSize.isAccessibilitySize
         return Button {
             model.chooseJourneyRoute(candidate.routeID)
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label("\(candidate.busKind) \(candidate.busNumber)", systemImage: "bus.fill")
-                        .font(FontCatalog.text(17, weight: .bold, relativeTo: .headline))
-                        .fixedSize(horizontal: false, vertical: true)
-                    if isSelected { Image(systemName: "checkmark.circle.fill") }
-                }
-                Text(candidate.destination).font(FontCatalog.text(17, weight: .bold, relativeTo: .headline)).fixedSize(horizontal: false, vertical: true)
-                Text("\(candidate.minutes)분 · \(candidate.stops)정류장 · \(candidate.distanceText)")
-                    .font(FontCatalog.text(12, relativeTo: .caption)).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 0) {
+                RouteBadge(kind: candidate.busKind, number: candidate.busNumber)
+                Text(candidate.destination)
+                    .font(FontCatalog.text(15, weight: .bold, relativeTo: .headline))
+                    .foregroundStyle(isSelected ? Color(hex: 0x111A13) : FMDesign.primary)
+                    .lineLimit(large ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 9)
+                Text("\(candidate.minutes) min · \(candidate.stops)정류장")
+                    .font(FontCatalog.text(11, relativeTo: .caption))
+                    .foregroundStyle(isSelected ? Color(hex: 0x405147) : Color(hex: 0xC2CCC5))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
             }
-            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 190, alignment: .leading)
-            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(14)
-            .foregroundStyle(isSelected ? Color.black : FMDesign.primary)
-            .background(isSelected ? FMDesign.primary : Color(red: 21 / 255, green: 27 / 255, blue: 23 / 255),
-                        in: RoundedRectangle(cornerRadius: 16))
-            .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(FMDesign.primary.opacity(0.18)) }
+            .padding(.leading, 13).padding(.trailing, 13).padding(.top, 15).padding(.bottom, 15)
+            .frame(width: large ? nil : 178, alignment: .topLeading)
+            .frame(maxWidth: large ? .infinity : nil, minHeight: large ? nil : 140, alignment: .topLeading)
+            .background(isSelected ? Color(hex: 0xF4F6F2) : Color(hex: 0x151B17), in: RoundedRectangle(cornerRadius: 20))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20)
+                    .strokeBorder(isSelected ? Color(hex: 0xF4F6F2) : Color.white.opacity(0.17), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -161,7 +236,7 @@ private struct MinuteRuler: View {
     @Binding var value: Int
     let range: ClosedRange<Int>
     @State private var dragStart: Int?
-    private let pointsPerMinute: CGFloat = 8
+    private let pointsPerMinute: CGFloat = 12
 
     var body: some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -171,30 +246,36 @@ private struct MinuteRuler: View {
                 minuteButton(increasing: true)
             }
         } else {
+            // R04 눈금자: 검정 상자, 1분 = 12pt, 5분 눈금 20pt(흰 73%)·1분 눈금 10pt(흰 33%), 10분마다 "N min" 라벨.
             Canvas { context, size in
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
                 let center = size.width / 2
                 for minute in range {
-                    let x = center + CGFloat(minute - value) * pointsPerMinute
-                    guard x >= -20, x <= size.width + 20 else { continue }
+                    let x = (center + CGFloat(minute - value) * pointsPerMinute).rounded() + 0.5
+                    guard x >= -40, x <= size.width + 40 else { continue }
                     let major = minute.isMultiple(of: 5)
-                    var tick = Path()
-                    tick.move(to: CGPoint(x: x, y: 12))
-                    tick.addLine(to: CGPoint(x: x, y: major ? 44 : 30))
-                    context.stroke(tick, with: .color(FMDesign.primary.opacity(major ? 0.65 : 0.3)), lineWidth: major ? 2 : 1)
-                    if major {
-                        context.draw(Text("\(minute)").font(FontCatalog.style(.caption2)).foregroundColor(FMDesign.secondaryText),
-                                     at: CGPoint(x: x, y: 62))
+                    if minute != value {
+                        var tick = Path()
+                        tick.move(to: CGPoint(x: x, y: 24))
+                        tick.addLine(to: CGPoint(x: x, y: major ? 44 : 34))
+                        context.stroke(tick, with: .color(.white.opacity(major ? 0.73 : 0.33)), lineWidth: 1)
+                    }
+                    if minute.isMultiple(of: 10) || minute == range.lowerBound {
+                        context.draw(Text("\(minute) min")
+                            .font(FontCatalog.fixed(12, weight: minute == value ? .bold : .regular))
+                            .foregroundColor(FMDesign.secondaryText),
+                                     at: CGPoint(x: x, y: 60))
                     }
                 }
                 var pointer = Path()
-                pointer.move(to: CGPoint(x: center - 5, y: 0))
-                pointer.addLine(to: CGPoint(x: center + 5, y: 0))
-                pointer.addLine(to: CGPoint(x: center, y: 7))
+                pointer.move(to: CGPoint(x: center - 5, y: 4))
+                pointer.addLine(to: CGPoint(x: center + 5, y: 4))
+                pointer.addLine(to: CGPoint(x: center, y: 11))
                 pointer.closeSubpath()
-                context.fill(pointer, with: .color(FMDesign.primary))
-                context.fill(Path(CGRect(x: center - 1, y: 10, width: 2, height: 38)), with: .color(FMDesign.primary))
+                context.fill(pointer, with: .color(.white))
+                context.fill(Path(CGRect(x: center - 1, y: 22, width: 2, height: 23)), with: .color(.white))
             }
-            .frame(height: 78)
+            .frame(height: 81)
             .contentShape(Rectangle())
             .simultaneousGesture(DragGesture(minimumDistance: 3)
                 .onChanged { drag in
@@ -234,6 +315,11 @@ private struct MinuteRuler: View {
     }
 }
 
+
+private enum TimeContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
 
 /// Includes the panel's outer bottom padding so map attribution clears the actual overlay.
 private enum TimePanelHeightKey: PreferenceKey {

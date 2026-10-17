@@ -108,7 +108,7 @@ final class JourneyPlanDraftCatalogTests: XCTestCase {
         draft.setMinutes(15)
         let state = draft.proceedState(origin: origin(), catalog: try F.multi())
         XCTAssertEqual(state, .noCandidates)
-        XCTAssertEqual(state.title, "이 시간에 맞는 버스가 없어요")
+        XCTAssertEqual(state.title, "이 시간의 도착 후보가 없어요")
     }
 
     // 깨짐: ready가 후보의 값(버스 종류·번호·도착·거리·방면)으로 JourneySelection을 만들지 않으면 실패한다.

@@ -32,7 +32,7 @@ enum ProceedState: Equatable {
         case .routeDataLoading: "정류장 정보를 불러오는 중이에요"
         case .routeDataFailed: "정류장 정보를 불러오지 못했어요. 앱을 다시 실행해 주세요"
         case .originUnavailable: "출발 정류장을 확인할 수 없어요"
-        case .noCandidates: "이 시간에 맞는 버스가 없어요"
+        case .noCandidates: "이 시간의 도착 후보가 없어요"
         case .needsSelection: "버스와 도착지를 선택하세요"
         case .ready: "이 여정 준비하기"
         }

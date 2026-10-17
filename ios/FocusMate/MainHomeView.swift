@@ -11,7 +11,6 @@ struct MainHomeView: View {
     var model: AppModel
     var actionFailed: Bool
     let openDestination: (Destination) -> Void
-    let customizeCard: () -> Void
     let resume: () -> Void
     let alight: () -> Void
     @State private var footerHeight: CGFloat = 100
@@ -23,25 +22,25 @@ struct MainHomeView: View {
                 SceneMapBackdrop(model: model, bottomInset: footerHeight + geometry.safeAreaInsets.bottom + 40,
                                  showsStationAnnotation: model.activeJourneyCard != nil)
                     .ignoresSafeArea()
-                // 지도 공통 덮개(33%) 위에 제목 영역만 옅게 받친다.
-                LinearGradient(stops: [
-                    .init(color: .black.opacity(0.35), location: 0),
-                    .init(color: .clear, location: 0.35)
-                ], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea().allowsHitTesting(false)
                 VStack(spacing: 0) {
                     tools
-                        .padding(.horizontal, 20).padding(.vertical, 8)
+                        .padding(.leading, 24).padding(.trailing, 16)
                     GeometryReader { scrollGeometry in
                         ScrollView {
                             VStack(alignment: .leading, spacing: 24) {
                                 welcome
-                                Spacer(minLength: model.activeJourneyCard == nil ? 80 : 16)
-                                if model.activeJourneyCard == nil { station }
+                                if model.activeJourneyCard == nil {
+                                    // 시안 R01: 정류장 표시는 제목 아래 화면 가운데 근처(라벨 y≈437)에 둔다.
+                                    Spacer(minLength: 24).frame(maxHeight: dynamicTypeSize.isAccessibilitySize ? 24 : 137)
+                                    station
+                                } else {
+                                    Spacer(minLength: 16)
+                                }
                                 Spacer(minLength: 32)
                                 footer
                             }
-                            .padding(.horizontal, 20).padding(.bottom, 16)
+                            .padding(.horizontal, isIdle ? 24 : 20)
+                            .padding(.bottom, isIdle ? max(0, 28 - geometry.safeAreaInsets.bottom) : 16)
                             .frame(minHeight: scrollGeometry.size.height, alignment: .topLeading)
                         }
                         .scrollIndicators(.hidden)
@@ -54,27 +53,21 @@ struct MainHomeView: View {
         .onPreferenceChange(MainFooterHeight.self) { footerHeight = $0 }
     }
 
+    /// 시안 R01: 오른쪽 위 원형 버튼 2개(기록·마이페이지). 설정·카드 꾸미기는 마이페이지에서 연다.
+    /// 진행 여정이 없는 기본 메인(R01). 진행 여정 메인(R31~R34)의 배치는 그 단계에서 맞춘다.
+    private var isIdle: Bool { model.activeJourneyCard == nil }
+
     private var tools: some View {
-        HStack(spacing: 10) {
-            Text("Focus Mate").font(FontCatalog.text(12, weight: .bold, relativeTo: .caption)).tracking(1.4)
-                .lineLimit(1).minimumScaleFactor(0.6)
-                .foregroundStyle(FMDesign.secondaryText)
+        HStack(spacing: 11) {
             Spacer(minLength: 8)
-            tool(symbol: "book.closed", destination: .records)
-            tool(symbol: "person.crop.circle", destination: .profile)
-            tool(symbol: "gearshape", destination: .settings)
-            Button(action: customizeCard) {
-                Image(systemName: "creditcard")
-            }
-            .buttonStyle(FMCircleButtonStyle())
-            .accessibilityLabel("카드 꾸미기")
-            .accessibilityIdentifier("open.cardCustomization")
+            tool(symbol: "doc.plaintext", size: 15, destination: .records)
+            tool(symbol: "person", size: 17, destination: .profile)
         }
     }
 
-    private func tool(symbol: String, destination: Destination) -> some View {
+    private func tool(symbol: String, size: CGFloat, destination: Destination) -> some View {
         Button { openDestination(destination) } label: {
-            Image(systemName: symbol)
+            Image(systemName: symbol).font(.system(size: size, weight: .regular))
         }
         .buttonStyle(FMCircleButtonStyle())
         .accessibilityLabel(destination.mainMenuTitle)
@@ -82,23 +75,32 @@ struct MainHomeView: View {
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 Text(greeting(at: context.date)).font(FontCatalog.text(15, relativeTo: .subheadline))
-                    .foregroundStyle(FMDesign.secondaryText)
+                    .foregroundStyle(Color(hex: 0xE1E5E8))
             }
-            Text(welcomeTitle)
-                .font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 22 : 28, weight: .bold, relativeTo: .title))
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            // 시안 R01: 줄마다 검정 53% 받침, 흰 28pt Bold.
+            VStack(alignment: .leading, spacing: -9) {
+                ForEach(Self.welcomeLines, id: \.self) { line in
+                    Text(line)
+                        .font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 22 : 28, weight: .bold, relativeTo: .title))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .shadow(color: .black.opacity(0.5), radius: 0, y: 2)
+                        .padding(.horizontal, 10).padding(.vertical, 3)
+                        .background(Color.black.opacity(0.53))
+                }
+            }
+            .padding(.leading, -10)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Self.welcomeLines.joined(separator: " "))
+            .accessibilityAddTraits(.isHeader)
         }
-        .padding(.top, 12)
+        .padding(.top, 25)
     }
 
-    private var welcomeTitle: String {
-        guard let name = model.snapshot?.currentStation?.name else { return "오늘은 어디에서\n출발해볼까요?" }
-        return "\(name)에서,\n나만의 속도로 출발해요."
-    }
+    static let welcomeLines = ["오늘은 어디에서", "출발해볼까요?"]
 
     private func greeting(at date: Date) -> String {
         switch Calendar.current.component(.hour, from: date) {
@@ -110,22 +112,25 @@ struct MainHomeView: View {
     }
 
     private var station: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 36)).padding(.bottom, 6)
-                .accessibilityHidden(true)
-            Text("앱 속 현재 정류장").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+        VStack(spacing: 3) {
+            Text("현재 위치").font(FontCatalog.text(10, relativeTo: .caption2)).foregroundStyle(FMDesign.tertiaryText)
+                .shadow(color: .black.opacity(0.75), radius: 4, y: 1)
                 .accessibilityLabel("현재 정류장")
                 .accessibilityIdentifier("screen.main")
             if let station = model.snapshot?.currentStation {
-                Text(station.name).font(FontCatalog.text(20, weight: .bold, relativeTo: .title3))
+                Text(station.name).font(FontCatalog.text(16, weight: .bold, relativeTo: .headline))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(Color.black)
                     .accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
-                Text(model.currentStationBound ?? " ").font(FontCatalog.text(12, relativeTo: .caption))
-                    .foregroundStyle(FMDesign.secondaryText)
+                // 시안에는 방면 줄이 없다. 낭독과 상태 확인을 위해 보이지 않는 요소로 남긴다.
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityLabel(model.currentStationBound ?? "")
                     .accessibilityValue(model.currentStationBound ?? "").accessibilityIdentifier("main.bound")
             }
         }
-        .shadow(color: .black.opacity(0.75), radius: 5, y: 2)
         .frame(maxWidth: .infinity)
     }
 
@@ -157,6 +162,7 @@ struct MainHomeView: View {
                     startButton.buttonStyle(FMSecondaryButtonStyle())
                 } else {
                     startButton.buttonStyle(FMPrimaryButtonStyle())
+                        .padding(.horizontal, isIdle ? -5 : 0)
                 }
             }
         }

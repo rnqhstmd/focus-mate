@@ -176,7 +176,9 @@ final class BoardingFlowUITests: XCTestCase {
         XCTAssertEqual(active["task"] as? String, taskB)
 
         for expected in ["screen.board", "screen.preparation", "screen.time", "screen.main"] {
-            h.app.navigationBars.buttons.firstMatch.tap()
+            // 시간 화면(R04)은 시스템 내비 막대 대신 패널 안 뒤로 버튼을 쓴다.
+            if expected == "screen.main" { h.element("time.back").tap() }
+            else { h.app.navigationBars.buttons.firstMatch.tap() }
             XCTAssertTrue(h.element(expected).waitForExistence(timeout: timeout), expected)
         }
         XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))

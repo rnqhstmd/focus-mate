@@ -91,7 +91,7 @@ final class PreparationFlowUITests: XCTestCase {
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
         XCTAssertTrue(element("time.candidate.2014-r", in: app).isSelected)
 
-        app.navigationBars.buttons.firstMatch.tap()
+        element("time.back", in: app).tap()
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
         app.buttons["open.preparation"].tap()
 
@@ -116,7 +116,6 @@ final class PreparationFlowUITests: XCTestCase {
 
         let destinations = [
             (button: "기록", screen: "screen.records"),
-            (button: "설정", screen: "screen.settings"),
             (button: "마이페이지", screen: "screen.profile"),
             (button: "open.preparation", screen: "screen.time"),
         ]
@@ -125,7 +124,8 @@ final class PreparationFlowUITests: XCTestCase {
             XCTAssertTrue(element(destination.screen, in: app).waitForExistence(timeout: timeout))
             XCTAssertFalse(element("screen.initialStationEntry", in: app).exists)
             XCTAssertEqual(searchElements(in: app).count, 0)
-            app.navigationBars.buttons.firstMatch.tap()
+            if destination.screen == "screen.time" { element("time.back", in: app).tap() }
+            else { app.navigationBars.buttons.firstMatch.tap() }
             XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
             XCTAssertFalse(element("screen.initialStationEntry", in: app).exists)
             XCTAssertEqual(searchElements(in: app).count, 0)

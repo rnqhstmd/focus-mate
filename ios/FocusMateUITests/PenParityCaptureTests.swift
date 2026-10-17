@@ -184,7 +184,9 @@ final class PenParityCaptureTests: XCTestCase {
         if let manifest { extra = ["--fm-ui-card-photo-manifest", "FocusMate/UITestPhotoFixtures/\(manifest).json"] }
         let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: extra)
         wait(h, "screen.main")
-        h.tap("open.cardCustomization")
+        h.tap("open.profile")
+        wait(h, "screen.profile")
+        tapReaching(h, "profile.customize")
         wait(h, "screen.cardCustomization")
         return h
     }
@@ -205,7 +207,7 @@ final class PenParityCaptureTests: XCTestCase {
 
     private func saveCustomization(_ h: FocusMateUIHarness) {
         h.tap("cardCustomization.save")
-        wait(h, "screen.main")
+        wait(h, "screen.profile")
         XCTAssertTrue(h.waitUntil(timeout: timeout) { !h.element("screen.cardCustomization").exists })
     }
 
@@ -411,7 +413,9 @@ final class PenParityCaptureTests: XCTestCase {
     func testR20_settings() {
         let h = FocusMateUIHarness.launch(seed: "ready")
         wait(h, "screen.main")
-        h.tap("open.settings")
+        h.tap("open.profile")
+        wait(h, "screen.profile")
+        tapReaching(h, "profile.settings")
         wait(h, "screen.settings")
         capture("R20-settings")
     }
@@ -480,8 +484,6 @@ final class PenParityCaptureTests: XCTestCase {
         let h = openCustomization()
         decorateCard(h)
         saveCustomization(h)
-        h.tap("open.profile")
-        wait(h, "screen.profile")
         capture("R41-profile-custom")
     }
 
@@ -489,6 +491,8 @@ final class PenParityCaptureTests: XCTestCase {
         let h = openCustomization()
         decorateCard(h)
         saveCustomization(h)
+        h.app.navigationBars.buttons.firstMatch.tap()
+        wait(h, "screen.main")
         enterPreparationFromMain(h)
         fillPreparation(h)
         confirmPreparation(h)

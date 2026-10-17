@@ -32,7 +32,7 @@ final class CardCustomizationFlowTests: XCTestCase {
         }
         capture(h, "basic")
         try tap(h, "close")
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         XCTAssertFalse(control(h, "discard").exists)
         XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
         XCTAssertEqual(try canonical(h.snapshot()), try canonical(snapshot))
@@ -73,7 +73,7 @@ final class CardCustomizationFlowTests: XCTestCase {
         XCTAssertEqual(try style(h).canUndo, changed.canUndo)
         try tap(h, "close"); try confirmation(h)
         try tapConfirmation(h, "discard", label: "변경 버리기")
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
         try open(h)
         XCTAssertEqual(try style(h).draft, baseline)
@@ -216,7 +216,7 @@ final class CardCustomizationFlowTests: XCTestCase {
         try fixtureButton(h); try waitState(h) { $0.isImporting }
         try tap(h, "close"); try confirmation(h)
         try tapConfirmation(h, "discard", label: "변경 버리기")
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         try open(h)
         XCTAssertEqual(try style(h).draft, baseline)
         // A new batch must arm again; release its real gate, not an artificial ignore-cancel loader.
@@ -465,9 +465,16 @@ final class CardCustomizationFlowTests: XCTestCase {
         h.element(helperID(suffix))
     }
     private func open(_ h: FocusMateUIHarness) throws {
-        let entry = h.element("open.cardCustomization")
+        // 시안 R01: 메인에는 기록·마이페이지만 있다. 카드 꾸미기는 마이페이지에서 연다.
+        let entry = h.element("profile.customize")
+        if !entry.exists {
+            let profile = h.element("open.profile")
+            XCTAssertTrue(profile.waitForExistence(timeout: timeout))
+            profile.tap()
+            XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
+        }
         XCTAssertTrue(entry.waitForExistence(timeout: timeout))
-        // 큰 글자에서는 메인 방면 줄이 길어져 버튼이 화면 아래로 밀린다. 메인은 스크롤된다.
+        // 큰 글자에서는 버튼이 화면 아래로 밀린다. 마이페이지는 스크롤된다.
         var swipes = 0
         while (!entry.isHittable || entry.frame.maxY > h.app.frame.maxY - 120) && swipes < 4 { h.app.swipeUp(); swipes += 1 }
         entry.tap()
@@ -590,7 +597,7 @@ final class CardCustomizationFlowTests: XCTestCase {
     }
     private func successfulSave(_ h: FocusMateUIHarness, expected: Style) throws -> StyleState {
         let editor = h.element("screen.cardCustomization")
-        let main = h.element("screen.main")
+        let main = h.element("screen.profile")
         let savedNotice = control(h, "savedNotice")
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             !editor.exists && main.exists && savedNotice.exists

@@ -23,8 +23,9 @@ enum FMDesign {
 
     // MARK: Controls
     static let ctaStroke = Color(hex: 0x444444)
-    static let ctaDisabledFill = Color(hex: 0x252525)
-    static let ctaDisabledText = Color(hex: 0x888888)
+    /// Disabled white-pill CTA (R04·R05·R07): #303A33 fill, #C6D0C9 label.
+    static let ctaDisabledFill = Color(hex: 0x303A33)
+    static let ctaDisabledText = Color(hex: 0xC6D0C9)
     /// Round icon button fill (#0A0A0ABF).
     static let circleFill = Color(hex: 0x0A0A0A).opacity(0.75)
 
@@ -88,7 +89,7 @@ struct FMPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity, minHeight: size.height)
             .foregroundStyle(isEnabled ? Color.black : FMDesign.ctaDisabledText)
             .background(isEnabled ? Color.white : FMDesign.ctaDisabledFill, in: Capsule())
-            .overlay { Capsule().strokeBorder(FMDesign.ctaStroke, lineWidth: 1) }
+            .overlay { Capsule().strokeBorder(isEnabled ? FMDesign.ctaStroke : FMDesign.ctaDisabledFill, lineWidth: 1) }
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
@@ -151,25 +152,33 @@ extension View {
     }
 }
 
-/// Route badge: kind-coloured rounded rectangle (height 32) with bus icon 18pt, kind 9pt, number 17pt Bold.
+/// Route badge: kind-coloured rounded rectangle (height 32) with outline bus icon 18pt, kind 9pt #B5B5BA,
+/// number 17pt Bold white.
 struct RouteBadge: View {
     let kind: String
     let number: String
     @ScaledMetric(relativeTo: .headline) private var height: CGFloat = 32
     @ScaledMetric(relativeTo: .headline) private var iconSize: CGFloat = 18
 
+    init(kind: String, number: String, height: CGFloat = 32) {
+        self.kind = kind
+        self.number = number
+        _height = ScaledMetric(wrappedValue: height, relativeTo: .headline)
+        _iconSize = ScaledMetric(wrappedValue: height >= 38 ? 20 : 18, relativeTo: .headline)
+    }
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "bus.fill")
-                .font(.system(size: iconSize * 0.8))
+        HStack(spacing: 4) {
+            Image(systemName: "bus")
+                .font(.system(size: iconSize * 0.78, weight: .light))
                 .frame(width: iconSize, height: iconSize)
-            Text(kind).font(FontCatalog.text(9, relativeTo: .caption2)).foregroundStyle(.white.opacity(0.8))
+            Text(kind).font(FontCatalog.text(9, relativeTo: .caption2)).foregroundStyle(FMDesign.tertiaryText)
             Text(number).font(FontCatalog.text(17, weight: .bold, relativeTo: .headline)).lineLimit(1)
         }
         .foregroundStyle(.white)
-        .padding(.leading, 7).padding(.trailing, 10)
+        .padding(.leading, 7).padding(.trailing, 8)
         .frame(minHeight: height)
-        .background(FMDesign.routeColor(kind: kind), in: RoundedRectangle(cornerRadius: 9))
+        .background(FMDesign.routeColor(kind: kind), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(kind) \(number)")
     }

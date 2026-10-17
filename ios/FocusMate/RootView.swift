@@ -143,6 +143,7 @@ struct RootView: View {
         switch model.launchState {
         case .ready:
             return model.presentedRoute == .main || model.presentedRoute == .cardEntry
+                || model.presentedRoute == .initialStationEntry
         default:
             return false
         }
@@ -152,6 +153,9 @@ struct RootView: View {
         if model.presentedRoute == .main, case .ready = model.launchState {
             content
                 .safeAreaInset(edge: .bottom, spacing: 0) { saveFailureNotice }
+        } else if model.presentedRoute == .initialStationEntry, case .ready = model.launchState {
+            // 시안 R03: 지도 위에 떠 있는 패널이 화면 가장자리 기준으로 자리 잡는다.
+            content
         } else {
             VStack(alignment: .leading, spacing: 24) {
                 content
@@ -242,7 +246,7 @@ struct RootView: View {
 
     private var mainContent: some View {
         MainHomeView(model: model, actionFailed: mainActionFailed,
-                     openDestination: openMainDestination, customizeCard: startCardCustomization,
+                     openDestination: openMainDestination,
                      resume: { apply(model.resumeJourney()) }, alight: { apply(model.beginAlighting()) })
     }
 

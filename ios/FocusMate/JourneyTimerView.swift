@@ -376,6 +376,7 @@ struct JourneyTimerView: View {
             "course": map.journey.stops.map { [$0.point.latitude, $0.point.longitude] },
             "render": ["route": map.routePoints.count, "stopMarkers": map.visibleStops.count, "bus": true, "destination": true],
             "camera": ["lat": target.center.latitude, "lon": target.center.longitude, "heading": target.headingDegrees,
+                       "focusLat": target.focus.latitude, "focusLon": target.focus.longitude,
                        "pitch": target.pitchDegrees, "animated": target.animated, "revision": target.revision],
         ]
         let json = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))

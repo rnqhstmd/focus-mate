@@ -104,9 +104,10 @@ final class JourneyMapUITests: XCTestCase {
         XCTAssertTrue(h.waitForValue("journey.map.follow", "따라가는 중"))
         let diagnostic = try h.mapDiagnostic()
         let bus = try latLon(diagnostic["bus"] as? [String: Any])
-        let camera = try latLon(diagnostic["camera"] as? [String: Any])
-        XCTAssertEqual(camera.0, bus.0, accuracy: 1e-6)
-        XCTAssertEqual(camera.1, bus.1, accuracy: 1e-6)
+        // 카메라 중심은 진행 방향 앞으로 옮겨져 있으므로(heading-up) 따라가는 버스 위치(focus)를 비교한다.
+        let camera = try XCTUnwrap(diagnostic["camera"] as? [String: Any])
+        XCTAssertEqual(try XCTUnwrap(camera["focusLat"] as? Double), bus.0, accuracy: 1e-6)
+        XCTAssertEqual(try XCTUnwrap(camera["focusLon"] as? Double), bus.1, accuracy: 1e-6)
     }
 
     // MARK: AC-19, 20, 21

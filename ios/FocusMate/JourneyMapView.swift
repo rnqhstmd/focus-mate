@@ -21,6 +21,7 @@ struct JourneyMapView: View {
         self.map = map
         self.bottomInset = bottomInset
         _position = State(initialValue: .camera(Self.camera(for: map.cameraTarget)))
+        _renderedHeading = State(initialValue: map.cameraTarget.headingDegrees)
     }
 
     var body: some View {
@@ -31,6 +32,7 @@ struct JourneyMapView: View {
                     updateBusAngle(proxy)
                 }
                 .onChange(of: map.bus) { _, _ in updateBusAngle(proxy) }
+                .onChange(of: map.cameraTarget) { _, _ in updateBusAngle(proxy) }
         }
         .task(id: map.segmentRequests.first?.key) {
             map.apply(shape: shapes.shape(for: map.segmentRequests))
@@ -147,11 +149,20 @@ struct JourneyMapView: View {
     /// 기울인 카메라에서는 북쪽 기준 방위에서 카메라 방위만 빼는 것으로는 화면 방향이 맞지 않는다.
     /// 앞뒤 값이 크게 뛰지 않게(359° → 1°) 직전 각도에 가까운 쪽으로 이어 붙인다.
     private func updateBusAngle(_ proxy: MapProxy) {
+        // 따라가는 중(heading-up)에는 카메라가 곧 목표 방위로 돌아가므로 방위 차이로 정한다. 진행 방향과 카메라 방위가
+        // 같으면 0°(위쪽)다. 카메라가 도는 도중에 투영하면 옛 카메라 기준 각도가 잠깐 보이므로 쓰지 않는다.
+        if map.state.camera == .follow {
+            setBusAngle(map.bus.headingDegrees - map.cameraTarget.headingDegrees)
+            return
+        }
         let bus = map.bus.point
         let ahead = RouteShape.offset(bus, headingDegrees: map.bus.headingDegrees, meters: 20)
         guard let a = proxy.convert(bus.coordinate, to: .local), let b = proxy.convert(ahead.coordinate, to: .local),
               hypot(b.x - a.x, b.y - a.y) > 0.5 else { return }
-        let angle = atan2(b.x - a.x, -(b.y - a.y)) * 180 / .pi
+        setBusAngle(atan2(b.x - a.x, -(b.y - a.y)) * 180 / .pi)
+    }
+
+    private func setBusAngle(_ angle: Double) {
         let previous = busScreenAngle ?? angle
         busScreenAngle = previous + (angle - previous + 540).truncatingRemainder(dividingBy: 360) - 180
     }

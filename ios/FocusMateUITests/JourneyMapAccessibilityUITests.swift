@@ -63,13 +63,13 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
 
     // MARK: AC-30, 31
 
-    // 깨짐: 동작 줄이기에서 카메라 이동이 애니메이션이거나 방위가 0이 아니다.
-    func testAC30_동작_줄이기에서는_카메라가_애니메이션_없이_방위_0으로_움직인다() throws {
+    // 깨짐: 동작 줄이기에서 카메라 이동이 애니메이션이다(방위는 내비처럼 진행 방향을 따르되 즉시 바뀐다).
+    func testAC30_동작_줄이기에서는_카메라가_애니메이션_없이_움직인다() throws {
         let h = running(extra: reduceMotion)
         h.advance(10)
         let camera = try cameraDiagnostic(h)
         XCTAssertEqual(camera["animated"] as? Bool, false)
-        XCTAssertEqual(camera["heading"] as? Double, 0)
+        XCTAssertNotNil(camera["heading"] as? Double)
     }
 
     // 깨짐: 동작 줄이기가 꺼져 있는데 카메라 이동이 애니메이션되지 않는다.

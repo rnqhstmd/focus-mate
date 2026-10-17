@@ -159,34 +159,65 @@ final class JourneyMapStateTests: XCTestCase {
 
     // MARK: - 카메라 정책
 
-    // 깨짐: reduceMotion을 무시하고 애니메이션하거나 heading이 0이 아니면 실패
-    func test16_AC30_동작_줄이기_켜짐이면_애니메이션_없이_정북이다() {
-        let target = JourneyCameraPolicy.target(center: seongsu, reduceMotion: true, revision: 3)
+    private func target(heading: Double = 0, previous: Double? = nil, reduceMotion: Bool = false,
+                        revision: Int = 1) -> JourneyCameraTarget {
+        JourneyCameraPolicy.target(bus: seongsu, busHeading: heading, previousHeading: previous,
+                                   reduceMotion: reduceMotion, revision: revision)
+    }
 
-        XCTAssertFalse(target.animated)
-        XCTAssertEqual(target.headingDegrees, 0)
+    // 깨짐: 동작 줄이기에서 애니메이션하거나 진행 방위(heading-up)를 따르지 않으면 실패
+    func test16_AC30_동작_줄이기_켜짐이면_애니메이션_없이_진행_방위로_바꾼다() {
+        let t = target(heading: 120, reduceMotion: true, revision: 3)
+
+        XCTAssertFalse(t.animated)
+        XCTAssertEqual(t.headingDegrees, 120)
     }
 
     // 깨짐: reduceMotion false일 때 animated가 true가 아니면 실패
     func test17_AC31_동작_줄이기_꺼짐이면_애니메이션한다() {
-        let target = JourneyCameraPolicy.target(center: seongsu, reduceMotion: false, revision: 3)
-        XCTAssertTrue(target.animated)
+        XCTAssertTrue(target(revision: 3).animated)
     }
 
     // 깨짐: pitch가 0 이하(평면)면 실패
     func test18_AC13_카메라는_기울어진_시점이다() {
-        let target = JourneyCameraPolicy.target(center: seongsu, reduceMotion: false, revision: 1)
-        XCTAssertGreaterThan(target.pitchDegrees, 0)
-        XCTAssertEqual(target.pitchDegrees, JourneyCameraPolicy.pitchDegrees)
-        XCTAssertEqual(target.distanceMeters, JourneyCameraPolicy.distanceMeters)
+        let t = target()
+        XCTAssertGreaterThan(t.pitchDegrees, 0)
+        XCTAssertEqual(t.pitchDegrees, JourneyCameraPolicy.pitchDegrees)
+        XCTAssertEqual(t.distanceMeters, JourneyCameraPolicy.distanceMeters)
     }
 
-    // 깨짐: center/revision을 다른 값으로 전달하면 실패
-    func test19_카메라_목표는_입력한_중심과_리비전을_그대로_담는다() {
-        let target = JourneyCameraPolicy.target(center: seongsu, reduceMotion: false, revision: 42)
+    // 깨짐: focus/revision을 다른 값으로 전달하면 실패
+    func test19_카메라_목표는_버스_위치와_리비전을_그대로_담는다() {
+        let t = target(revision: 42)
 
-        XCTAssertEqual(target.center, seongsu)
-        XCTAssertEqual(target.revision, 42)
+        XCTAssertEqual(t.focus, seongsu)
+        XCTAssertEqual(t.revision, 42)
+    }
+
+    // 깨짐: 카메라 방위가 버스 진행 방위가 아니면(북쪽 위 고정이면) 실패
+    func test19a_heading_up_카메라_방위는_버스_진행_방위다() {
+        XCTAssertEqual(target(heading: 75).headingDegrees, 75)
+    }
+
+    // 깨짐: 중심을 진행 방향 앞으로 옮기지 않으면(버스가 화면 가운데) 실패
+    func test19b_카메라_중심은_진행_방향으로_앞서_버스가_화면_아래쪽에_온다() {
+        let t = target(heading: 90)
+        XCTAssertEqual(RouteShape.meters(t.focus, t.center), JourneyCameraPolicy.leadMeters, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(RouteShape.bearing(t.focus, t.center)), 90, accuracy: 0.5)
+    }
+
+    // 깨짐: 5° 미만 흔들림에도 지도가 돌면 실패
+    func test19c_방위_변화가_5도_미만이면_직전_방위를_유지한다() {
+        XCTAssertEqual(target(heading: 94, previous: 90).headingDegrees, 90)
+        XCTAssertEqual(target(heading: 2, previous: 358).headingDegrees, 358)
+        XCTAssertEqual(target(heading: 96, previous: 90).headingDegrees, 96)
+    }
+
+    // 깨짐: 350°→10°를 반대로(340° 회전) 돌면 실패
+    func test19d_방위는_최단_각도로_이어_붙인다() {
+        XCTAssertEqual(target(heading: 10, previous: 350).headingDegrees, 370)
+        XCTAssertEqual(target(heading: 350, previous: 10).headingDegrees, -10)
+        XCTAssertEqual(JourneyCameraPolicy.shortestDelta(from: 90, to: 270 + 1), -179)
     }
 
     // MARK: - 문구

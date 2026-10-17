@@ -27,7 +27,8 @@ final class JourneyMapController {
         self.shape = shape
         let bus = Self.locate(JourneyCourseProgress.position(of: journey, elapsedSeconds: elapsedSeconds), journey: journey, shape: shape)
         self.bus = bus
-        cameraTarget = JourneyCameraPolicy.target(center: bus.point, reduceMotion: reduceMotion, revision: 0)
+        cameraTarget = JourneyCameraPolicy.target(bus: bus.point, busHeading: bus.headingDegrees, previousHeading: nil,
+                                                  reduceMotion: reduceMotion, revision: 0)
         nextStopIndex = JourneyCourseProgress.nextStopIndex(of: journey, elapsedSeconds: elapsedSeconds)
         remainingStops = JourneyCourseProgress.remainingStops(of: journey, elapsedSeconds: elapsedSeconds)
         remainingDistanceTenthsKm = JourneyCourseProgress.remainingDistanceTenthsKm(of: journey, elapsedSeconds: elapsedSeconds)
@@ -78,11 +79,11 @@ final class JourneyMapController {
     }
 
     func userMovedCamera() { state.userMovedCamera() }
-    func followTapped() { if state.followTapped() { retarget() } }
+    func followTapped() { if state.followTapped() { retarget(resetHeading: true) } }
     /// 일시정지 중에도 쓰는 "현재 정류장으로"(R15): 카메라를 버스 위치로 되돌린다.
     func recenter() {
         state.recenter()
-        retarget()
+        retarget(resetHeading: true)
     }
     func openThemeSheet() { state.openThemeSheet() }
     func dismissThemeSheet() { state.dismissThemeSheet() }
@@ -107,8 +108,10 @@ final class JourneyMapController {
                                  segmentTo: position.segmentTo, fraction: position.fraction, isArrived: position.isArrived)
     }
 
-    private func retarget() {
-        cameraTarget = JourneyCameraPolicy.target(center: bus.point, reduceMotion: reduceMotion,
-                                                  revision: cameraTarget.revision + 1)
+    /// 따라가는 중 카메라를 버스 진행 방향 위(heading-up)로 맞춘다. 복귀할 때는 직전 방위와 무관하게 진행 방위 그대로.
+    private func retarget(resetHeading: Bool = false) {
+        cameraTarget = JourneyCameraPolicy.target(bus: bus.point, busHeading: bus.headingDegrees,
+                                                  previousHeading: resetHeading ? nil : cameraTarget.headingDegrees,
+                                                  reduceMotion: reduceMotion, revision: cameraTarget.revision + 1)
     }
 }

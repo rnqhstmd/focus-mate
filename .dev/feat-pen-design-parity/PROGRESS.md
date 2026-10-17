@@ -554,3 +554,29 @@
 - 실제 번들 노선(정류장 100개 이상)은 노선 전체 흐린 선 중 탈 구간 앞뒤 6구간 밖은 곧은 선(길찾기 요청 수 제한). 길찾기 결과는 자동차 경로라 버스 전용차로·회차 경로와 다를 수 있다.
 - R13 시안처럼 화면에 정류장 여러 개가 보이려면 카메라 거리(1000m)를 늘려야 하는데 이번 범위에서 바꾸지 않았다.
 - MapKit 표식 순서를 정할 수 없어 다음 정류장 이름표가 버스와 겹칠 수 있다(버스가 다음 정류장에 거의 닿을 때).
+
+## 내비 방향(heading-up) (2026-10-17)
+
+사용자 요청: "버스가 내비처럼 일단 위로 일직선으로 진행하는 방향이 기본이어야 해".
+
+### 한 것
+- **카메라 정책** `JourneyCameraPolicy`(JourneyMapState.swift): 북쪽 위 고정 → 진행 방향 위(heading-up). `target(bus:busHeading:previousHeading:reduceMotion:revision:)` — 카메라 방위 = 버스 진행 방위(도로 맞춤 선 40m 앞 접선, 정차 중엔 다음 구간). 중심은 진행 방향 앞으로 `leadMeters` 150m 옮겨 버스가 화면 높이 약 62%에 온다(기울기 40°·거리 1000m 그대로). `JourneyCameraTarget.focus`(따라가는 버스 위치) 추가.
+- **흔들림·최단 회전**: `smoothedHeading` — 직전 카메라 방위와 차이가 5° 미만이면 유지, 아니면 최단 각도로 이어 붙인 값(350°→10°는 370°). 동작 줄이기에서는 방위는 따르되 애니메이션 없이 바꾼다(기존 `animated` 규칙).
+- **컨트롤러**: 따라가는 중 갱신은 직전 방위 기준으로 매끄럽게, 따라가기 버튼·"현재 정류장으로"(recenter)는 직전 방위 없이 진행 방위 그대로 복귀. 사용자 조작 시 follow 해제는 기존대로.
+- **버스 표식 회전**(JourneyMapView): 따라가는 중에는 `버스 방위 − 카메라 목표 방위`(heading-up이면 0° = 위쪽)로 정하고 카메라 목표가 바뀔 때도 갱신 — 카메라가 도는 도중의 투영 값(옛 카메라 기준)으로 잠깐 틀어지는 것을 막는다. 자유 탐색 중에는 기존 화면 좌표 투영. 초기 `renderedHeading`도 카메라 목표 방위로 시작.
+- **진단**: `test.map` camera에 `focusLat`·`focusLon` 추가.
+
+### 확인
+- 라이브 길찾기 R13(`scratchpad/hu/live/R13-focus-map.png`): 버스가 화면 높이 약 62%에서 위를 보고, 앞 도로(초록 선)가 위로 뻗은 뒤 교차로에서 왼쪽으로 꺾임. 지나온 흰 선은 아래로. 진행 칩·하단 지표와 겹치지 않음.
+- 기본(곧은 선) R13(`scratchpad/app/R13-focus-map.png`): 버스 위쪽, 다음 정류장(성동구민체육센터)까지 선이 화면 위로 일직선. R15(일시정지 흐림)는 변화 없음.
+
+### 테스트 결과
+- build-for-testing 1회 성공. 라이브 R13 캡처 1회.
+- 묶음 1회: 단위 `JourneyMapStateTests`(24, 신규 4: heading=진행방위·중심 오프셋 방향/거리·5° 미만 유지·최단 각도)·`JourneyMapControllerTests`(21), UI `PenParityCaptureTests` R13·R15 + `JourneyMapUITests` AC14_15 + `JourneyMapAccessibilityUITests` AC30 = **49개 실패 0**(52초).
+- 고친 기존 테스트: 상태 test16(동작 줄이기 = 방위 0 → 애니메이션 없이 진행 방위), test19(center → focus), 컨트롤러 test4·test6(center → focus + 방위 = 진행 방위), test10(방위 0 → 진행 방위), UI AC14_15(카메라 중심 → focus 비교), AC30(방위 0 단언 제거 — 이름도 바꿈).
+
+### 마지막 회귀에서 확인(미실행)
+- `JourneyMapAccessibilityUITests` 나머지(AC31 등), `JourneyMapUITests` 나머지, 카메라 위치를 보는 다른 UI 테스트가 있으면 중심 오프셋 영향.
+
+### 남은 것
+- 회전 애니메이션은 기존 카메라 이동과 같은 1초 선형. MapKit이 370° 같은 연속 방위를 어떻게 보간하는지(최단 회전 여부)는 실기기 주행으로만 확인 가능.

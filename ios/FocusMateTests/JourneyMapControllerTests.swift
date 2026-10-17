@@ -118,7 +118,8 @@ final class JourneyMapControllerTests: XCTestCase {
 
         XCTAssertEqual(map.state.camera, .follow)
         XCTAssertGreaterThan(map.cameraTarget.pitchDegrees, 0)
-        assertPoint(map.cameraTarget.center, equals: map.bus.point)
+        assertPoint(map.cameraTarget.focus, equals: map.bus.point)
+        XCTAssertEqual(map.cameraTarget.headingDegrees, map.bus.headingDegrees, accuracy: accuracy)
     }
 
     // MARK: AC-14 앱 갱신
@@ -147,7 +148,8 @@ final class JourneyMapControllerTests: XCTestCase {
         map.followTapped()
 
         XCTAssertEqual(map.state.camera, .follow)
-        assertPoint(map.cameraTarget.center, equals: forwardJourney.stops[2].point)
+        assertPoint(map.cameraTarget.focus, equals: forwardJourney.stops[2].point)
+        XCTAssertEqual(map.cameraTarget.headingDegrees, map.bus.headingDegrees, accuracy: accuracy)
         XCTAssertGreaterThan(map.cameraTarget.revision, revisionBefore)
     }
 
@@ -211,16 +213,17 @@ final class JourneyMapControllerTests: XCTestCase {
 
     // MARK: AC-30 / 31 움직임 줄이기
 
-    // 깨짐: 움직임 줄이기를 무시하고 애니메이션 카메라나 heading 회전을 내면 실패한다.
-    func test10_AC30_움직임_줄이기가_켜지면_카메라는_애니메이션과_회전이_없다() {
+    // 깨짐: 움직임 줄이기를 무시하고 애니메이션 카메라를 내거나, 진행 방위(heading-up)를 따르지 않으면 실패한다.
+    func test10_AC30_움직임_줄이기가_켜지면_카메라는_애니메이션_없이_진행_방위로_바뀐다() {
         let map = makeMap(elapsed: 300, reduceMotion: true)
         XCTAssertFalse(map.cameraTarget.animated)
-        XCTAssertEqual(map.cameraTarget.headingDegrees, 0, accuracy: accuracy)
+        XCTAssertEqual(map.cameraTarget.headingDegrees, map.bus.headingDegrees, accuracy: accuracy)
 
         map.sync(status: .running, elapsedSeconds: 450)
 
         XCTAssertFalse(map.cameraTarget.animated)
-        XCTAssertEqual(map.cameraTarget.headingDegrees, 0, accuracy: accuracy)
+        XCTAssertEqual(JourneyCameraPolicy.shortestDelta(from: map.cameraTarget.headingDegrees, to: map.bus.headingDegrees),
+                       0, accuracy: JourneyCameraPolicy.headingThresholdDegrees)
     }
 
     // 깨짐: 기본은 애니메이션이 아니거나, 설정 변경이 이후 목표에 반영되지 않으면 실패한다.

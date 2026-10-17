@@ -65,9 +65,14 @@ final class PenParityCaptureTests: XCTestCase {
 
     // MARK: 경로 도우미
 
+    /// `TEST_RUNNER_FM_ROUTE_SHAPE=live`면 노선선을 실제 Apple 길찾기로 받는다(기본은 네트워크 없는 곧은 선).
+    private var routeShapeArguments: [String] {
+        ProcessInfo.processInfo.environment["FM_ROUTE_SHAPE"] == "live" ? ["--fm-ui-route-shape", "live"] : []
+    }
+
     /// cardOnly 시드: 최초 정류장 검색 화면.
     private func launchFirstUse() -> FocusMateUIHarness {
-        let h = FocusMateUIHarness.launch(seed: "cardOnly")
+        let h = FocusMateUIHarness.launch(seed: "cardOnly", extraArguments: routeShapeArguments)
         wait(h, "screen.initialStationEntry")
         return h
     }
@@ -97,7 +102,7 @@ final class PenParityCaptureTests: XCTestCase {
 
     /// ready 시드 → 여행 시작하기 → 60분 → 2014-r → 준비 화면.
     private func openPreparation(extra: [String] = []) -> FocusMateUIHarness {
-        let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: extra)
+        let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: extra + routeShapeArguments)
         wait(h, "screen.main")
         enterPreparationFromMain(h)
         return h
@@ -145,7 +150,7 @@ final class PenParityCaptureTests: XCTestCase {
 
     /// 진행 여정 시드로 여행 화면을 바로 연다(실시간 시계 — 수동 시계의 검은 테스트 버튼을 피한다).
     private func launchJourneyScreen(seed: String) -> FocusMateUIHarness {
-        let h = FocusMateUIHarness.launch(seed: seed, extraArguments: ["--fm-ui-route", "journey"])
+        let h = FocusMateUIHarness.launch(seed: seed, extraArguments: ["--fm-ui-route", "journey"] + routeShapeArguments)
         wait(h, "screen.journey")
         return h
     }

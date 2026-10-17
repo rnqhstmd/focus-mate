@@ -62,14 +62,53 @@ struct SceneMapBackdrop: View {
         }
     }
 
+    private var shapes: RouteShapeStore { RouteShapeStore.shared }
+
+    /// Road-fitted segment requests (route ID + stop pair) for consecutive catalog stop indices.
+    private func segmentRequests(_ indices: [Int]) -> [RouteSegmentRequest] {
+        guard let routeID, let catalog = model.routeCatalog else { return [] }
+        let valid = indices.filter { catalog.stops.indices.contains($0) }
+        return zip(valid, valid.dropFirst()).map { a, b in
+            RouteSegmentRequest(routeID: routeID, fromID: catalog.stops[a].id, toID: catalog.stops[b].id,
+                                from: catalog.stops[a].point, to: catalog.stops[b].point)
+        }
+    }
+
+    private var fullRouteIndices: [Int] {
+        guard let routeID, let catalog = model.routeCatalog, let index = catalog.routeIndex(id: routeID) else { return [] }
+        return catalog.routes[index].stops
+    }
+
+    /// The chosen leg as a road-fitted shape (straight until directions arrive, or without a route ID).
+    private var legShape: RouteShape? {
+        guard let leg, leg.count > 1 else { return nil }
+        let requests = segmentRequests(leg)
+        if requests.count == leg.count - 1 { return shapes.shape(for: requests) }
+        return RouteShape.straight(routeCoordinates.map { CoursePoint(latitude: $0.latitude, longitude: $0.longitude) })
+    }
+
     /// Whole route (all stops of `routeID`). Drawn as a faint white line under the chosen leg (R07 시안).
     private var fullRouteCoordinates: [CLLocationCoordinate2D] {
-        guard leg != nil, let routeID, let catalog = model.routeCatalog, let index = catalog.routeIndex(id: routeID) else { return [] }
-        return catalog.routes[index].stops.compactMap { stopIndex in
-            guard catalog.stops.indices.contains(stopIndex) else { return nil }
-            let point = catalog.stops[stopIndex].point
-            return CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
-        }
+        guard leg != nil else { return [] }
+        return shapes.shape(for: segmentRequests(fullRouteIndices)).points.map(\.coordinate)
+    }
+
+    /// Segments to fetch: the leg plus up to `CourseJourney.contextStops` route stops on either side. The rest of the
+    /// faint full route stays straight unless already cached, to keep the number of directions requests small.
+    private var requestsToLoad: [RouteSegmentRequest] {
+        guard let leg, let first = leg.first else { return [] }
+        let stops = fullRouteIndices
+        guard let position = stops.firstIndex(of: first), !stops.isEmpty else { return segmentRequests(leg) }
+        let lower = max(position - CourseJourney.contextStops, 0)
+        let upper = min(position + leg.count - 1 + CourseJourney.contextStops, stops.count - 1)
+        return segmentRequests(leg) + segmentRequests(Array(stops[lower...upper]))
+    }
+
+    /// Bus heading on the leg: towards the next stop at the origin, arrival direction at the end of a finished trip.
+    private func busHeading(_ shape: RouteShape?) -> Double {
+        guard let shape else { return 0 }
+        let location = finished ? RouteShape.Location(segment: shape.segments.count, fraction: 0) : RouteShape.Location(segment: 0, fraction: 0)
+        return shape.heading(at: location, backward: finished) ?? 0
     }
 
     private static func camera(at coordinate: CLLocationCoordinate2D) -> MapCameraPosition {
@@ -99,6 +138,9 @@ struct SceneMapBackdrop: View {
                 if let stop {
                     let coordinate = CLLocationCoordinate2D(latitude: stop.point.latitude, longitude: stop.point.longitude)
                     let route = routeCoordinates
+                    let shape = legShape
+                    let line = shape?.points.map(\.coordinate) ?? route
+                    let heading = busHeading(shape)
                     let detailed = leg != nil && route.count > 1
                     let decorated = labelsOrigin || detailed
                     Map(position: $position, interactionModes: []) {
@@ -117,13 +159,13 @@ struct SceneMapBackdrop: View {
                         }
                         if route.count > 1 {
                             if detailed && finished {
-                                MapPolyline(coordinates: route)
+                                MapPolyline(coordinates: line)
                                     .stroke(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                             } else if detailed {
-                                MapPolyline(coordinates: route)
-                                    .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
-                                MapPolyline(coordinates: route)
-                                    .stroke(routeColor, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                                MapPolyline(coordinates: line)
+                                    .stroke(Color.black.opacity(0.5), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                                MapPolyline(coordinates: line)
+                                    .stroke(routeColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                             } else {
                                 MapPolyline(coordinates: route)
                                     .stroke(routeColor, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
@@ -137,7 +179,7 @@ struct SceneMapBackdrop: View {
                             Annotation("", coordinate: route[route.count - 1], anchor: .center) { arrivalDot }
                                 .annotationTitles(.hidden)
                             Annotation("", coordinate: route[route.count - 1], anchor: .bottom) {
-                                BusTopMarker(color: busColor, width: 20).padding(.bottom, 6)
+                                BusTopMarker(color: busColor, width: 20).rotationEffect(.degrees(heading)).padding(.bottom, 6)
                             }
                             .annotationTitles(.hidden)
                         } else if detailed && showsMarks {
@@ -147,7 +189,7 @@ struct SceneMapBackdrop: View {
                                 }
                                 .annotationTitles(.hidden)
                             }
-                            Annotation("", coordinate: route[0], anchor: .center) { busMarker }
+                            Annotation("", coordinate: route[0], anchor: .center) { busMarker.rotationEffect(.degrees(heading)) }
                                 .annotationTitles(.hidden)
                         } else if showsStationAnnotation && showsMarks {
                             Annotation(stop.name, coordinate: coordinate, anchor: .bottom) {
@@ -174,6 +216,7 @@ struct SceneMapBackdrop: View {
                         try? await Task.sleep(for: .milliseconds(600))
                         showsMarks = true
                     }
+                    .task(id: leg) { await shapes.load(requestsToLoad) }
                     .id(stop.id)
                 } else if let fallbackCoordinate {
                     Map(initialPosition: Self.camera(at: fallbackCoordinate), interactionModes: [])

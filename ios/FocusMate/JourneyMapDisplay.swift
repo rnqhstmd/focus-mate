@@ -11,6 +11,13 @@ enum JourneyMapDisplay {
     static let remainingStopsLabel = "남은 정류장"
     static let remainingDistanceLabel = "남은 거리"
 
+    static let progressLabel = "진행 상황"
+
+    static func nextStopText(_ name: String) -> String { "다음 · \(name)" }
+    static func progressCountText(passed: Int, total: Int) -> String { "\(passed)/\(total) 정류장" }
+    static func progressAccessibilityValue(_ progress: JourneyStopProgress) -> String {
+        "다음 정류장 \(progress.nextName), 정류장 \(progress.total)개 중 \(progress.passed)개 지남"
+    }
     static func mapValue(next: String, destination: String) -> String { "다음 정류장 \(next), 도착 정류장 \(destination)" }
     static func followValue(_ mode: JourneyCameraMode) -> String { mode == .follow ? "따라가는 중" : "자유 탐색 중" }
     static func selectedValue(_ on: Bool) -> String { on ? "선택됨" : "선택 안 됨" }

@@ -10,6 +10,13 @@ struct CourseJourney: Equatable {
     let cumulativeSeconds: [Int]
     /// 노선 종류("간선"·"지선"·"마을" 등). 지도 노선선 색에만 쓴다.
     let routeKind: String
+    /// 노선 ID. 도로 경로 캐시 키에 쓴다.
+    let routeID: String
+    /// 노선 전체를 흐린 선으로 보이기 위한 탈 구간 앞·뒤 정류장(노선 순서, 최대 `contextStops`개씩).
+    let stopsBefore: [CourseStop]
+    let stopsAfter: [CourseStop]
+
+    static let contextStops = 6
 
     var totalSeconds: Int { cumulativeSeconds.last! }
     var totalStops: Int { segmentSeconds.count }
@@ -22,7 +29,33 @@ struct CourseJourney: Equatable {
         segmentSeconds = leg.segmentSeconds
         segmentMeters = leg.segmentMeters
         cumulativeSeconds = leg.cumulativeSeconds
-        routeKind = catalog.routes.indices.contains(leg.routeIndex) ? catalog.routes[leg.routeIndex].kind : ""
+        let route = catalog.routes.indices.contains(leg.routeIndex) ? catalog.routes[leg.routeIndex] : nil
+        routeKind = route?.kind ?? ""
+        routeID = route?.id ?? ""
+        if let route, !route.stops.isEmpty {
+            let count = route.stops.count
+            // 순환 노선이라 위치는 나머지로 돈다. 앞뒤 정류장이 탈 구간과 겹치지 않게 남은 수를 나눈다.
+            let free = max(count - leg.segmentSeconds.count - 1, 0)
+            let before = min(Self.contextStops, free / 2), after = min(Self.contextStops, free - free / 2)
+            func stop(_ offset: Int) -> CourseStop {
+                let index = route.stops[((leg.originPosition + offset) % count + count) % count]
+                let item = catalog.stops[index]
+                return CourseStop(index: offset, id: item.id, name: item.name, point: item.point)
+            }
+            stopsBefore = (0..<before).map { stop($0 - before) }
+            stopsAfter = (0..<after).map { stop(leg.segmentSeconds.count + 1 + $0) }
+        } else {
+            stopsBefore = []
+            stopsAfter = []
+        }
+    }
+
+    /// 노선선 전체(앞 문맥 + 탈 구간 + 뒤 문맥)의 구간 요청. 탈 구간은 `stopsBefore.count`번째 구간부터다.
+    var segmentRequests: [RouteSegmentRequest] {
+        let all = stopsBefore + stops + stopsAfter
+        return zip(all, all.dropFirst()).map {
+            RouteSegmentRequest(routeID: routeID, fromID: $0.id, toID: $1.id, from: $0.point, to: $1.point)
+        }
     }
 
     /// 저장된 여정에서 구간을 다시 만든다. 노선·출발 정류장이 없거나, 구간이 없거나, 다시 계산한 도착지가 저장값과 다르면 nil이다(BR-12).

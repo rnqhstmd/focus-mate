@@ -521,3 +521,36 @@
 5. `reports/rerun3.log`: #8 + 같은 helper를 쓰는 `test05` → **2/2 통과**. 447초(test05 자체가 약 330초, 전체 회귀 때와 같음).
 
 최종: **실패 12건 모두 통과.** 함께 돌린 확인용 테스트 7건(AC18, StationSaveFailure, R30, 포기 AC15·AC21, CardCustomization test04·test05)도 통과. 커밋하지 않았다.
+
+## 노선·정류장 진행·버스 방향 (2026-10-17)
+
+사용자 요청: 노선 표시 개선, 정류장 진행 표시, 버스가 진행 방향을 보게. 결정: 노선 선은 Apple 길찾기(MKDirections)로 도로에 맞춤.
+
+### 한 것
+- **도로 맞춤 경로** `RouteShapeProvider.swift`(새 파일): `RouteShapeProviding` 프로토콜 + `MapKitRouteShapeProvider`(MKDirections .automobile, 대안 경로 없음) + `StraightRouteShapeProvider`(네트워크 없음). `RouteShapeStore.shared`(@MainActor @Observable)가 구간(노선ID|출발정류장ID|도착정류장ID)별로 메모리 + 디스크(`Caches/RouteShapes/v2/*.json`) 캐시, 동시 요청 최대 3개. 요청 실패는 저장하지 않아 다음에 다시 시도하고, 화면은 먼저 곧은 선 → 받아지는 대로(`revision`) 교체. 실패 원인은 `Logger(app.focusmate, RouteShape)`에 남긴다.
+- **대체 규칙** `RouteSegmentRule`(RouteShape.swift): 결과 없음·2점 미만·도로 끝이 정류장에서 150m 초과·길이가 max(직선×3, 300m) 초과면 그 구간만 곧은 선. 받아들인 경로는 양 끝(도로에 붙인 점)을 정류장 자리로 바꾼다 — 정류장→도로 직각 연결선 때문에 정류장에 선 버스가 도로와 직각으로 돌던 문제(라이브 캡처에서 발견)를 없앴다.
+- **UI 테스트 모드**: `--fm-ui-test-id`가 있으면 곧은 선(결정적, 디스크 캐시 안 씀). `--fm-ui-route-shape live`를 주면 실제 길찾기. `PenParityCaptureTests`는 `TEST_RUNNER_FM_ROUTE_SHAPE=live`일 때만 이 인자를 붙인다(기본 동작 변화 없음).
+- **선 위 보간·방위** `RouteShape`: 구간 진행 비율을 그 구간 선 길이 비율로 바꿔 선 위 점을 찾고, 방위는 그 자리에서 40m 앞 지점 방향(탈 구간 안에서만). 정류장에 서 있으면 다음 구간 방향, 도착하면 마지막 구간 방향. `JourneyMapController.locate`가 시간 진도(`JourneyCourseProgress.position`, 그대로)를 선 위 위치로 바꾸고, `apply(shape:)`로 받은 경로를 반영한다. 지나온/남은 선도 노선선 위를 따른다.
+- **화면 회전** `JourneyMapView`: `MapReader`의 `MapProxy.convert`로 버스 위치와 진행 방향 20m 앞 지점을 화면 좌표로 바꿔 `atan2`(위 0°, 시계 방향) — 기울인 카메라(40°)에서도 화면상 방향이 맞다. 카메라 조작이 끝날 때·버스가 움직일 때 갱신, 359°→1° 같은 넘김은 가까운 쪽으로 이어 붙여 돌지 않게 했다. 투영 전에는 방위 − 카메라 방위.
+- **노선 표시** `CourseJourney`에 `routeID`·`stopsBefore`·`stopsAfter`(탈 구간 앞뒤 노선 정류장 최대 6개씩, 순환 위치) 추가. 여행 지도: 노선 전체 흐린 흰 선(27%) → 지나온 흰 45% 2.5pt → 남은 구간 검정 55% 7pt 외곽선 위 노선색 4pt.
+- **정류장 진행**: 지난 정류장 회색 5pt, 다음 정류장 흰 12pt + 노선색 3pt 링, 남은 정류장 흰 7pt, 도착 표식 그대로. 다음 정류장 아래 이름표(Noto 11 semibold, 검정 75%·#444444 테두리). 버스가 서 있는 정류장 점은 버스 위로 올라와 그리지 않는다(`isUnderBus`).
+- **진행 칩** `JourneyTimerView.progressChip`: 하단 지표 바로 위 가운데 "다음 · {정류장명}  {지난 수}/{전체} 정류장"(검정 75%·#444444·Noto 12, 이름 말줄임, 글자 크기 xxxLarge까지). 진행 중에만 보이고 일시정지(R15)에는 숨김. VoiceOver: 라벨 "진행 상황", 값 "다음 정류장 X, 정류장 N개 중 M개 지남", 식별자 `journey.progress`.
+- **장면 지도** `SceneMapBackdrop`(R06·R07·R11·요약): 같은 저장소로 탈 구간 도로 경로(+외곽선), 노선 전체 흐린 선도 구간 경로. 요청은 탈 구간 + 앞뒤 6구간만(그 밖은 캐시에 없으면 곧은 선). 버스 표식을 첫 구간 방향(요약은 도착 방향)으로 돌림.
+
+### 확인
+- 라이브 길찾기 캡처(`scratchpad/rs/live/R13·R06·R11`): 도로를 따라 꺾이는 노선선 확인. 로그: 정류장 사이 구간이 6~16점 도로 경로로 받아짐, 한강을 건너는 2구간(성수대교 북단→뚝섬한강공원 등)은 171·228점 우회 경로가 3배 규칙에 걸려 곧은 선으로 대체.
+- 버스 방향: 캡처를 잘라 확인 — R13(정류장 정차 중) 앞(큰 앞유리·사이드미러)이 남은 초록 선 쪽(서쪽)이고 도로와 평행, R06 출발 버스가 다음 정류장 쪽(서북서), R11은 역방향 노선 다음 정류장 쪽(북). 이전 캡처의 기울어짐은 투영 미사용(최대 수 °)보다, 도로 경로에서는 정류장→도로 연결선 방위가 원인이었다(고침).
+
+### 테스트 결과
+- build-for-testing 6회 성공.
+- 마지막 1회: 단위 `RouteShapeTests`(7, 신규)·`JourneyMapControllerTests`(21)·`CourseJourneyTests`(13) = 41개, UI `PenParityCaptureTests` R13·R06·R11 + `JourneyMapUITests` AC1·AC2·AC21 + `JourneyMapAccessibilityUITests` AC33·AC36 = 8개 — **49개 실패 0**(161초). 그 전 반복: 캡처 3개 + 단위 41개 1회, 라이브 캡처 3회(진단 포함).
+- 기본(곧은 선) 캡처는 `scratchpad/app/R13·R06·R11` 갱신.
+
+### 마지막 회귀에서 확인(미실행)
+- `JourneyMapUITests`·`JourneyMapAccessibilityUITests` 나머지(특히 AC38 큰 글자 + 저장 경고, AC14·15 따라가기), `JourneyTimerAccessibilityUITests`, `JourneyResumeUITests`, `JourneyLifecycleSafetyUITests`(최대 글씨), `BoardingLargeTextUITests`, `AlightingFlowUITests`(요약 지도), `PenParityCaptureTests` R07·R08·R15·R17·R30·R33.
+- 단위: `JourneyCourseProgressTests`, `JourneyMapStateTests`, `JourneyMapDisplayTests`.
+
+### 남은 것
+- 실제 번들 노선(정류장 100개 이상)은 노선 전체 흐린 선 중 탈 구간 앞뒤 6구간 밖은 곧은 선(길찾기 요청 수 제한). 길찾기 결과는 자동차 경로라 버스 전용차로·회차 경로와 다를 수 있다.
+- R13 시안처럼 화면에 정류장 여러 개가 보이려면 카메라 거리(1000m)를 늘려야 하는데 이번 범위에서 바꾸지 않았다.
+- MapKit 표식 순서를 정할 수 없어 다음 정류장 이름표가 버스와 겹칠 수 있다(버스가 다음 정류장에 거의 닿을 때).

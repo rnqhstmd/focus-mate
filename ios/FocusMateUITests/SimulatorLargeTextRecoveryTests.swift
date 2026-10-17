@@ -11,14 +11,14 @@ final class SimulatorLargeTextRecoveryTests: XCTestCase {
     }
 
     func testAC32_XXXL에서_60분_2014를_선택하면_선택값을_유지하고_준비로_진입한다() throws {
-        // 깨짐 명명: 후보 탭을 휠이 가로채거나 탭 뒤 분 변경으로 후보 선택을
+        // 깨짐 명명: 후보 탭을 눈금자가 가로채거나 탭 뒤 분 변경으로 후보 선택을
         // 해제하면 준비 라벨/준비 진입/저장된 여정 선택값 검증이 실패한다.
         let h = FocusMateUIHarness.launch(seed: "cardOnly", extraArguments: [
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
         ])
         let app = h.app
         let candidate = h.element("time.candidate.2014")
-        let wheel = app.pickerWheels.firstMatch
+        let ruler = app.sliders["time.ruler"]
         let proceed = h.element("time.proceed")
 
         // 진단은 누락된 요소를 기다리거나 assertion하지 않는다. nil도 증거로 남긴다.
@@ -35,7 +35,7 @@ final class SimulatorLargeTextRecoveryTests: XCTestCase {
                 "AC32 stage=\(stage)",
                 "app.frame=\(app.frame)",
                 describe("candidate2014", candidate),
-                describe("wheel", wheel),
+                describe("ruler", ruler),
                 describe("time.minutesLabel", h.element("time.minutesLabel")),
                 describe("proceed", proceed),
                 describe("test.journeySelection (optional)", h.element("test.journeySelection"))
@@ -58,12 +58,31 @@ final class SimulatorLargeTextRecoveryTests: XCTestCase {
             add(screenshot)
         }
 
-        // LargeTextUITests와 같은 isHittable 조건·최대 3회 app.swipeUp 경로.
+        // Search 제출과 해당 화면의 실제 scroll 영역을 사용하는 사용자 경로.
         func reach(_ target: XCUIElement, stage: String) {
             record("\(stage) reach 전")
+            if target.identifier.hasPrefix("search."), !target.isHittable, app.keyboards.count > 0 {
+                app.typeText("\n")
+            }
+            if target.identifier.hasPrefix("time.") {
+                _ = app.revealTimeContent(target, maxAttempts: 3, timeout: timeout)
+                record("\(stage) reach 후 (time.contentScroll 최대 3회)")
+                XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)")
+                return
+            }
             var attempts = 0
             while !target.isHittable && attempts < 3 {
-                app.swipeUp()
+                if target.identifier.hasPrefix("search.") {
+                    let scroll = app.scrollViews["search.scroll"]
+                    let viewport = scroll.frame
+                    let distance = min(max(target.frame.midY - viewport.midY, -viewport.height * 0.6), viewport.height * 0.6)
+                    let center = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    let start = center.withOffset(CGVector(dx: 0, dy: distance / 2))
+                    let end = center.withOffset(CGVector(dx: 0, dy: -distance / 2))
+                    start.press(forDuration: 0.1, thenDragTo: end)
+                } else {
+                    app.swipeUp()
+                }
                 attempts += 1
             }
             record("\(stage) reach 후 (swipes=\(attempts))")
@@ -93,14 +112,14 @@ final class SimulatorLargeTextRecoveryTests: XCTestCase {
         record("proceed 초기 도달 확인 전")
         XCTAssertTrue(proceedExists)
         XCTAssertTrue(proceed.isHittable, "진행 버튼이 진입 직후 스크롤 없이 닿지 않음")
-        let wheelExists = wheel.waitForExistence(timeout: timeout)
-        record("wheel60 전")
-        XCTAssertTrue(wheelExists, "분 휠이 없음")
-        wheel.adjust(toPickerWheelValue: "60분")
-        record("wheel60 후")
+        let rulerExists = ruler.waitForExistence(timeout: timeout)
+        record("ruler60 전")
+        XCTAssertTrue(rulerExists, "분 눈금자가 없음")
+        app.setJourneyMinutes(60, timeout: timeout)
+        record("ruler60 후")
         let minutes = h.element("time.minutesLabel")
         let minutesExists = minutes.waitForExistence(timeout: timeout)
-        record("wheel60 minutes assertion 전")
+        record("ruler60 minutes assertion 전")
         XCTAssertTrue(minutesExists, "Missing value element: time.minutesLabel")
         XCTAssertEqual(try XCTUnwrap(minutes.value as? String), "60")
 

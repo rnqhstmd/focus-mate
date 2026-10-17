@@ -39,7 +39,7 @@ struct ProfileStatsDisplay: Equatable {
 }
 
 private enum ProfileLayout {
-    static let background = Color(red: 0x0F / 255, green: 0x10 / 255, blue: 0x12 / 255)
+    static let background = FMDesign.background
     static let horizontal: CGFloat = 24
 }
 
@@ -56,15 +56,15 @@ struct ProfileView: View {
         let stats = ProfileStatsDisplay(model.profileStats)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text(ProfileCopy.headline).font(.title2.bold())
+                Text(ProfileCopy.headline).font(FontCatalog.text(23, bold: true, relativeTo: .title2))
                     .accessibilityIdentifier("profile.headline")
-                Text(ProfileCopy.subhead).font(.subheadline).foregroundStyle(.secondary)
+                Text(ProfileCopy.subhead).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                     .padding(.top, 8).accessibilityIdentifier("profile.subhead")
-                PassFace(style: model.currentCardStyle).frame(maxWidth: .infinity)
+                PassFace(style: model.currentCardStyle, dotsOpacity: 0.25).frame(maxWidth: .infinity)
                     .padding(.top, 32).accessibilityIdentifier("profile.card")
-                Text(PassIdentity.displayName).font(.title3.bold())
+                Text(PassIdentity.displayName).font(FontCatalog.text(17, bold: true, relativeTo: .title3))
                     .padding(.top, 16).accessibilityIdentifier("profile.cardName")
-                Text(ProfileCopy.cardTagline).font(.subheadline).foregroundStyle(.secondary)
+                Text(ProfileCopy.cardTagline).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                     .padding(.top, 4).accessibilityIdentifier("profile.cardTagline")
                 Divider().padding(.top, 28)
                 ProfileMenuRow(systemImage: "pencil", title: "카드 꾸미기",
@@ -80,6 +80,7 @@ struct ProfileView: View {
             .padding(.vertical, 32)
         }
         .background(ProfileLayout.background.ignoresSafeArea())
+        .foregroundStyle(FMDesign.primary).tint(FMDesign.primary)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
         .toolbar { titleItem }
@@ -98,7 +99,7 @@ struct ProfileView: View {
     // 제목 Text의 screen.profile이 한 요소로만 잡히게 한다.
     private var title: some View {
         HStack {
-            Text(Destination.profile.title).font(.title2.bold()).fixedSize()
+            Text(Destination.profile.title).font(FontCatalog.text(20, bold: true, relativeTo: .title2)).fixedSize()
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.profile")
         }
@@ -119,7 +120,7 @@ struct ProfileView: View {
                                 accessibilityLabel: stats.timeAccessibilityLabel, identifier: "profile.stat.time")
             }
             if let message = stats.errorMessage {
-                Text(message).font(.subheadline).foregroundStyle(.secondary)
+                Text(message).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                     .accessibilityIdentifier("profile.statsError")
             }
         }
@@ -137,9 +138,9 @@ private struct ProfileMenuRow: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: systemImage).frame(width: 24).accessibilityHidden(true)
-                Text(title)
+                Text(title).font(FontCatalog.text(16))
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right").foregroundStyle(.secondary).accessibilityHidden(true)
+                Image(systemName: "chevron.right").foregroundStyle(FMDesign.secondaryText).accessibilityHidden(true)
             }
             .padding(.vertical, 20)
             .frame(minHeight: 44)
@@ -159,9 +160,9 @@ private struct ProfileStatView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(value).font(.title.bold()).lineLimit(1).minimumScaleFactor(0.6)
+            Text(value).font(FontCatalog.text(24, bold: true, relativeTo: .title)).lineLimit(1).minimumScaleFactor(0.6)
                 .accessibilityIdentifier("\(identifier).value")
-            Text(label).font(.subheadline).foregroundStyle(.secondary)
+            Text(label).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)

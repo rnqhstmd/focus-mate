@@ -48,9 +48,7 @@ final class LargeTextUITests: XCTestCase {
         XCTAssertTrue(proceed.waitForExistence(timeout: timeout))
         XCTAssertTrue(proceed.isHittable, "진행 버튼이 진입 직후 스크롤 없이 닿지 않음")
 
-        let wheel = app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout), "분 휠이 없음")
-        wheel.adjust(toPickerWheelValue: "60분")
+        app.setJourneyMinutes(60, timeout: timeout)
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
 
         let candidate = element("time.candidate.2014", in: app)
@@ -84,10 +82,40 @@ final class LargeTextUITests: XCTestCase {
 
     /// 사용자가 스크롤해서 닿는 경로. 최대 3회 위로 민다.
     private func reach(_ target: XCUIElement, in app: XCUIApplication) throws {
+        if target.identifier.hasPrefix("search."), !target.isHittable, app.keyboards.count > 0 {
+            app.typeText("\n")
+        }
+        if target.identifier.hasPrefix("time.") {
+            _ = app.revealTimeContent(target, maxAttempts: 8, timeout: timeout)
+            if !target.isHittable {
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "diagnostic-large-text-reach-\(target.identifier)"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+            XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)")
+            return
+        }
         var attempts = 0
         while !target.isHittable && attempts < 3 {
-            app.swipeUp()
+            if target.identifier.hasPrefix("search.") {
+                let scroll = app.scrollViews["search.scroll"]
+                let viewport = scroll.frame
+                let distance = min(max(target.frame.midY - viewport.midY, -viewport.height * 0.6), viewport.height * 0.6)
+                let center = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                let start = center.withOffset(CGVector(dx: 0, dy: distance / 2))
+                let end = center.withOffset(CGVector(dx: 0, dy: -distance / 2))
+                start.press(forDuration: 0.1, thenDragTo: end)
+            } else {
+                app.swipeUp()
+            }
             attempts += 1
+        }
+        if !target.isHittable {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "diagnostic-large-text-reach-\(target.identifier)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
         }
         XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)")
     }

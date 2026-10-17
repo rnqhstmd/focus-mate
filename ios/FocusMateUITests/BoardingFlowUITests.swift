@@ -26,9 +26,7 @@ final class BoardingFlowUITests: XCTestCase {
         let startBytes = try h.diagnostic("test.persistedBytes")
         h.app.buttons["open.preparation"].tap()
         XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
-        let wheel = h.app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
-        wheel.adjust(toPickerWheelValue: "60분")
+        h.app.setJourneyMinutes(60, timeout: timeout)
         let bus = h.element("time.candidate.2014-r")
         XCTAssertTrue(bus.waitForExistence(timeout: timeout))
         bus.tap()
@@ -142,9 +140,7 @@ final class BoardingFlowUITests: XCTestCase {
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         h.app.buttons["open.preparation"].tap()
         XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
-        let wheel = h.app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
-        wheel.adjust(toPickerWheelValue: "60분")
+        h.app.setJourneyMinutes(60, timeout: timeout)
         let bus = h.element("time.candidate.2014-r")
         XCTAssertTrue(bus.waitForExistence(timeout: timeout))
         bus.tap()

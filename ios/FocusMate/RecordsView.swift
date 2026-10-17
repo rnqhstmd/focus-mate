@@ -11,6 +11,7 @@ struct RecordsView: View {
     @State private var widgetEntry: WidgetAnalyticsEntry?
     @State private var pendingAnalyticsRecordID: String?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private struct EditingMemo: Identifiable { let id: String; let memo: String }
 
@@ -26,20 +27,38 @@ struct RecordsView: View {
 
     var body: some View {
         ScrollView {
+            VStack(spacing: 0) {
+            SceneMapBackdrop(model: model, showsStationAnnotation: false)
+                .frame(height: 120)
             VStack(alignment: .leading, spacing: 20) {
-                Text("기록").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
-                Button("분석 보기") { widgetEntry = nil; refreshBrowserToday(); showsAnalytics = true }
-                    .buttonStyle(.bordered).frame(minHeight: 44)
-                    .accessibilityIdentifier("records.analytics.open")
+                Text("여행 기록").font(FontCatalog.text(23, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
+                HStack(spacing: 4) {
+                    Text("잔디").font(FontCatalog.text(13, bold: true, relativeTo: .subheadline))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(FMDesign.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                        .accessibilityAddTraits(.isSelected)
+                    Button("분석 보기") { widgetEntry = nil; refreshBrowserToday(); showsAnalytics = true }
+                        .font(FontCatalog.text(13, relativeTo: .subheadline))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("records.analytics.open")
+                }
+                .padding(3).background(FMDesign.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
                 yearBar
                 Text(RecordsCalendar.summary(year: browser.year, records: records, today: browser.today).text)
-                    .foregroundStyle(.secondary).accessibilityIdentifier("records.summary")
+                    .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText).accessibilityIdentifier("records.summary")
                 heatmap
                 dayList
             }
-            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fmPanel()
+            .padding(.horizontal, 12).padding(.vertical, 20)
+            }
         }
-        .navigationTitle("기록").navigationBarTitleDisplayMode(.inline)
+        .background(FMDesign.background.ignoresSafeArea())
+        .foregroundStyle(FMDesign.primary).tint(FMDesign.primary)
+        .font(FontCatalog.text(15))
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showsAnalytics) {
             RecordsAnalyticsView(model: model, selectedDay: widgetEntry?.day ?? browser.selectedDay.key, initialTag: widgetEntry?.tag, initialKind: widgetEntry?.kind) { id in
                 guard records.contains(where: { $0.id.utf16.elementsEqual(id.utf16) }) else { return }
@@ -61,7 +80,9 @@ struct RecordsView: View {
             RecordMemoEditor(model: model, recordID: item.id, memo: item.memo) { editing = nil }
         }
         #if DEBUG
-        .overlay(alignment: .bottomLeading) { diagnostics }
+        .overlay(alignment: .bottomLeading) {
+            if services.failNextSave != nil { diagnostics }
+        }
         #endif
     }
 
@@ -100,7 +121,10 @@ struct RecordsView: View {
                     Button("\(String(year))년") { browser.selectYear(year, records: records) }
                 }
             } label: {
-                Text("\(String(browser.year))년").font(.title2.bold()).frame(minHeight: 44)
+                Text("\(String(browser.year))년").font(FontCatalog.text(18, bold: true, relativeTo: .title3))
+                    .padding(.horizontal, 14).frame(minHeight: 44)
+                    .foregroundStyle(FMDesign.panel)
+                    .background(FMDesign.primary, in: RoundedRectangle(cornerRadius: 8))
             }
             .accessibilityIdentifier("records.year.picker")
             Button { browser.moveYear(by: 1, records: records) } label: {
@@ -108,27 +132,63 @@ struct RecordsView: View {
             }
             .disabled(!browser.canGoNextYear)
             .accessibilityLabel("다음 연도").accessibilityIdentifier("records.year.next")
-        }
+        }.buttonStyle(.plain)
     }
 
     private var heatmap: some View {
         let cells = RecordsCalendar.cells(year: browser.year, records: records, today: browser.today)
         let blanks = RecordsCalendar.leadingBlanks(year: browser.year)
         let selected = cells.first { $0.day == browser.selectedDay }
-        return ScrollView(.horizontal, showsIndicators: false) {
-            LazyHGrid(rows: Array(repeating: GridItem(.fixed(14), spacing: 3), count: 7), spacing: 3) {
-                ForEach(0..<blanks, id: \.self) { _ in Color.clear.frame(width: 14, height: 14) }
-                ForEach(cells) { cell in
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Self.color(level: cell.level).opacity(cell.isFuture ? 0.3 : 1))
-                        .overlay(RoundedRectangle(cornerRadius: 3)
-                            .stroke(cell.day == browser.selectedDay ? Color.primary : .clear, lineWidth: 1.5))
-                        .frame(width: 14, height: 14)
-                        .onTapGesture { browser.select(cell.day) }
+        let weeks = (cells.count + blanks + 6) / 7
+        return GeometryReader { geometry in
+            let gap: CGFloat = typeSize.isAccessibilitySize ? 3 : 1.5
+            let side: CGFloat = typeSize.isAccessibilitySize ? 14 : max(2, (geometry.size.width - 20 - CGFloat(weeks - 1) * gap) / CGFloat(weeks))
+            let gridWidth = CGFloat(weeks) * side + CGFloat(weeks - 1) * gap
+            ScrollView(.horizontal, showsIndicators: typeSize.isAccessibilitySize) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 0) {
+                        ForEach(1...12, id: \.self) { month in
+                            Text("\(month)월").font(FontCatalog.text(8, relativeTo: .caption2))
+                                .frame(width: gridWidth / 12, alignment: .leading)
+                        }
+                    }.padding(.leading, 20)
+                    HStack(alignment: .top, spacing: 5) {
+                        VStack(spacing: gap) {
+                            ForEach(0..<7, id: \.self) { row in
+                                Text(row == 1 ? "월" : row == 3 ? "수" : row == 5 ? "금" : "")
+                                    .font(FontCatalog.text(8, relativeTo: .caption2))
+                                    .frame(width: 15, height: side)
+                            }
+                        }
+                        LazyHGrid(rows: Array(repeating: GridItem(.fixed(side), spacing: gap), count: 7), spacing: gap) {
+                            ForEach(0..<blanks, id: \.self) { _ in Color.clear.frame(width: side, height: side) }
+                            ForEach(cells) { cell in
+                                RoundedRectangle(cornerRadius: min(3, side / 4))
+                                    .fill(Self.color(level: cell.level).opacity(cell.isFuture ? 0.3 : 1))
+                                    .overlay(RoundedRectangle(cornerRadius: min(3, side / 4))
+                                        .stroke(cell.day == browser.selectedDay ? FMDesign.primary : .clear, lineWidth: 1))
+                                    .frame(width: side, height: side)
+                                    .onTapGesture { browser.select(cell.day) }
+                            }
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Text("하루 여행 시간")
+                        Spacer(minLength: 8)
+                        Text("적음")
+                        ForEach(0..<5, id: \.self) { level in
+                            RoundedRectangle(cornerRadius: 1).fill(Self.color(level: level)).frame(width: 8, height: 8)
+                        }
+                        Text("많음")
+                    }
+                    .font(FontCatalog.text(9, relativeTo: .caption2))
+                    .frame(width: gridWidth + 20)
                 }
+                .foregroundStyle(FMDesign.secondaryText)
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
         }
+        .frame(height: typeSize.isAccessibilitySize ? 180 : 100)
         // 칸 365개를 하나씩 넘기지 않도록 격자 전체를 조정 가능한 요소 하나로 읽는다.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(String(browser.year))년 날짜별 여행 시간")
@@ -146,15 +206,15 @@ struct RecordsView: View {
     @ViewBuilder private var dayList: some View {
         let visible = browser.visibleRecords(in: records)
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일").font(.headline)
+            Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일").font(FontCatalog.text(16, bold: true, relativeTo: .headline))
             if let empty = browser.emptyState(records: records) {
                 Text(empty == .noRecords ? "첫 여행을 마치면 잔디에 색이 채워져요. 하루하루 나만의 시간을 모아보세요."
                                          : "이날은 완료한 여행이 없어요.")
-                    .foregroundStyle(.secondary).accessibilityIdentifier("records.empty")
+                    .foregroundStyle(FMDesign.secondaryText).accessibilityIdentifier("records.empty")
             }
             ForEach(visible, id: \.id) { record in item(record) }
             if browser.hasMore(in: records) {
-                Button("더 보기") { browser.showMore() }.buttonStyle(.bordered)
+                Button("더 보기") { browser.showMore() }.buttonStyle(FMSecondaryButtonStyle())
                     .accessibilityIdentifier("records.more")
             }
         }
@@ -164,29 +224,30 @@ struct RecordsView: View {
         let content = RecordListItemContent(record: record, timeZone: timeZone)
         return VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(content.task).font(.headline)
-                Text("\(content.timeText) · \(content.minutesText) · \(content.tag)").foregroundStyle(.secondary)
-                Text(content.routeText).foregroundStyle(.secondary)
+                Text(content.task).font(FontCatalog.text(16, bold: true, relativeTo: .headline))
+                Text("\(content.timeText) · \(content.minutesText) · \(content.tag)").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+                Text(content.routeText).font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
                 if !content.memo.isEmpty { Text(content.memo) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("records.item.\(record.id)")
             Button(content.memoButtonTitle) { editing = EditingMemo(id: record.id, memo: record.memo) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain).font(FontCatalog.text(12, relativeTo: .caption))
+                .frame(minHeight: 44)
                 .accessibilityIdentifier("records.memo.\(record.id)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.08)))
+        .padding(.vertical, 18)
+        .overlay(alignment: .bottom) { Rectangle().fill(FMDesign.primary.opacity(0.14)).frame(height: 1) }
     }
 
     private static func color(level: Int) -> Color {
         switch level {
-        case 0: Color.secondary.opacity(0.15)
-        case 1: Color.green.opacity(0.3)
-        case 2: Color.green.opacity(0.5)
-        case 3: Color.green.opacity(0.75)
-        default: Color.green
+        case 0: Color(red: 27 / 255, green: 33 / 255, blue: 30 / 255)
+        case 1: Color(red: 14 / 255, green: 68 / 255, blue: 41 / 255)
+        case 2: Color(red: 0, green: 109 / 255, blue: 50 / 255)
+        case 3: Color(red: 38 / 255, green: 166 / 255, blue: 65 / 255)
+        default: Color(red: 57 / 255, green: 211 / 255, blue: 83 / 255)
         }
     }
 

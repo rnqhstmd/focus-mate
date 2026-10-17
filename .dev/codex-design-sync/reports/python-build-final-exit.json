@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "compileall",
+    "-q",
+    "scripts/route_data",
+    "scripts/build_route_data.py"
+  ],
+  "exitCode": 0,
+  "elapsedSeconds": 0.055,
+  "finishedAt": "2026-10-16T20:41:39.934139+09:00"
+}

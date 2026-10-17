@@ -5,25 +5,40 @@ import SwiftUI
 struct InitialStationSearchView: View {
     @Bindable var model: AppModel
     @State private var search = StationSearchState()
+    @FocusState private var searchFocused: Bool
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         // 검색은 그릴 때 한 번만 한다. 결과·선택·확인 버튼이 같은 결과를 쓴다.
         let result = model.routeCatalog.map(search.result(in:))
         let selected = result.flatMap(search.selectedOption(from:))
-        VStack(alignment: .leading, spacing: 16) {
-            Text("최초 정류장 설정").font(.largeTitle.bold()).accessibilityIdentifier("screen.initialStationEntry")
-            if let notice = model.stationResetNotice {
-                Text(notice.text).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("search.resetNotice")
-            }
+        GeometryReader { geometry in
+          VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 16) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    Text("출발 정류장").font(.title2.bold()).accessibilityIdentifier("screen.initialStationEntry")
+                    Text("출발 정류장을 골라주세요.").font(.subheadline).foregroundStyle(FMDesign.secondaryText)
+                    if let notice = model.stationResetNotice {
+                        Text(notice.text).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("search.resetNotice")
+                    }
+                    Text("정류장 검색").font(.caption).foregroundStyle(FMDesign.secondaryText)
                     TextField("정류장 이름 또는 번호", text: $search.query)
-                        .textFieldStyle(.roundedBorder).autocorrectionDisabled()
+                        .textFieldStyle(.plain).padding(14)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.16)))
+                        .autocorrectionDisabled()
+                        .focused($searchFocused)
+                        .submitLabel(.search)
+                        .onSubmit { searchFocused = false }
                         .accessibilityLabel("정류장 검색").accessibilityIdentifier("search.query")
                     results(result, selected: selected)
-                }
+                }.padding(.bottom, 8)
             }
+            .accessibilityIdentifier("search.scroll")
+            .scrollDismissesKeyboard(.immediately)
             if model.saveFailure != nil {
                 Text("출발 정류장 저장에 실패했어요. 확인을 다시 눌러 주세요.")
                     .foregroundStyle(.secondary).accessibilityIdentifier("search.saveFailure")
@@ -31,9 +46,15 @@ struct InitialStationSearchView: View {
             Button("확인") {
                 if let selected { model.confirmInitialStation(selected) }
             }
-            .buttonStyle(.borderedProminent).frame(maxWidth: .infinity)
+            .buttonStyle(FMPrimaryButtonStyle()).frame(maxWidth: .infinity)
             .disabled(selected == nil)
             .accessibilityHint("고른 정류장에서 출발해요").accessibilityIdentifier("search.confirm")
+        }
+            .foregroundStyle(FMDesign.primary)
+            .frame(maxHeight: typeSize.isAccessibilitySize || searchFocused
+                ? max(0, geometry.size.height - 44) : max(0, geometry.size.height * 0.68 - 44))
+            .fmPanel(padding: 22)
+          }
         }
     }
 
@@ -76,9 +97,13 @@ struct InitialStationSearchView: View {
                 Spacer(minLength: 0)
                 if isSelected { Image(systemName: "checkmark.circle.fill") }
             }
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(FMDesign.primary)
+            .background(Color(white: 0.067), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(isSelected ? 1 : 0.14)))
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(option.accessibilityLabel)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)

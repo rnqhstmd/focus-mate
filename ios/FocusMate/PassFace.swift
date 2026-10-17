@@ -6,6 +6,7 @@ struct PassFace: View {
     static let referenceWidth: CGFloat = 352
     static let dotsAssetName = "PassDots"
     var style: CardStyle = .standard
+    var dotsOpacity: Double = 0.85
 
     var body: some View {
         Color.clear
@@ -26,7 +27,7 @@ struct PassFace: View {
                 if style.isStandard {
                     Image(Self.dotsAssetName).resizable().scaledToFit()
                         .frame(width: proxy.size.width * 0.78)
-                        .opacity(0.85)
+                        .opacity(dotsOpacity)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                         .offset(x: proxy.size.width * 0.12)
                     Text("Focus Mate").font(FontCatalog.text(11 * s, bold: true))

@@ -190,9 +190,7 @@ final class PreparationFlowUITests: XCTestCase {
 
     /// 후보 식별자는 노선 id다. 서울숲역 역방향 승강장(ready 시드)에서는 2014-r이다.
     private func selectSixtyMinutesBus2014(in app: XCUIApplication, routeID: String = "2014") throws {
-        let wheel = app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout), "분 휠이 없음")
-        wheel.adjust(toPickerWheelValue: "60분")
+        app.setJourneyMinutes(60, timeout: timeout)
         XCTAssertEqual(try value("time.minutesLabel", in: app), "60")
         let candidate = element("time.candidate.\(routeID)", in: app)
         XCTAssertTrue(candidate.waitForExistence(timeout: timeout))

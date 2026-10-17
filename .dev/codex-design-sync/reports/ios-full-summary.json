@@ -1,0 +1,19 @@
+{
+  "unitTests": 1426,
+  "unitFailures": 0,
+  "uiTests": 319,
+  "uiFailures": 2,
+  "exitCode": 65,
+  "elapsedSeconds": 5931.415,
+  "bundle": ".build/w17-ios/Logs/Test/Test-FocusMate-2026.10.16_18-54-01-+0900.xcresult",
+  "failedTests": [
+    "-[FocusMateUITests.RecordsAnalyticsUITests testAC5_분석메모에서_기존편집기로_돌아가_저장하면_재진입에_최신메모를_읽는다]",
+    "-[FocusMateUITests.SimulatorLargeTextRecoveryTests testAC32_XXXL에서_60분_2014를_선택하면_선택값을_유지하고_준비로_진입한다]"
+  ],
+  "postFullChanges": [
+    "ios/FocusMate/RecordsAnalyticsView.swift",
+    "ios/FocusMateUITests/SimulatorLargeTextRecoveryTests.swift"
+  ],
+  "fullRepeat": false,
+  "failureAttachmentsExport": "--only-failures export returned empty manifest; no failure screenshot claimed"
+}

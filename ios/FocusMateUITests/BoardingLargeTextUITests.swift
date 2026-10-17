@@ -12,10 +12,36 @@ final class BoardingLargeTextUITests: XCTestCase {
 
     private func reach(_ target: XCUIElement, in app: XCUIApplication) {
         XCTAssertTrue(target.waitForExistence(timeout: timeout), target.identifier)
-        var attempts = 0
-        while !target.isHittable && attempts < 4 {
-            app.swipeUp()
-            attempts += 1
+        if target.identifier.hasPrefix("time.") {
+            _ = app.revealTimeContent(target, maxAttempts: 8, timeout: timeout)
+        } else {
+            var attempts = 0
+            while !target.isHittable && attempts < 4 {
+                app.swipeUp()
+                attempts += 1
+            }
+        }
+        if !target.isHittable {
+            let panel = app.scrollViews["time.contentScroll"]
+            var lines = [
+                "boarding-large-reach target=\(target.identifier) frame=\(target.frame) hittable=\(target.isHittable)",
+                "app.frame=\(app.frame)",
+                panel.exists ? "time.contentScroll.frame=\(panel.frame)" : "time.contentScroll.exists=false"
+            ]
+            let candidates = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "time.candidate."))
+            for candidate in candidates.allElementsBoundByIndex {
+                lines.append("candidate=\(candidate.identifier) frame=\(candidate.frame) hittable=\(candidate.isHittable) selected=\(candidate.isSelected)")
+            }
+            let details = lines.joined(separator: "\n")
+            print(details)
+            let diagnostic = XCTAttachment(string: details)
+            diagnostic.name = "boarding-large-reach-\(target.identifier)-frames"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "boarding-large-reach-\(target.identifier)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
         }
         XCTAssertTrue(target.isHittable, "스크롤해도 닿지 않음: \(target.identifier)")
     }
@@ -71,9 +97,7 @@ final class BoardingLargeTextUITests: XCTestCase {
         confirmNewJourney.tap()
 
         XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
-        let wheel = h.app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout))
-        wheel.adjust(toPickerWheelValue: "60분")
+        h.app.setJourneyMinutes(60, timeout: timeout)
         let bus = h.element("time.candidate.2014")
         reach(bus, in: h.app)
         bus.tap()

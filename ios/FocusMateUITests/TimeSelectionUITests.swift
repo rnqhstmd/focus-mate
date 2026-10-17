@@ -13,26 +13,26 @@ final class TimeSelectionUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testTimeWheelSpike() throws {
+    func testTimeRulerAdjustmentSpike() throws {
         let app = try openTimeScreen()
 
-        XCTAssertEqual(app.pickerWheels.count, 1)
-        let wheel = app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: 3))
-        XCTAssertEqual(wheel.value as? String, "25분")
+        XCTAssertEqual(app.sliders.matching(identifier: "time.ruler").count, 1)
+        let ruler = app.sliders["time.ruler"]
+        XCTAssertTrue(ruler.waitForExistence(timeout: 3))
+        XCTAssertEqual(ruler.value as? String, "25분")
         XCTAssertEqual(try value("time.minutesLabel", in: app), "25")
 
         for target in ["360", "15"] {
             let started = Date()
-            wheel.adjust(toPickerWheelValue: "\(target)분")
-            XCTAssertLessThan(Date().timeIntervalSince(started), 20, "\(target)분 이동이 20초를 넘김")
-            XCTAssertEqual(wheel.value as? String, "\(target)분")
+            app.setJourneyMinutes(Int(target)!, timeout: timeout)
+            XCTAssertLessThan(Date().timeIntervalSince(started), 60, "\(target)분 물리 드래그 이동이 60초를 넘김")
+            XCTAssertEqual(ruler.value as? String, "\(target)분")
             XCTAssertEqual(try value("time.minutesLabel", in: app), target)
         }
 
         try setMinutes(60, in: app)
-        wheel.adjust(toPickerWheelValue: "61분")
-        XCTAssertEqual(wheel.value as? String, "61분")
+        app.setJourneyMinutes(61, timeout: timeout)
+        XCTAssertEqual(ruler.value as? String, "61분")
         XCTAssertEqual(try value("time.minutesLabel", in: app), "61")
     }
 
@@ -111,7 +111,7 @@ final class TimeSelectionUITests: XCTestCase {
         first.tap()
         XCTAssertTrue(first.isSelected)
 
-        app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "61분")
+        app.setJourneyMinutes(61, timeout: timeout)
 
         // ±1분 규칙: 61분에도 60분 후보(차이 60초)가 남지만 선택은 즉시 해제된다. 대기 없이 확인한다.
         let remaining = element("time.candidate.2014", in: app)
@@ -120,7 +120,7 @@ final class TimeSelectionUITests: XCTestCase {
         XCTAssertEqual(element("time.proceed", in: app).label, needsSelection)
         XCTAssertFalse(element("time.proceed", in: app).isEnabled)
 
-        app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "60분")
+        app.setJourneyMinutes(60, timeout: timeout)
         let again = element("time.candidate.2014", in: app)
         XCTAssertTrue(again.waitForExistence(timeout: timeout))
         XCTAssertFalse(again.isSelected)
@@ -137,19 +137,19 @@ final class TimeSelectionUITests: XCTestCase {
         XCTAssertFalse(element("time.proceed", in: app).label.isEmpty)
     }
 
-    func testWheelBoundariesReportFifteenAndThreeSixtyMinutes() throws {
+    func testRulerBoundariesReportFifteenAndThreeSixtyMinutes() throws {
         let app = try openTimeScreen()
-        let wheel = app.pickerWheels.firstMatch
+        let ruler = app.sliders["time.ruler"]
 
-        wheel.adjust(toPickerWheelValue: "15분")
-        wheel.adjust(toPickerWheelValue: "15분")
+        app.setJourneyMinutes(15, timeout: timeout)
+        app.setJourneyMinutes(15, timeout: timeout)
         XCTAssertEqual(try value("time.minutesLabel", in: app), "15")
-        XCTAssertEqual(wheel.value as? String, "15분")
+        XCTAssertEqual(ruler.value as? String, "15분")
 
-        wheel.adjust(toPickerWheelValue: "360분")
-        wheel.adjust(toPickerWheelValue: "360분")
+        app.setJourneyMinutes(360, timeout: timeout)
+        app.setJourneyMinutes(360, timeout: timeout)
         XCTAssertEqual(try value("time.minutesLabel", in: app), "360")
-        XCTAssertEqual(wheel.value as? String, "360분")
+        XCTAssertEqual(ruler.value as? String, "360분")
     }
 
     // MARK: - Helpers
@@ -170,9 +170,7 @@ final class TimeSelectionUITests: XCTestCase {
     }
 
     private func setMinutes(_ minutes: Int, in app: XCUIApplication) throws {
-        let wheel = app.pickerWheels.firstMatch
-        XCTAssertTrue(wheel.waitForExistence(timeout: timeout), "분 휠이 없음")
-        wheel.adjust(toPickerWheelValue: "\(minutes)분")
+        app.setJourneyMinutes(minutes, timeout: timeout)
         XCTAssertEqual(try value("time.minutesLabel", in: app), String(minutes))
     }
 

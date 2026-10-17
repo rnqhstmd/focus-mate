@@ -1,0 +1,12 @@
+{
+  "exitCode": 0,
+  "elapsedSeconds": 245.476,
+  "finishedAt": "2026-10-16T20:38:10.344723+09:00",
+  "command": [
+    "python3",
+    "scripts/check-ios.py",
+    "test",
+    "ios/FocusMateUITests/RecordsAnalyticsUITests.swift",
+    "ios/FocusMateUITests/SimulatorLargeTextRecoveryTests.swift"
+  ]
+}

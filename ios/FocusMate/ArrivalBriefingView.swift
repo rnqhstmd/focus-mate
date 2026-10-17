@@ -4,23 +4,28 @@ import SwiftUI
 @MainActor
 struct ArrivalBriefingView: View {
     let controller: ArrivalBriefingController
+    var model: AppModel? = nil
+    var reduceMotion: Bool = false
     @AccessibilityFocusState private var confirmFocused: Bool
 
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 32) {
-                    Image(systemName: "bus").font(.system(size: 44, weight: .semibold)).accessibilityHidden(true)
-                    Text(controller.content.routeText).font(.headline).foregroundStyle(.white.opacity(0.8))
-                        .accessibilityIdentifier("alighting.route")
+                VStack(spacing: 0) {
+                    Image(systemName: "mappin.circle")
+                        .font(.system(size: 44, weight: .regular)).accessibilityHidden(true)
+                        .padding(.bottom, 36)
                     sentences
                     if controller.showsConfirm {
                         Button { controller.confirm() } label: {
-                            Text("확인").font(.headline).foregroundStyle(.black)
-                                .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
+                            Text("확인").font(.system(.body, weight: .semibold)).padding(.horizontal, 24)
+                                .frame(minWidth: 160, minHeight: 52)
+                                .foregroundStyle(.black)
                                 .background(Color(white: 0.95), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        .frame(width: 160).padding(.top, 64)
+                        .transition(.opacity)
                         .accessibilityIdentifier("alighting.confirm")
                         .accessibilityFocused($confirmFocused)
                     }
@@ -30,12 +35,29 @@ struct ArrivalBriefingView: View {
                     }
                 }
                 .multilineTextAlignment(.center)
-                .padding(24)
+                .padding(.horizontal, 32).padding(.vertical, 24)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
         .foregroundStyle(.white)
-        .background(LinearGradient(colors: [Color(white: 0.12), .black], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .background {
+            GeometryReader { background in
+                Group {
+                    if let model {
+                        SceneMapBackdrop(model: model, stationID: model.activeJourney?.destinationStopID,
+                                         bottomInset: max(0, background.size.height - 200))
+                    } else { Color.black }
+                }
+                .overlay(JourneyBriefingShade())
+            }
+            .ignoresSafeArea()
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: controller.showsConfirm)
+        .overlay(alignment: .topTrailing) {
+            // The final reference hides the route line; retain its existing accessibility contract.
+            Text(controller.content.routeText).font(.system(size: 1)).foregroundStyle(.clear)
+                .accessibilityIdentifier("alighting.route").allowsHitTesting(false)
+        }
         .overlay(alignment: .topLeading) {
             Color.clear.frame(width: 1, height: 1).accessibilityElement()
                 .accessibilityLabel("도착 안내").accessibilityIdentifier("alighting.briefing")
@@ -49,17 +71,17 @@ struct ArrivalBriefingView: View {
     @ViewBuilder private var sentences: some View {
         if controller.showsAll {
             VStack(spacing: 12) {
-                ForEach(controller.content.sentences, id: \.self) { Text($0).font(.title2.bold()) }
+                ForEach(controller.content.sentences, id: \.self) { Text($0).font(.system(.title2, weight: .semibold)) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(controller.content.sentences.joined(separator: " "))
             .accessibilityIdentifier("alighting.sentence")
         } else {
             let sentence = controller.content.sentences[controller.visibleIndex]
-            Text(sentence).font(.title2.bold())
+            Text(sentence).font(.system(.title2, weight: .semibold))
                 .id(controller.visibleIndex)
                 .transition(.opacity)
-                .animation(.easeInOut(duration: 0.4), value: controller.visibleIndex)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: controller.visibleIndex)
                 .accessibilityLabel(sentence)
                 .accessibilityIdentifier("alighting.sentence")
         }

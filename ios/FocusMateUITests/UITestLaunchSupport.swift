@@ -350,3 +350,135 @@ extension FocusMateUIHarness {
         return try XCTUnwrap(String(data: data, encoding: .utf8))
     }
 }
+
+
+extension XCUIApplication {
+    /// 시간 패널 안에서 실제 target 위치에 맞는 방향으로만 스크롤한다.
+    @MainActor
+    func revealTimeContent(_ target: XCUIElement, maxAttempts: Int = 6,
+                           fullyVisible: Bool = false, timeout: TimeInterval = 5) -> Bool {
+        if !fullyVisible, target.isHittable { return true }
+        let scroll = scrollViews["time.contentScroll"]
+        guard scroll.waitForExistence(timeout: timeout) else { return false }
+        func reached() -> Bool {
+            guard target.isHittable else { return false }
+            if !fullyVisible { return true }
+            let viewport = scroll.frame.intersection(frame).insetBy(dx: 0, dy: 8)
+            return target.frame.minY >= viewport.minY && target.frame.maxY <= viewport.maxY
+        }
+        for _ in 0..<maxAttempts {
+            if reached() { return true }
+            let viewport = scroll.frame.intersection(frame).insetBy(dx: 0, dy: 8)
+            guard viewport.height > 80, viewport.width > 0 else { return false }
+            let moveDown = target.frame.midY < viewport.midY
+            let startY = moveDown ? viewport.minY + viewport.height * 0.25 : viewport.minY + viewport.height * 0.75
+            let distance = min(viewport.height * 0.5, max(40, abs(target.frame.midY - viewport.midY)))
+            let endY = startY + (moveDown ? distance : -distance)
+            let anchor = coordinate(withNormalizedOffset: .zero)
+            let x = viewport.minX + viewport.width * 0.92
+            let start = anchor.withOffset(CGVector(dx: x - frame.minX, dy: startY - frame.minY))
+            let end = anchor.withOffset(CGVector(dx: x - frame.minX, dy: endY - frame.minY))
+            start.press(forDuration: 0.1, thenDragTo: end)
+        }
+        return reached()
+    }
+
+    /// Canvas 눈금자에 실제 손가락 드래그를 보내고 접근성으로 정확한 분 값을 확인한다.
+    /// accessibilityRepresentation Slider에는 XCTest의 물리 scrubber 좌표가 없어 adjust API를 쓰지 않는다.
+    @MainActor
+    func setJourneyMinutes(_ minutes: Int, timeout: TimeInterval = 5,
+                           file: StaticString = #filePath, line: UInt = #line) {
+        guard (15...360).contains(minutes) else {
+            XCTFail("여행 시간 범위 밖: \(minutes)", file: file, line: line)
+            return
+        }
+        let ruler = sliders["time.ruler"]
+        guard ruler.waitForExistence(timeout: timeout) else {
+            XCTFail("Missing: time.ruler", file: file, line: line)
+            return
+        }
+        guard revealTimeContent(ruler, maxAttempts: 6, fullyVisible: true, timeout: timeout) else {
+            XCTFail("6회 panel 스크롤 후 눈금자에 닿지 않음: ruler=\(ruler.frame), viewport=\(scrollViews["time.contentScroll"].frame)", file: file, line: line)
+            return
+        }
+        let displayed = descendants(matching: .any)["time.minutesLabel"]
+        if launchArguments.contains(where: { $0.hasPrefix("UICTContentSizeCategoryAccessibility") }) {
+            // The visible +/- controls provide exact one-minute steps even on a narrow native Slider.
+            let deadline = Date().addingTimeInterval(90)
+            for attempt in 0..<345 {
+                guard let raw = displayed.value as? String, let current = Int(raw) else {
+                    XCTFail("여행 시간 분 값을 읽을 수 없음: \(String(describing: displayed.value))", file: file, line: line)
+                    return
+                }
+                if current == minutes {
+                    XCTAssertEqual(ruler.value as? String, "\(minutes)분", file: file, line: line)
+                    return
+                }
+                guard Date() < deadline else {
+                    XCTFail("1분 버튼 조절 90초 초과: 목표 \(minutes), 현재 \(current), 시도 \(attempt)", file: file, line: line)
+                    return
+                }
+                let increasing = current < minutes
+                let button = buttons[increasing ? "time.minute.increase" : "time.minute.decrease"]
+                guard button.exists, button.isHittable, button.isEnabled else {
+                    XCTFail("여행 시간 1분 버튼에 닿을 수 없음: \(button.identifier), 현재 \(current)", file: file, line: line)
+                    return
+                }
+                let expected = current + (increasing ? 1 : -1)
+                button.tap()
+                let predicate = NSPredicate(format: "value == %@", String(expected))
+                let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: displayed)],
+                                           timeout: min(timeout, max(0, deadline.timeIntervalSinceNow)))
+                guard result == .completed else {
+                    XCTFail("1분 버튼이 정확히 한 분 변경하지 않음: 이전 \(current), 기대 \(expected), 실제 \(String(describing: displayed.value))", file: file, line: line)
+                    return
+                }
+                XCTAssertEqual(ruler.value as? String, "\(expected)분", file: file, line: line)
+                if expected == minutes {
+                    XCTAssertEqual(displayed.value as? String, String(minutes), file: file, line: line)
+                    return
+                }
+            }
+            XCTFail("1분 버튼 345회 후 목표에 도달하지 못함: 목표 \(minutes), 현재 \(String(describing: displayed.value))", file: file, line: line)
+            return
+        }
+        let deadline = Date().addingTimeInterval(60)
+        let maxAttempts = 60
+        for attempt in 0..<maxAttempts {
+            guard let raw = displayed.value as? String, let current = Int(raw) else {
+                XCTFail("time.minutesLabel 분 값을 읽을 수 없음: \(String(describing: displayed.value))", file: file, line: line)
+                return
+            }
+            if current == minutes {
+                XCTAssertEqual(ruler.value as? String, "\(minutes)분", file: file, line: line)
+                return
+            }
+            guard Date() < deadline else {
+                XCTFail("눈금자 드래그 60초 초과: 목표 \(minutes), 현재 \(current), 시도 \(attempt)", file: file, line: line)
+                return
+            }
+            let width = ruler.frame.width
+            let capacity = Int((width * 0.6 / 8).rounded(.down))
+            guard capacity >= 1, ruler.isHittable else {
+                XCTFail("눈금자 드래그 영역에 닿을 수 없음: \(ruler.frame), hittable=\(ruler.isHittable)", file: file, line: line)
+                return
+            }
+            let increasing = minutes > current
+            let step = min(abs(minutes - current), capacity)
+            let distance = CGFloat(step) * 8 / width
+            let startX: CGFloat = increasing ? 0.8 : 0.2
+            let endX = startX + (increasing ? -distance : distance)
+            let start = ruler.coordinate(withNormalizedOffset: CGVector(dx: startX, dy: 0.5))
+            let end = ruler.coordinate(withNormalizedOffset: CGVector(dx: endX, dy: 0.5))
+            start.press(forDuration: 0.1, thenDragTo: end)
+            let changed = NSPredicate(format: "value != %@", String(current))
+            let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: changed, object: displayed)],
+                                       timeout: min(timeout, max(0, deadline.timeIntervalSinceNow)))
+            guard result == .completed else {
+                XCTFail("실제 드래그 후 분 값이 바뀌지 않음: 현재 \(current), 목표 \(minutes), 이동 \(step * 8)pt", file: file, line: line)
+                return
+            }
+        }
+        XCTFail("눈금자 드래그 \(maxAttempts)회 초과: 목표 \(minutes), 현재 \(String(describing: displayed.value))", file: file, line: line)
+    }
+}

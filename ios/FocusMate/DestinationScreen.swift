@@ -45,8 +45,8 @@ struct DestinationScreen: View {
                 }
             }
         }
-        .padding(destination == .preparation ? 0 : 24).frame(maxWidth: .infinity, alignment: .leading)
-        .navigationTitle(destination == .preparation ? "" : destination.title).navigationBarTitleDisplayMode(.inline)
+        .padding(destination == .preparation || destination == .time ? 0 : 24).frame(maxWidth: .infinity, alignment: .leading)
+        .navigationTitle(destination == .preparation || destination == .time ? "" : destination.title).navigationBarTitleDisplayMode(.inline)
         #if DEBUG
         .overlay(alignment: .bottomLeading) {
             if destination == .preparation {

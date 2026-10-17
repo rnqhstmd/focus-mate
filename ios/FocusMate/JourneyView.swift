@@ -90,7 +90,9 @@ private struct JourneyScreen: View {
                 #else
                 JourneyTimerView(controller: timer, map: map, reduceMotion: reduceMotion, concealed: concealed)
                 #endif
-                if concealed, let arrival { ArrivalBriefingView(controller: arrival) }
+                if concealed, let arrival {
+                    ArrivalBriefingView(controller: arrival, model: model, reduceMotion: reduceMotion)
+                }
             } else { Color.clear }
         }
         // 하단 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다. 일시정지가 아니면 버튼 없이 아래 여백만 남는다.
@@ -135,16 +137,23 @@ private struct JourneyScreen: View {
     private var departureBriefing: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 40) {
-                    Image(systemName: "bus").font(.system(size: 44, weight: .semibold)).accessibilityHidden(true)
+                VStack(spacing: 0) {
+                    Image(systemName: "bus.fill")
+                        .font(.system(size: 44, weight: .regular)).accessibilityHidden(true)
+                        .padding(.bottom, 36)
                     sentences
                     if briefing.showsStart {
                         Button { briefing.confirm() } label: {
-                            Text("시작").font(.headline).foregroundStyle(.black)
-                                .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
+                            Text("시작")
+                                .font(.system(.body, weight: .semibold)).padding(.horizontal, 24)
+                                .frame(minWidth: 160, minHeight: 52)
+                                .foregroundStyle(.black)
                                 .background(Color(white: 0.95), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        .frame(width: 160)
+                        .padding(.top, 64)
+                        .transition(.opacity)
                         .accessibilityIdentifier("journey.start")
                         .accessibilityFocused($startFocused)
                     }
@@ -154,12 +163,20 @@ private struct JourneyScreen: View {
                     }
                 }
                 .multilineTextAlignment(.center)
-                .padding(24)
+                .padding(.horizontal, 32).padding(.vertical, 24)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
         .foregroundStyle(.white)
-        .background(LinearGradient(colors: [Color(white: 0.12), .black], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .background {
+            GeometryReader { background in
+                SceneMapBackdrop(model: model, stationID: model.activeJourney?.originStopID,
+                                 bottomInset: max(0, background.size.height - 200))
+                    .overlay(JourneyBriefingShade())
+            }
+            .ignoresSafeArea()
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: briefing.showsStart)
         // 중첩 컨테이너 식별자는 스크롤 뷰에 흡수될 수 있어, 안내 단계 표지는 별도 요소로 둔다.
         .overlay(alignment: .topLeading) {
             Color.clear.frame(width: 1, height: 1).accessibilityElement()
@@ -170,17 +187,17 @@ private struct JourneyScreen: View {
     @ViewBuilder private var sentences: some View {
         if briefing.showsAll {
             VStack(spacing: 12) {
-                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(.title2.bold()) }
+                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(.system(.title2, weight: .semibold)) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityValue(DepartureBriefingController.sentences.joined(separator: " "))
             .accessibilityIdentifier("journey.briefingSentence")
         } else {
             let sentence = DepartureBriefingController.sentences[briefing.visibleIndex]
-            Text(sentence).font(.title2.bold())
+            Text(sentence).font(.system(.title2, weight: .semibold))
                 .id(briefing.visibleIndex)
                 .transition(.opacity)
-                .animation(.easeInOut(duration: 0.4), value: briefing.visibleIndex)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: briefing.visibleIndex)
                 .accessibilityValue(sentence)
                 .accessibilityIdentifier("journey.briefingSentence")
         }
@@ -225,4 +242,26 @@ private struct JourneyScreen: View {
             .accessibilityValue(json).accessibilityIdentifier("test.briefing")
     }
     #endif
+}
+
+/// Full-screen briefing shade from the final HTML; shared only by departure and arrival.
+struct JourneyBriefingShade: View {
+    var body: some View {
+        LinearGradient(stops: [
+            .init(color: Color(red: 5 / 255, green: 8 / 255, blue: 10 / 255).opacity(0.25), location: 0),
+            .init(color: Color(red: 5 / 255, green: 8 / 255, blue: 10 / 255).opacity(0.65), location: 0.38),
+            .init(color: Color(red: 5 / 255, green: 8 / 255, blue: 10 / 255).opacity(0.94), location: 0.74),
+            .init(color: .black, location: 1)
+        ], startPoint: .top, endPoint: .bottom)
+        // Keep native MapKit attribution in the upper 200pt readable beneath the shade.
+        .mask {
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.4), location: 0),
+                .init(color: .black.opacity(0.4), location: 0.25),
+                .init(color: .black, location: 0.45),
+                .init(color: .black, location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+        }
+        .allowsHitTesting(false).accessibilityHidden(true)
+    }
 }

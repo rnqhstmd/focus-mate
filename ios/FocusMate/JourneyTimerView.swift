@@ -44,11 +44,34 @@ struct JourneyTimerView: View {
 
     private func mapBody(_ map: JourneyMapController) -> some View {
         ZStack {
-            JourneyMapView(map: map, bottomInset: bottomHeight)
+            JourneyMapView(map: map, bottomInset: max(190, bottomHeight + 60))
+            if controller.status == .paused {
+                PausedJourneyShade(bottomInset: max(190, bottomHeight + 60))
+                    .ignoresSafeArea(.container, edges: .all)
+            }
+            VStack {
+                Spacer(minLength: 0)
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black.opacity(0.73), location: 0.65),
+                    .init(color: .black.opacity(0.88), location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+                .frame(height: max(190, bottomHeight + 60))
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .allowsHitTesting(false).accessibilityHidden(true)
             VStack(spacing: 0) {
                 topBar(map)
                 Spacer(minLength: 0)
-                bottomInfo(map)
+                VStack(spacing: 24) {
+                    if controller.status == .paused {
+                        Text("일시정지됨")
+                            .font(.system(.title3, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.73))
+                            .padding(.top, 16)
+                    }
+                    bottomInfo(map)
+                }
                     .background(GeometryReader { proxy in
                         Color.clear.preference(key: BottomInfoHeightKey.self, value: proxy.size.height)
                     })
@@ -140,7 +163,6 @@ struct JourneyTimerView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(.ultraThinMaterial, ignoresSafeAreaEdges: .bottom)
         .environment(\.colorScheme, .dark)
     }
 
@@ -294,4 +316,30 @@ private struct MapSync: Equatable {
 private struct BottomInfoHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// A strong pause dim with a smooth, lighter band around MapKit's native attribution.
+private struct PausedJourneyShade: View {
+    let bottomInset: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let legal = min(0.9, max(0.15, (proxy.size.height - bottomInset - 20) / max(1, proxy.size.height)))
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.55), location: 0),
+                .init(color: .black.opacity(0.68), location: 0.6),
+                .init(color: .black.opacity(0.94), location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+            .mask {
+                LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: max(0, legal - 0.08)),
+                    .init(color: .black.opacity(0.3), location: legal),
+                    .init(color: .black, location: min(1, legal + 0.08)),
+                    .init(color: .black, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+            }
+        }
+        .allowsHitTesting(false).accessibilityHidden(true)
+    }
 }

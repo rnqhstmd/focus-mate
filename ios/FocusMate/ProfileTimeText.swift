@@ -5,6 +5,12 @@ import Foundation
 enum ProfileTimeText {
     static func display(minutes: Int) -> String { format(minutes, hour: " h", minute: " min") }
     static func spoken(minutes: Int) -> String { format(minutes, hour: "시간", minute: "분") }
+    /// 도넛 가운데 짧은 형식(시안 R23·R24): "16h 35m", 1시간 미만은 "25 min", 0은 "0 min".
+    static func compact(minutes: Int) -> String {
+        guard minutes >= 60 else { return "\(minutes) min" }
+        let hours = minutes / 60, rest = minutes % 60
+        return rest == 0 ? "\(hours)h" : "\(hours)h \(rest)m"
+    }
 
     private static func format(_ minutes: Int, hour: String, minute: String) -> String {
         guard minutes >= 60 else { return "\(minutes)\(minute)" }

@@ -34,8 +34,9 @@ struct RootView: View {
             .navigationTitle("Focus Mate").navigationBarTitleDisplayMode(.inline)
             .toolbar(hidesRootNavigationBar ? .hidden : .visible, for: .navigationBar)
             .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization, services: services) }
-            .newJourneyConfirmation(isPresented: $confirmsNewJourney) { apply(model.confirmNewJourney()) }
         }
+        // 시안 R32: 직접 그린 확인 창을 내비게이션 전체 위에 띄운다.
+        .newJourneyConfirmation(isPresented: $confirmsNewJourney) { apply(model.confirmNewJourney()) }
         .onChange(of: model.path) { _, _ in
             mainActionFailed = false
             // 저장 안내는 저장 직후 화면(마이페이지)에서만 보인다. 다른 화면으로 옮기면 지운다(R42 승차 화면에 남지 않게).

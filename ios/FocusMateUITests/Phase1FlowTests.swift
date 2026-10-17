@@ -168,7 +168,8 @@ final class Phase1FlowTests: XCTestCase {
         // 설정은 시안 R01에서 메인 도구가 아니라 마이페이지 안에서 연다.
         let destinations = [
             (button: "기록", screen: "screen.records", placeholder: false),
-            (button: "profile.settings", screen: "screen.settings", placeholder: true),
+            // 설정 자리표시 안에는 '데이터 출처' 진입(공공데이터 출처 표기)이 있다.
+            (button: "profile.settings", screen: "screen.settings", placeholder: false),
         ]
 
         for destination in destinations {
@@ -190,6 +191,9 @@ final class Phase1FlowTests: XCTestCase {
             XCTAssertEqual(navigationBar.buttons.count, 1)
             if destination.placeholder {
                 XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
+            }
+            if destination.button == "profile.settings" {
+                XCTAssertTrue(element("settings.dataSource", in: app).exists)
             }
 
             let backButton = navigationBar.buttons.firstMatch

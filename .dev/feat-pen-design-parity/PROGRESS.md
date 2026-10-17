@@ -349,3 +349,77 @@
 - R17: 메모 칸이 펼쳐진 채라 패널이 높고 지도 보이는 영역이 좁다. 지도 축척이 시안보다 넓어 구간이 작게 보이고, 선은 흰 45%(시안 27%).
 - R30: "메모 저장" 버튼·금색 초점 테두리(캡처는 키보드를 내려 초점이 없음) 외 1~3pt 안. 패널 위끝 ≈170(시안 124, 버튼 몫).
 - E단계 참고: 진행 여정 카드·"새 여정 시작" 버튼 스타일은 공용이라 R31~R33에도 이미 적용됐다. 멈춘 여정의 제목 문구·현재 정류장 묶음·좌우 여백·지도 핀·바닥 여백은 손대지 않았다(`MainHomeView.isArrived` 분기).
+
+## E단계 — R31·R32·R33·R19·R23·R24·R20 (2026-10-17)
+
+근거: `diff/E.md`, `G-global.md`. 속도 우선 지시로 캡처 비교 2회. 기록·분석의 "지도 위 한 패널 + 잔디/분석 탭 전환 + × 닫기" 재구성과 설정 화면 신규 구현은 제외(BRIEF 범위).
+
+### 한 것
+
+**R31 멈춘 여정 메인** `MainHomeView`
+- 진행 여정(멈춘·도착) 공통 배치로 묶었다(`isActive`): 좌우 18, 버튼 바닥 화면 28pt 위, 현재 정류장 묶음 제거(`screen.main`·`main.currentStation`·`main.bound`는 보이지 않는 요소로 유지), 지도 정류장 핀 없음, "새 여정 시작"은 카드 아래 5pt.
+- 멈춘 여정 제목 "{정류장}에서, / 잠깐, 나에게 집중해요."(줄별 검정 53% 띠는 A단계 공용). 카드·버튼 모양은 D단계 공용 그대로.
+
+**R32 새 여정 확인 창** `MainActiveJourneyView`(`NewJourneyDialog`), `RootView`
+- 시스템 alert → 직접 그린 창(`main.newJourney.dialog`): 검정 60% 배경, 화면 전체 세로 가운데, 좌우 22, #0C0C0C 반경 24 흰 25% 테두리, 제목 23 Bold, 본문 13 #AAAAAA(문구 그대로 한 문장, 자연 줄바꿈), 버튼 순서 "이전 여정 유지하기"(흰 캡슐+금색 바깥 테두리) 위 → "새 여정 시작"(#111111 흰 글자, 빨강 아님) 아래, 간격 13.
+- 동작 동일: 유지 = 닫기만, 새 여정 = 닫고 `confirmNewJourney()`. 식별자 `main.newJourney.keep/confirm` 유지. 모달 낭독, escape = 유지, 열릴 때 유지 버튼에 초점. 창은 NavigationStack 바깥에 overlay로 띄운다(위젯 진입 등 어느 경로에서도 전체를 덮음).
+
+**R33 이어간 여정**: C단계(R13) 결과로 일시정지·노선·따라가기·테마 버튼, 노선선 색 분리, 정류장 점, 도착 표시, 버스 그림, 하단 그라데이션, 지표 정렬이 이미 맞다. 코드 변경 없음.
+
+**R19 기록** `RecordsView`, `RecordsPanelChrome.swift`(새 파일), `RecordsCalendar`(`RecordDay.weekdayName`)
+- push·시스템 뒤로 버튼은 그대로 두고, 120pt 지도 띠 → 화면 전체 지도 + 떠 있는 패널(`RecordsPanelScreen`: 위끝 y≈116, 좌우 12, 바닥 20, 반경 28, 흰 20% 테두리, 안쪽 23, 내비 막대 배경 숨김).
+- 탭 모양(`RecordsTabBar`): #181C19 반경 10·안쪽 3, 선택 #303B34 반경 8, 12pt, "분석 보기" → "분석"(누르면 기존처럼 분석 push).
+- 안내 "날짜를 눌러 둘러보세요." 11pt(예시 접두어 제외), 연도 머리줄 "2026년의 여행" 18 Bold + 오른쪽 "‹ 올해 ›"(`records.year.current` = 올해로), 요약 #C3CDC6, 연도 칩 줄(64x44, 선택 #F3F6F3/#0A0A0A, `records.year.<연도>`) — 연도 메뉴(`records.year.picker`)를 대체.
+- 잔디 상자 #0B100D 반경 6 흰 15% 테두리, 월 라벨을 실제 1일이 있는 주 위치에, 요일 열 32pt, 칸 약 4pt·간격 1.5, 선택 날짜는 칸보다 3pt 큰 흰 테두리. 범례는 상자 밖 10pt #B8C4BC "하루 여행 시간 … ■■■■■ 적음 → 많음".
+- 구분선(흰 14%), 날짜 머리줄 "10월 17일 토요일" + 오른쪽 "N회 · 합계"(11pt #C3CDC6), 기록 줄 "할 일 16 Bold / 출발 → 도착 11pt / 태그 · 25 min · 버스 11pt 태그 색", 줄 구분선 제거. 낭독 라벨은 시각·경로를 포함해 유지.
+- "다음 여행 시작하기"(compact 흰 알약, `records.startNext`): 진행 여정이 없을 때만 보이고 누르면 경로를 비운 뒤 `startTripFromMain()`(메인 "여행 시작하기"와 같은 흐름). 진행 여정이 있으면 메인 확인 창을 거쳐야 하므로 숨긴다.
+
+**R23/R24 분석** `RecordsAnalyticsView`
+- 같은 떠 있는 패널. 기록이 하나도 없으면 패널 높이를 내용에 맞춰 아래에 붙인다(R24, `ViewThatFits`).
+- 탭 줄 표시(분석 선택). "잔디"는 `analytics.tab.records` = 기록으로 돌아가기(dismiss, 기존 뒤로와 같음).
+- 기간 줄 한 줄: "주간/월간" 11pt(선택 #303B34 반경 8 높이 38, 누름 영역 44) + 오른쪽 "‹ 이번 달 ›" 11pt #CBD6CE.
+- 요약 세 열 105/91/나머지, 라벨 10pt, 평균은 "1 h 30 min" 형식. 도넛: 두께 19, 바탕 #27332B, 조각 사이 틈, 가운데 "16h 35m"/"0 min" 20 Bold(`ProfileTimeText.compact` 추가). **빈 상태에서도 빈 고리 + "0 min 합계"**.
+- 범례: 6x20 막대, 이름 12 #E8EEE9, 값 10pt "1 h 15 min · 50%"(횟수는 낭독에만), 줄마다 흰 9% 선, 폭 156.
+- 비교 문구 "지난달/지난주 같은 기간보다 N min 많이/적게 여행했어요." #C3CDC6. 차트 제목 "날짜별 여행 시간"(태그 선택 시 "{태그} 여행 시간").
+- 빈 상태 문구 "첫 여행을 마치면 태그별 시간과 활동이 여기에 모여요."를 도넛 아래 13pt로. 기록이 하나도 없으면 비교·날짜별·인사이트 섹션을 숨긴다.
+- 고정 "다음 여행 시작하기"(R19와 같음).
+
+**R20 설정(자리표시)** `DestinationScreen`(`SettingsPlaceholderView`)
+- 자리표시를 시안 패널 모양으로: 지도 배경, 아래 시트(좌우 12, 바닥 25, 반경 28, 흰 20% 테두리), "설정" 22 Bold(`screen.settings`), "Focus Mate" 15 #AAAAAA, **"데이터 출처" 진입(`settings.dataSource` → `.dataSource`)**. 내비 제목 제거, 뒤로 버튼 유지.
+- **F단계 참고**: 마이페이지의 '데이터 출처' 줄(`profile.dataSource`)은 아직 그대로다. F단계에서 지우고 관련 테스트(DataSourceUITests 진입 경로 등)를 설정 경유로 바꿀 것.
+
+**테스트 기대값 수정(실행 안 함, build-for-testing 컴파일만 확인)**
+- `UITestLaunchSupport`: `alert(titled: "새 여정을 시작할까요?")` → `main.newJourney.dialog`, `alertButton("main.newJourney.*")` → 직접 그린 창의 버튼.
+- `PenParityCaptureTests.testR32_newConfirm`: `main.newJourney.dialog`를 기다린다.
+- `Phase1FlowTests.testNoCompletionActionsBeyondNavigationButtonsInDefaultDestinations`: 설정은 자리표시 버튼 수 검사 대신 `settings.dataSource` 존재 확인.
+
+### 건너뛴 것(이유)
+- R19/R23/R24 한 패널 + 탭 전환 + × 닫기: 화면 재구성(BRIEF). 탭은 모양만, × 대신 시스템 뒤로 버튼.
+- R19 "확대해서 보기", "날짜 찾기"(날짜 선택기): 새 기능. 그만큼 범례~구분선 간격이 시안보다 짧다.
+- R19 기록 줄의 "메모 남기기/수정" 버튼: 시안에는 없지만 메모 편집의 유일한 진입이라 11pt로 작게 남겼다.
+- R23 태그별 집계를 선택 기간으로 바꾸기: 동작 변경이라 보류. 그래서 제목에 " · 전체 기간"을 남겼다(시안은 "태그별 여행 시간").
+- R23 "태그로 활동 보기" 칩: 시안에 없지만 지우면 태그 거르기 기능이 사라져(테스트 `analytics.tag.*`) 안내 문구만 빼고 작은 칩으로 남겼다.
+- R23/R24 "예시 기록으로 보는 여행 분석입니다.", R19 "예시 기록 · ": 예시 문구(BRIEF). 그래서 R24 패널이 시안보다 약 30pt 낮다.
+- R20 앱 소개 "가상 지도와 30초 압축 시간의 프로토타입입니다.", "이 데모는 …", 동작 줄이기 체크, "서울 버스 유형 보기"·서체 출처 링크: 프로토타입 문구이거나 새 기능. 그래서 패널이 시안(303)보다 낮다(약 190).
+- R31·R32 금색 초점 고리(R33 일시정지 둘레 포함)는 R32 확인 창의 기본 버튼에만 그렸다. R33 재개 직후 초점 이동은 접근성 동작 변경(PRD FR-12)이라 보류.
+- R33 하단 지표: R33 시안(15 = 28 Bold + min 15 #AAAAAA, 정류장 19/11, km 13 #AAAAAA, 라벨 10 #B5B5BA)과 R13 시안(30 Bold + 단위 15 흰 64%, 라벨 12)이 같은 화면인데 서로 다르다. C단계의 R13 값을 유지했다 — 디자이너 확인 필요.
+
+### 테스트 결과
+- build-for-testing 2회 성공(앱·단위·UI 타깃, 오류 0).
+- PenParityCaptureTests R31·R32·R33·R19·R23·R24·R20: 2회, 매번 **7개 실행, 실패 0**(각 약 68초). 캡처 `scratchpad/app/` 갱신.
+- 그 밖의 단위/UI 테스트는 실행하지 않았다(사용자 지시).
+
+### 마지막 회귀에서 확인(미실행)
+- UI: `NewJourneyUITests`(전체 — 확인 창 교체), `JourneyLifecycleSafetyUITests`(새 여정 창 AC27·AC28·AC32·AC33 — 백그라운드 왕복·재실행·최대 글씨), `WidgetEntryUITests`(새 여정 창, 분석 진입), `ActiveJourneyMainUITests`, `MainActiveJourneyCardUITests`, `BoardingLargeTextUITests`, `RouteDataUITests`(새 여정 확정), `RecordsUITests`(전체 — 연도 메뉴 → 칩, 기록 줄·빈 문구 배치), `RecordsAnalyticsUITests`(전체 — 기간 줄, 빈 상태 섹션 숨김, 큰 글자 AC6·AC7), `RecordsAnalyticsVisualCaptureTests`, `Phase1FlowTests`(설정 데이터 출처 확인), `ProfileUITests`(설정 AC26·AC27·XXXL 왕복), `DataSourceUITests`, `LargeTextUITests`, `SimulatorLargeTextRecoveryTests`, `StorageRecoveryFlowTests`
+- 단위: `RecordsCalendarTests`, `ProfileTimeTextTests`, `RecordsAnalyticsAdapterTests`, `RecordsAnalyticsBrowserTests`, `RecordsAnalyticsRowTests`, `RecordsAnalyticsTests`
+- `PenParityCaptureTests`: testR34_alightResume·testR18_homeAfter·testR01_main(진행 여정 공통 배치·바닥 여백 분기 변경)
+
+### 남은 차이
+- 공통: 실제 항공 사진(시안은 3D 일러스트), Apple 로고·Legal, 상태 표시줄.
+- R31: 1~3pt 안. 할 일·정류장·인사말은 데이터 차이.
+- R32: 창 위치·크기 1~2pt 안. 본문 줄바꿈 위치 동일.
+- R33: 하단 지표 서체 값(위 R13/R33 충돌), 재개 직후 금색 초점 고리 없음. 지도 시점·축척(항공 사진).
+- R19: × 대신 시스템 뒤로 버튼, 날짜 찾기·확대해서 보기 없음, 메모 버튼 있음. 그 밖의 요소 위치 1~4pt 안.
+- R23: × 대신 뒤로 버튼, 예시 안내 줄 없음(그만큼 위로 붙음), 제목 " · 전체 기간", 태그 칩 줄 추가. 도넛·범례·요약은 시안과 같은 모양.
+- R24: 예시 안내 줄 몫만큼 패널이 낮다(위끝 ≈232 vs 200).
+- R20: 프로토타입 문구·동작 줄이기·링크가 없어 패널이 낮다. 뒤로 버튼 있음(시안은 ×).

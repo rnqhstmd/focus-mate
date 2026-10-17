@@ -393,7 +393,7 @@ final class PenParityCaptureTests: XCTestCase {
         let h = FocusMateUIHarness.launch(seed: "lifePaused600")
         wait(h, "main.activeJourney")
         h.app.buttons["open.preparation"].tap()
-        XCTAssertTrue(h.app.alerts.firstMatch.waitForExistence(timeout: timeout), "새 여정 alert 없음")
+        wait(h, "main.newJourney.dialog")
         capture("R32-new-confirm")
     }
 

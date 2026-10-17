@@ -10,6 +10,9 @@ struct JourneyMapView: View {
     @State private var position: MapCameraPosition
     /// 버스 아이콘을 화면 기준 진행 방향으로 돌리기 위한 현재 지도 방위. 조작이 끝날 때만 갱신한다.
     @State private var renderedHeading: Double = 0
+    /// 지도를 처음 만들 때 함께 넘긴 표식·덮개 다각형은 MapKit이 그리지 않는 일이 있어(정류장 점이 안 보이던 원인),
+    /// 지도가 자리를 잡은 뒤에 더한다. 선은 처음부터 그린다.
+    @State private var showsMarks = false
 
     init(map: JourneyMapController, bottomInset: CGFloat) {
         self.map = map
@@ -23,27 +26,35 @@ struct JourneyMapView: View {
             position = new
             if new.positionedByUser { map.userMovedCamera() }
         }), interactionModes: [.pan, .zoom, .rotate]) {
-            // 남은 구간은 흐린 흰색, 지나온 구간은 노선 종류 색(지선 초록·간선 파랑).
-            MapPolyline(coordinates: map.remainingPoints.map(\.coordinate))
-                .stroke(FMDesign.routeRemaining, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            // 덮개(검정 33%)를 지도 안 다각형으로 깔아 노선선·표식이 그 위에 선명하게 그려지게 한다(R06과 같은 방식).
+            if showsMarks {
+                MapPolygon(coordinates: Self.scrimBox(around: map.destinationStop.point.coordinate))
+                    .foregroundStyle(FMDesign.mapScrim)
+            }
+            // 시안 R13: 버스부터 도착까지(앞으로 갈 구간)는 노선 종류 색 3pt, 지나온 구간은 흰 선 2.5pt.
             MapPolyline(coordinates: map.travelledPoints.map(\.coordinate))
+                .stroke(FMDesign.routePassed, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+            MapPolyline(coordinates: map.remainingPoints.map(\.coordinate))
                 .stroke(FMDesign.routeColor(kind: map.journey.routeKind),
-                        style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            ForEach(map.visibleStops, id: \.id) { stop in
-                Annotation("", coordinate: stop.point.coordinate) {
-                    Circle().fill(map.isPassed(stop) ? FMDesign.stopPassed : .white).frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(FMDesign.stopStroke, lineWidth: 1.5))
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+            ForEach(showsMarks ? Array(map.visibleStops.dropLast()) : [], id: \.id) { stop in
+                Annotation("", coordinate: stop.point.coordinate, anchor: .center) {
+                    Circle().fill(map.isPassed(stop) ? FMDesign.stopPassed : .white).frame(width: 7, height: 7)
+                        .overlay(Circle().strokeBorder(FMDesign.stopStroke, lineWidth: 1))
                 }
                 .annotationTitles(.hidden)
             }
-            Annotation("", coordinate: map.destinationStop.point.coordinate) {
-                Image(systemName: "flag.fill").font(.system(size: 16, weight: .bold)).foregroundStyle(.orange)
+            // 도착: 검은 원에 노선색 테두리, 가운데 흰 점.
+            if showsMarks {
+            Annotation("", coordinate: map.destinationStop.point.coordinate, anchor: .center) {
+                Circle().fill(FMDesign.stopStroke).frame(width: 16, height: 16)
+                    .overlay(Circle().strokeBorder(FMDesign.routeColor(kind: map.journey.routeKind), lineWidth: 2.5))
+                    .overlay(Circle().fill(.white).frame(width: 6, height: 6))
             }
             .annotationTitles(.hidden)
-            Annotation("", coordinate: map.bus.point.coordinate) {
-                Image(systemName: "location.north.fill")
-                    .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                    .padding(6).background(Circle().fill(FMDesign.routeColor(kind: map.journey.routeKind)))
+            }
+            Annotation("", coordinate: map.bus.point.coordinate, anchor: .center) {
+                BusTopMarker(color: FMDesign.busBodyColor(kind: map.journey.routeKind), width: 30)
                     .rotationEffect(.degrees(map.bus.headingDegrees - renderedHeading))
             }
             .annotationTitles(.hidden)
@@ -55,9 +66,12 @@ struct JourneyMapView: View {
             MapPitchToggle().mapControlVisibility(.hidden)
             MapScaleView().mapControlVisibility(.hidden)
         }
-        .overlay { FMMapScrim() }
         .background(FMDesign.mapBase)
         .safeAreaPadding(.bottom, bottomInset)
+        .task {
+            try? await Task.sleep(for: .milliseconds(600))
+            showsMarks = true
+        }
         .onMapCameraChange(frequency: .onEnd) { context in renderedHeading = context.camera.heading }
         .onChange(of: map.cameraTarget) { _, target in
             withAnimation(target.animated ? .linear(duration: 1) : nil) { position = .camera(Self.camera(for: target)) }
@@ -82,6 +96,16 @@ struct JourneyMapView: View {
         case .dark: .standard(elevation: .realistic, pointsOfInterest: .excludingAll)
         case .satellite: .imagery(elevation: .realistic)
         }
+    }
+
+    private static func scrimBox(around center: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+        let d = 0.6
+        return [
+            CLLocationCoordinate2D(latitude: center.latitude - d, longitude: center.longitude - d),
+            CLLocationCoordinate2D(latitude: center.latitude - d, longitude: center.longitude + d),
+            CLLocationCoordinate2D(latitude: center.latitude + d, longitude: center.longitude + d),
+            CLLocationCoordinate2D(latitude: center.latitude + d, longitude: center.longitude - d),
+        ]
     }
 
     private static func camera(for target: JourneyCameraTarget) -> MapCamera {

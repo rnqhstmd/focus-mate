@@ -95,8 +95,8 @@ private struct JourneyScreen: View {
                 }
             } else { Color.clear }
         }
-        // 하단 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다. 일시정지가 아니면 버튼 없이 아래 여백만 남는다.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // 포기 X(R15)와 확인 창(R16)은 타이머 화면 위에 겹친다. 버튼·창 밖의 터치는 아래로 넘어간다.
+        .overlay {
             if let timer, !awaitingDeparture { JourneyAbandonBar(abandoner: model, timer: timer) }
         }
         .accessibilityElement(children: .contain)
@@ -223,10 +223,10 @@ private struct JourneyScreen: View {
     }
 
     private func testButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
-        // 거의 투명한 opacity는 히트 테스트에서 빠질 수 있어, 불투명 뷰에 글자만 투명하게 두고 터치 영역을 명시한다.
+        // 화면(지도)을 가리지 않게 거의 투명하게 두되, 터치 영역은 contentShape로 명시해 히트 테스트에 남긴다.
         Button(action: action) {
             Text(label).font(.system(size: 1)).foregroundStyle(.clear)
-                .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
         }
         .accessibilityLabel(label)
         .accessibilityIdentifier(id)

@@ -18,6 +18,9 @@ struct SceneMapBackdrop: View {
     var fallbackCoordinate: CLLocationCoordinate2D? = nil
 
     @State private var position: MapCameraPosition = .automatic
+    /// MapKit이 지도를 처음 만들 때 함께 넘긴 표식(Annotation)과 덮개 다각형을 그리지 않는 일이 있다(선은 그려짐).
+    /// R06처럼 나중에 더한 표식은 그려지므로, 표식·덮개는 지도가 자리를 잡은 뒤에 더한다(R07·R08·R11 버그).
+    @State private var showsMarks = false
 
     private var stop: RouteCatalog.Stop? {
         guard let catalog = model.routeCatalog,
@@ -56,6 +59,16 @@ struct SceneMapBackdrop: View {
         }
     }
 
+    /// Whole route (all stops of `routeID`). Drawn as a faint white line under the chosen leg (R07 시안).
+    private var fullRouteCoordinates: [CLLocationCoordinate2D] {
+        guard leg != nil, let routeID, let catalog = model.routeCatalog, let index = catalog.routeIndex(id: routeID) else { return [] }
+        return catalog.routes[index].stops.compactMap { stopIndex in
+            guard catalog.stops.indices.contains(stopIndex) else { return nil }
+            let point = catalog.stops[stopIndex].point
+            return CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+        }
+    }
+
     private static func camera(at coordinate: CLLocationCoordinate2D) -> MapCameraPosition {
         .camera(MapCamera(centerCoordinate: coordinate, distance: cameraDistance, heading: 0, pitch: cameraPitch))
     }
@@ -86,11 +99,18 @@ struct SceneMapBackdrop: View {
                     let detailed = leg != nil && route.count > 1
                     let decorated = labelsOrigin || detailed
                     Map(position: $position, interactionModes: []) {
-                        if decorated {
+                        if decorated && showsMarks {
                             // 시안(R04·R06)의 표식·노선선은 덮개 위에 선명하다. 덮개를 지도 안 다각형으로 깔아
                             // 노선선·표식이 그 위에 그려지게 한다(Apple 로고·Legal은 지도 위 UI라 가려지지 않는다).
                             MapPolygon(coordinates: Self.scrimBox(around: coordinate))
                                 .foregroundStyle(FMDesign.mapScrim)
+                        }
+                        if detailed {
+                            let full = fullRouteCoordinates
+                            if full.count > 1 {
+                                MapPolyline(coordinates: full)
+                                    .stroke(Color.white.opacity(0.44), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                            }
                         }
                         if route.count > 1 {
                             if detailed {
@@ -103,7 +123,7 @@ struct SceneMapBackdrop: View {
                                     .stroke(routeColor, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                             }
                         }
-                        if detailed {
+                        if detailed && showsMarks {
                             ForEach(Array(route.enumerated().dropFirst()), id: \.offset) { item in
                                 Annotation("", coordinate: item.element, anchor: .center) {
                                     stopDot(isLast: item.offset == route.count - 1)
@@ -112,7 +132,7 @@ struct SceneMapBackdrop: View {
                             }
                             Annotation("", coordinate: route[0], anchor: .center) { busMarker }
                                 .annotationTitles(.hidden)
-                        } else if showsStationAnnotation {
+                        } else if showsStationAnnotation && showsMarks {
                             Annotation(stop.name, coordinate: coordinate, anchor: .bottom) {
                                 if labelsOrigin { originMarker(name: stop.name) } else {
                                     Image(systemName: "mappin.circle.fill")
@@ -132,6 +152,10 @@ struct SceneMapBackdrop: View {
                     .onAppear { position = targetPosition(for: coordinate) }
                     .onChange(of: leg) { _, _ in
                         withAnimation(.easeInOut(duration: 0.6)) { position = targetPosition(for: coordinate) }
+                    }
+                    .task {
+                        try? await Task.sleep(for: .milliseconds(600))
+                        showsMarks = true
                     }
                     .id(stop.id)
                 } else if let fallbackCoordinate {
@@ -186,21 +210,9 @@ struct SceneMapBackdrop: View {
             .overlay { Circle().strokeBorder(isLast ? routeColor : FMDesign.stopStroke, lineWidth: isLast ? 1.5 : 1) }
     }
 
-    /// R06 bus marker at the origin: a kind-coloured bus body seen from above.
+    /// R06·R07 bus marker at the origin: the green bus seen from above.
     private var busMarker: some View {
-        RoundedRectangle(cornerRadius: 6)
-            .fill(routeColor)
-            .frame(width: 22, height: 32)
-            .overlay {
-                VStack(spacing: 0) {
-                    RoundedRectangle(cornerRadius: 2).fill(Color.black.opacity(0.45)).frame(width: 14, height: 6)
-                    Spacer(minLength: 0)
-                    RoundedRectangle(cornerRadius: 2).fill(Color.black.opacity(0.45)).frame(width: 14, height: 4)
-                }
-                .padding(.vertical, 4)
-            }
-            .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Color.white.opacity(0.85), lineWidth: 1) }
-            .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+        BusTopMarker(color: routeColor == FMDesign.routeBranch ? Color(hex: 0x2E9E4F) : routeColor, width: 24)
     }
 }
 

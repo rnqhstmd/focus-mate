@@ -212,3 +212,84 @@
 - R09: 요소 위치 1~3pt 안. 아이콘 모양 차이.
 - R10: 위치 1pt 안. 셀 아이콘 모양 차이(나무 1그루, 지하철 모양).
 - R11: 시트 높이 시안 384 대비 약 1~3pt 안으로 맞춤(2회차 수치 조정). 배지 버스 아이콘은 SF `bus`라 시안 선형 아이콘보다 두껍다. 배지 녹색은 `FMDesign.routeColor(kind:)`(#168445) 사용.
+
+## C단계 — R27·R12·R42·R28·R29·R13·R15·R16 (2026-10-17)
+
+근거: `diff/C.md`(R27·R12·R42·R13·R15·R16), `diff/D.md`(R28·R29), `diff/F.md` 공통 C1~C7, `G-global.md`. R14(다음 정류장 패널)·R22(여행 중 소리)는 새 기능이라 제외. 속도 우선 지시로 캡처 비교 2회.
+
+### 한 것
+
+**PassFace(공용 카드 앞면)**
+- 서울 점지도를 지웠다(`dotsOpacity` 인자 삭제, `PassDots` 에셋·`dotsAssetName`은 남김).
+- **카드 번호 표시(BR-4 시안 우선 변경)**: `numberText` 인자, 왼쪽 아래 7pt "FM · 0842 3017". `AppModel.currentCardNumberText` 추가, `PassIdentity` 주석 갱신. 태그 화면·LCD 썸네일·마이페이지에 넘긴다(꾸미기 미리보기·발급 화면은 넘기지 않음 — F단계 몫).
+- 배치 `Layout`: `.wide`(352x221, 마이페이지·발급·꾸미기 기본값)와 `.ticket`(270x158, 태그 화면). 글자 #F1F2F3, Focus Mate 10 Bold, 제목 18, 비접촉 아이콘 12x19(기본 카드 #D5DED7, 꾸민 카드 흰색), 테두리 #51565A 1pt.
+- 꾸민 카드: "Focus Mate"·번호를 사진 위 어두운 알약(#080B0C 80%, 글자 #D3D6D8)으로 보인다.
+
+**CardTagScreen(승차·하차 공용)**
+- 배경 #101411, 단말기 237x286(r24, #525454), 표시줄 156x4(대기 #737C76/인식 #B2C9B9), LCD 201x125(r12, #5D625F/인식 #848F87), 태그 영역 149x76(#141617·#707874, 인식 #242829·#A6B6AC, 아이콘 `dot.radiowaves.right`+"카드를 여기에"/"태그 완료"), 아래 각인 "FOCUS MATE". 카드 270x158, 점선·깜박임 삭제.
+- 세로 배치 고정: 승차 단말기 y=191·화살표 550·카드 593, 하차 단말기 246·카드 593, 아래 안내 772.
+- LCD 문구: 승차 "작은 시작이 / 오늘을 바꿔요."(15 Bold)+현재 시각, 하차 "하차 준비"(18 Bold)+"아래 태그 영역에 카드를 대주세요"+오른쪽 위 노선 번호(`lcdTrailing`, AlightingTagView가 처음 나타날 때 잡아 둠).
+- 인식 연출(R12·R29): 카드가 0.78배로 줄어 태그 영역 가운데로 이동(뷰에서 계산, 컨트롤러 `cardOffset`은 그대로), 오른쪽 아래 초록 체크 배지, LCD는 왼쪽 카드 썸네일 + 승차 "집중동행카드 ✓ / 나의 Focus Mate / 번호", 하차 "하차 완료 / 집중동행카드 / ✓". 올림 화살표는 인식 시 숨김.
+- 하차 화면 문구 노출(R28): "여행의 마지막 정류장"/"하차 태그", "도착했어요. / 하차 태그를 해주세요."(27 Bold), "○○에 도착", 늘 보이는 "카드를 위의 단말기로 올려주세요"(인식 뒤 "하차 완료 · 이번 여행을 기록했어요"), "눌러서 태그하기" 밑줄 버튼(`alighting.tapToTag`, 기존 `activate`와 같은 동작). 시각 문구는 낭독에서 숨기고 기존 낭독 제목은 유지.
+- 승차 안내는 카드를 눌렀을 때만 "카드를 위의 단말기로 올려주세요"(12pt #BDC8BF).
+- **승차 화면 뒤로 버튼 숨김(AC-14 시안 우선 변경)**: 승차·하차 모두 내비 막대 숨김. 테스트 전용 `test.boarding.back`(DEBUG, `model.goBack()`)을 뒀다.
+- `BoardingGeometry.tagAreaSize` 238x160 → 149x76, `cardWidth` 268 → 270.
+- R42: 카드 저장 안내 띠(`savedCardNotice`)를 경로가 바뀌면 지운다(승차 화면에 남던 문제).
+
+**여행 지도(R13)** `JourneyMapView`, `JourneyTimerView`, `BusTopMarker`(새 파일)
+- 버스 표식: 위에서 본 초록 버스를 도형으로 그렸다(`BusTopMarker`, 30x57, 지선 몸체 #2E9E4F, 앞유리·뒷유리·옆창·미러). 진행 방향 회전 유지. R06·R07·R11 출발 표식도 같은 그림(24폭).
+- 노선선: **시안대로 앞으로 갈 구간(버스→도착)을 노선색 3.5pt, 지나온 구간을 흰 45% 2.5pt**로 바꿨다(0단계는 반대였고 남은 흰 27% 선이 너무 흐렸다). 정류장 점 7pt(지난 #777777, 앞 흰색, #0A0A0A 1pt), 도착은 16pt 검은 원+노선색 2.5pt 테두리+흰 점.
+- 덮개 33%를 지도 위 덮개 뷰 대신 지도 안 다각형으로 깔아 선·표식이 덮개 위에 선명하다.
+- 카메라 기울기 55→40°, 거리 1200→1000m.
+- 버튼: 일시정지 46 유리 원(`fmGlassCircle`: #080808 80%+흰 14.5%, 아이콘 14 Bold), 그 아래 노선 버튼 44(`journey.map.route`, 동작은 기존 지도 보기 시트 열기), 따라가기 43 흰 12.5%+흰 1pt 테두리 `scope`, 지도 테마 46 유리 원. 간격 10, 위 여백은 안전 영역 바로 아래.
+- 하단 지표: 숫자 30 Bold 흰색 + 단위 15 Regular 흰 64%, 정류장 열 가운데·거리 열 오른쪽 정렬. 하단 진한 그라데이션 → 아주 약한 0→30%(150pt).
+
+**일시정지(R15)·종료 확인(R16)** `JourneyTimerView`, `JourneyAbandonBar`, `JourneyView`
+- 지도 흐림 12 + 검정 55% 균일(`PausedJourneyShade` 삭제). 일시정지 중 노선·따라가기·테마 버튼을 숨긴다.
+- "일시정지됨" 18 Regular #BBBBBB, "현재 정류장으로" 캡슐(44, #0A0A0A 75%, 흰 38% 테두리, `journey.recenter`) → `JourneyMapController.recenter()`(일시정지 중에도 카메라를 버스로 되돌림, `JourneyMapState.recenter()`).
+- 포기: 아래 "포기하기" 캡슐 → 오른쪽 위 빨간 X(46, #D13A42+흰 19%). 식별자 `journey.abandon`·라벨 "포기하기" 유지. `JourneyAbandonBar`는 safeAreaInset 대신 타이머 위 overlay라 일시정지 중 하단 지표 위치가 실행 중과 같다.
+- 종료 확인: 시스템 alert → 직접 그린 창(`journey.abandon.dialog`, 검정 60% 배경, 358폭 #0C0C0C r24 흰 25% 테두리, 제목 22 Bold, 본문 13 #AAAAAA 두 줄, 세로 버튼 "계속 여행"(흰 캡슐+금색 바깥 테두리)·"그만두기"(#111111 흰 글자)). 버튼 식별자·동작·포커스 복귀 그대로, 모달 낭독·escape 닫기·열릴 때 제목에 포커스. 낭독 본문은 기존 `abandonMessage` 한 문장(`abandonMessageLines` 추가).
+
+**B단계 버그(R07·R08·R11 지도에 정류장 점·버스가 안 보임) — 원인·수정**
+- 원인: MapKit이 지도를 처음 만들 때 함께 받은 Annotation·MapPolygon을 그리지 않는다(MapPolyline은 그림). R06은 노선을 고른 뒤 나중에 더해져서 그려졌다. 캡처 확대로 R07이 이미 `detailed` 분기(2pt 선+흰 외곽)였음을 확인했다.
+- 수정: `SceneMapBackdrop`·`JourneyMapView`에서 표식·덮개 다각형을 지도가 나타나고 0.6초 뒤(`showsMarks`)에 더한다. 2회차 캡처에서 R07·R11에 정류장 점·버스·덮개가 나온다. R07 시안처럼 노선 전체를 흰 44% 1.5pt 선으로 고른 구간 아래에 깐다.
+
+**진단 버튼**: 여행 화면 수동 시계 버튼·메인 저장 실패·기록 화면 진단 버튼 배경을 검정 → 검정 2%로 바꿨다(터치 영역은 `contentShape` 그대로).
+
+**테스트 기대값 수정(실행 안 함, build-for-testing 컴파일만 확인)**
+- `BoardingRulesTests`: 태그 영역 149x76·카드 270x158 기준으로 다시 계산(29.9%=22.72, 30.1%=22.88, BR-7 교집합 149x38=0.5, 활성 위치 카드 위쪽 45.2, 폭 270/149/120/300). 정확히 30% 경계 검사만 이진 소수 오차를 피하려고 100x50 영역으로 본다.
+- `BoardingTagControllerTests`: rig 기하 (−60.5,260,270,158)/(0,0,149,76). 드래그 −240 접촉·−150 미접촉 유지, activate 기대값 (0, −214.8)(정밀도 비교).
+- `UITestLaunchSupport`: `alert(titled: "여행을 그만둘까요?")`와 `alertButton("journey.abandon.*")`이 직접 그린 창을 찾는다.
+- `JourneyAbandonUITests.testAC21`: alerts.count → 창 개수.
+- `BoardingFlowUITests`: 승차 화면 → 승차권 이동을 `test.boarding.back`으로(3곳), 내비 버튼 0개 확인 추가.
+- `AlightingFlowUITests.testAC6_7_8_9_21`: 안내 문구 "카드를 위의 단말기로 올려주세요".
+- `JourneyMapUITests.testAC22`·`testAC25`, `JourneyMapAccessibilityUITests.testAC34`: 일시정지 중 도구는 "없거나 잠김".
+- `PenParityCaptureTests.testR16_endConfirm`: `journey.abandon.dialog`를 기다린다.
+
+### 건너뛴 것(이유)
+- R14 다음 정류장 패널, R22 여행 중 소리: 새 기능(BRIEF).
+- R13 노선 전체선(도착 너머까지 흰 선): 여행 지도에 노선 전체 좌표를 붙이는 데이터 작업이 필요해 뺐다(준비·승차권 지도에는 넣음).
+- 노선 버튼의 다음 정류장 패널 동작: 지시대로 기존 지도 보기 시트를 연다.
+- R15 "예시 여정 · 실제로 저장하지 않아요.": 예시 문구(BRIEF).
+- 승차 화면 이탈 경로: 뒤로 버튼을 숨기면서 사용자 이탈 경로가 없어졌다(시안대로). 테스트만 진단 버튼을 쓴다.
+- 꾸미기 미리보기·발급 화면 카드 번호: F단계 화면이라 `numberText`를 넘기지 않았다.
+
+### 테스트 결과
+- build-for-testing 2회 성공(앱·단위·UI 타깃, 오류 0).
+- PenParityCaptureTests R27·R12·R42·R28·R29·R13·R15·R16·R07·R11: 2회, 매번 **10개 실행, 실패 0**(각 약 226초). 캡처는 `scratchpad/app/` 갱신.
+- 그 밖의 단위/UI 테스트는 실행하지 않았다(사용자 지시).
+
+### 마지막 회귀에서 확인(미실행)
+- 단위: `BoardingRulesTests`(전체), `BoardingTagControllerTests`(전체), `PassFaceAccessibilityTests`, `PassFaceAssetTests`, `PassIdentityTests`, `JourneyMapStateTests`, `JourneyMapControllerTests`
+- UI: `BoardingTagUITests`(전체 — 태그 영역·카드 크기 변경으로 끌기 좌표 영향), `BoardingFlowUITests`(전체), `BoardingLargeTextUITests`, `AlightingFlowUITests`(전체), `AlightingTag` 관련 UI, `JourneyAbandonUITests`(전체), `JourneyLifecycleSafetyUITests`, `RouteDataUITests`, `JourneyResumeUITests`, `JourneyMapUITests`(전체), `JourneyMapAccessibilityUITests`(전체), `JourneyTimerUITests`, `DepartureBriefingUITests`, `ProfileUITests`, `CardCustomizationFlowTests`(저장 안내 띠), `LargeTextUITests`, `SimulatorLargeTextRecoveryTests`
+- `PenParityCaptureTests`: testR33_resumed, testR38_profile, testR39~R41, testR34_alightResume, testR06_timeDest·testR08·testR10(지도 표식 지연 적용)
+
+### 남은 차이
+- 공통: 실제 항공 사진(시안은 3D 일러스트), Apple 로고·Legal.
+- R27·R42: 1~2pt 안. 태그 아이콘은 SF `dot.radiowaves.right`. LCD 시각은 현재 시각(시안 20:00).
+- R12·R29: LCD 썸네일이 100x58(시안 100x64, 카드 비율 유지). 하차 머리 문구가 시안보다 약 2~3pt 아래.
+- R28: 1~3pt 안.
+- R13: 시안 대비 지도 시점·축척 차이(항공 사진). 노선 전체선 없음. 이번 캡처 화면 안에는 정류장 점이 들어오지 않았다(정류장 간격이 넓음, 표식 자체는 R07·R11에서 그려짐 확인).
+- R15: 흐린 지도가 시안보다 조금 밝다. 하단 지표·버튼 위치는 1~3pt 안.
+- R16: 창 세로 위치·높이 2~4pt 차이, 뒤 흐림 화면 동일.
+- R07·R11: 점·버스·덮개는 나오지만 시안의 현재 정류장 14pt 원은 없다. 지도 범위가 시안보다 넓다(구간 전체 맞춤).

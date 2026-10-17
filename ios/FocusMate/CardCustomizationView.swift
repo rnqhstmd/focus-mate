@@ -249,7 +249,7 @@ struct CardCustomizationView: View {
             let size = canvas.size
             let style = previewStyle(size: size)
             ZStack {
-                PassFace(style: style, dotsOpacity: 0.25).accessibilityHidden(true)
+                PassFace(style: style).accessibilityHidden(true)
                 if let photo = style.photos.first(where: { $0.id == controller.selectedPhotoID }) {
                     let rect = photoRect(photo, size: size)
                     Rectangle().stroke(.white, lineWidth: 1).frame(width: rect.width, height: rect.height)

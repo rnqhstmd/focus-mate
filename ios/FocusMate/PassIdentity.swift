@@ -1,6 +1,6 @@
 import Foundation
 
-/// 카드 이름·번호 표기의 단일 출처. 번호 표기는 지금 어떤 화면에도 노출하지 않는다(BR-4).
+/// 카드 이름·번호 표기의 단일 출처. 번호는 시안대로 카드 앞면 왼쪽 아래와 태그 LCD에 보인다(BR-4 시안 우선 변경).
 struct PassIdentity: Equatable {
     static let displayName = "집중동행카드"
 

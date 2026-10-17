@@ -327,7 +327,7 @@ final class PenParityCaptureTests: XCTestCase {
     func testR16_endConfirm() {
         let h = launchJourneyScreen(seed: "lifePaused600")
         h.tap("journey.abandon")
-        XCTAssertTrue(h.app.alerts.firstMatch.waitForExistence(timeout: timeout), "그만두기 확인 alert 없음")
+        XCTAssertTrue(h.element("journey.abandon.dialog").waitForExistence(timeout: timeout), "그만두기 확인 창 없음")
         capture("R16-end-confirm")
     }
 

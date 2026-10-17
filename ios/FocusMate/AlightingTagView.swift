@@ -7,17 +7,23 @@ struct AlightingTagView: View {
     @Bindable var model: AppModel
     let services: JourneyServices
     @State private var controller: BoardingTagController?
+    /// 하차 저장 뒤에는 진행 여정이 비므로 처음 나타날 때 노선 번호·도착 정류장을 잡아 둔다(R28 LCD·부제).
+    @State private var busNumber: String?
+    @State private var destination: String?
 
     var body: some View {
         Group {
             if let controller {
                 CardTagScreen(model: model, services: services, controller: controller, kind: .alighting,
                               title: "하차 태그, 하차 단계. 카드를 위로 밀어 단말기에 대주세요",
+                              lcdTrailing: busNumber, subtitle: destination.map { "\($0)에 도착" },
                               onSettle: { reconcile(controller) })
             } else { Color.clear }
         }
         .onAppear {
             guard controller == nil else { return }
+            busNumber = model.activeJourney?.busNumber
+            destination = model.activeJourney?.destinationName
             let model = model
             controller = BoardingTagController(
                 alighter: model, haptics: services.haptics, announcer: services.announcer,

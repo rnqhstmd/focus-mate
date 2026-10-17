@@ -60,7 +60,7 @@ struct ProfileView: View {
                     .accessibilityIdentifier("profile.headline")
                 Text(ProfileCopy.subhead).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                     .padding(.top, 8).accessibilityIdentifier("profile.subhead")
-                PassFace(style: model.currentCardStyle, dotsOpacity: 0.25).frame(maxWidth: .infinity)
+                PassFace(style: model.currentCardStyle, numberText: model.currentCardNumberText).frame(maxWidth: .infinity)
                     .padding(.top, 32).accessibilityIdentifier("profile.card")
                 Text(PassIdentity.displayName).font(FontCatalog.text(17, weight: .bold, relativeTo: .title3))
                     .padding(.top, 16).accessibilityIdentifier("profile.cardName")

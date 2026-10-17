@@ -315,7 +315,7 @@ final class JourneyAbandonUITests: XCTestCase {
         abandon.doubleTap()
 
         XCTAssertTrue(h.alert(titled: alertTitle).waitForExistence(timeout: timeout))
-        XCTAssertEqual(h.app.alerts.count, 1)
+        XCTAssertEqual(h.app.descendants(matching: .any).matching(identifier: "journey.abandon.dialog").count, 1)
     }
 
     // 깨짐: 그만두기 연타가 저장을 두 번 하거나 메인으로 가지 못한다.

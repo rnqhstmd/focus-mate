@@ -162,7 +162,10 @@ final class JourneyMapUITests: XCTestCase {
         openSheet(h)
         h.tap("journey.timer.pause")
         XCTAssertTrue(h.waitUntil { !h.element("journey.map.themeSheet").exists })
-        XCTAssertTrue(h.waitUntil { !h.element("journey.map.follow").isEnabled && !h.element("journey.map.theme").isEnabled })
+        // 시안 R15: 일시정지 중에는 지도 도구가 화면에서 빠진다(눌릴 수 없으면 된다).
+        XCTAssertTrue(h.waitUntil {
+            ["journey.map.follow", "journey.map.theme"].allSatisfy { !h.element($0).exists || !h.element($0).isEnabled }
+        })
 
         h.tap("journey.timer.resume")
         XCTAssertTrue(h.waitUntil { h.element("journey.map.follow").isEnabled && h.element("journey.map.theme").isEnabled })
@@ -183,10 +186,13 @@ final class JourneyMapUITests: XCTestCase {
     // 깨짐: 일시정지 상태에서 테마 버튼이 활성이거나 탭하면 시트가 열린다.
     func testAC25_일시정지_상태에서는_테마_버튼이_잠기고_시트가_열리지_않는다() {
         let h = FocusMateUIHarness.launchJourney(seed: "timerPaused90")
+        XCTAssertTrue(h.element("journey.timer.resume").waitForExistence(timeout: timeout))
+        // 시안 R15: 일시정지 중에는 테마 버튼이 화면에 없다. 남아 있다면 잠겨 있어야 한다.
         let theme = h.element("journey.map.theme")
-        XCTAssertTrue(theme.waitForExistence(timeout: timeout))
-        XCTAssertFalse(theme.isEnabled)
-        theme.tap()
+        if theme.exists {
+            XCTAssertFalse(theme.isEnabled)
+            theme.tap()
+        }
         Thread.sleep(forTimeInterval: 0.5)
         XCTAssertFalse(h.element("journey.map.themeSheet").exists)
     }

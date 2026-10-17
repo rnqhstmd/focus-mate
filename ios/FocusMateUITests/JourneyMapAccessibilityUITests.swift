@@ -128,7 +128,8 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
         XCTAssertEqual(theme.label, "지도 테마")
 
         h.tap("journey.timer.pause")
-        XCTAssertTrue(h.waitUntil { !follow.isEnabled && !theme.isEnabled })
+        // 시안 R15: 일시정지 중에는 지도 도구가 화면에서 빠진다(눌릴 수 없으면 된다).
+        XCTAssertTrue(h.waitUntil { (!follow.exists || !follow.isEnabled) && (!theme.exists || !theme.isEnabled) })
     }
 
     // MARK: AC-35

@@ -120,7 +120,8 @@ final class AlightingFlowUITests: XCTestCase {
         card.tap()
         let hint = h.element("alighting.tapHint")
         XCTAssertTrue(hint.waitForExistence(timeout: timeout), "터치 뒤 안내가 없음")
-        XCTAssertTrue(hint.label.contains("카드를 위로 밀어 단말기에 대주세요"), hint.label)
+        // 시안 R28: 하차 화면은 안내 문구를 늘 보인다.
+        XCTAssertTrue(hint.label.contains("카드를 위의 단말기로 올려주세요"), hint.label)
         XCTAssertEqual(try h.writeAttempts(), before)
         XCTAssertTrue(h.element("alighting.tag").exists)
         XCTAssertFalse(h.element("screen.alightingSummary").exists)

@@ -26,6 +26,9 @@ struct JourneyMapState: Equatable {
         return true
     }
 
+    /// 일시정지 화면의 "현재 정류장으로"(R15). 도구 잠금과 무관하게 카메라를 버스로 되돌린다.
+    mutating func recenter() { camera = .follow }
+
     mutating func openThemeSheet() {
         guard toolsEnabled else { return }
         isThemeSheetPresented = true
@@ -54,9 +57,10 @@ struct JourneyCameraTarget: Equatable {
 }
 
 /// 카메라 목표 규칙. 기울인 3D 시점, 북쪽 위 고정(FR-17 제외), 동작 줄이기면 애니메이션 없음.
+/// 시안 R13은 거의 내려다보는 시점(약 30~40°)에 화면 높이에 정류장 약 5개가 들어오는 축척이다.
 enum JourneyCameraPolicy {
-    static let pitchDegrees: Double = 55
-    static let distanceMeters: Double = 1200
+    static let pitchDegrees: Double = 40
+    static let distanceMeters: Double = 1000
 
     static func target(center: CoursePoint, reduceMotion: Bool, revision: Int) -> JourneyCameraTarget {
         JourneyCameraTarget(center: center, headingDegrees: 0, pitchDegrees: pitchDegrees,

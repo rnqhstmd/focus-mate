@@ -43,32 +43,36 @@ struct JourneyTimerView: View {
     // MARK: 지도 배치
 
     private func mapBody(_ map: JourneyMapController) -> some View {
-        ZStack {
+        let paused = controller.status == .paused
+        return ZStack {
+            // 일시정지(R15): 지도를 흐리게 하고 균일하게 어둡게 덮는다.
             JourneyMapView(map: map, bottomInset: max(190, bottomHeight + 60))
-            if controller.status == .paused {
-                PausedJourneyShade(bottomInset: max(190, bottomHeight + 60))
-                    .ignoresSafeArea(.container, edges: .all)
+                .blur(radius: paused ? 12 : 0)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: paused)
+            if paused {
+                Color.black.opacity(0.55)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            } else {
+                // 시안 R13은 균일한 33% 덮개뿐이다. 항공 사진 위 하단 지표 가독성만 아주 약하게 보탠다.
+                VStack {
+                    Spacer(minLength: 0)
+                    LinearGradient(colors: [.clear, .black.opacity(0.3)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 150)
+                }
+                .ignoresSafeArea(.container, edges: .bottom)
+                .allowsHitTesting(false).accessibilityHidden(true)
             }
-            VStack {
-                Spacer(minLength: 0)
-                LinearGradient(stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .black.opacity(0.73), location: 0.65),
-                    .init(color: .black.opacity(0.88), location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-                .frame(height: max(190, bottomHeight + 60))
-            }
-            .ignoresSafeArea(.container, edges: .bottom)
-            .allowsHitTesting(false).accessibilityHidden(true)
             VStack(spacing: 0) {
                 topBar(map)
                 Spacer(minLength: 0)
-                VStack(spacing: 24) {
-                    if controller.status == .paused {
+                VStack(spacing: 0) {
+                    if paused {
                         Text("일시정지됨")
-                            .font(FontCatalog.style(.title3))
-                            .foregroundStyle(.white.opacity(0.73))
-                            .padding(.top, 16)
+                            .font(FontCatalog.text(18, relativeTo: .title3))
+                            .foregroundStyle(Color(hex: 0xBBBBBB))
+                        recenterButton(map).padding(.top, 49).padding(.horizontal, 8)
+                        Color.clear.frame(height: 9)
                     }
                     bottomInfo(map)
                 }
@@ -93,22 +97,46 @@ struct JourneyTimerView: View {
         #endif
     }
 
+    /// R15 "현재 정류장으로": 일시정지 중 잠긴 따라가기 대신 카메라를 버스(현재 정류장 부근)로 되돌린다.
+    private func recenterButton(_ map: JourneyMapController) -> some View {
+        Button { map.recenter() } label: {
+            Text("현재 정류장으로").font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color(hex: 0x0A0A0A).opacity(0.75), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.38), lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityIdentifier("journey.recenter")
+    }
+
+    /// 시안 R13: 왼쪽 일시정지·노선 버튼, 오른쪽 따라가기·지도 테마. 일시정지(R15)에는 재개 버튼만 남는다.
     private func topBar(_ map: JourneyMapController) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let running = controller.status != .paused
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
-                roundControl
+                VStack(spacing: 10) {
+                    roundControl
+                    if running && controller.status != .arrived {
+                        // 노선 버튼(R13). 다음 정류장 패널(R14)은 이번 범위가 아니라 기존 지도 보기 시트(정류장 표시)를 연다.
+                        toolButton(systemImage: "point.topleft.down.to.point.bottomright.curvepath", label: "노선 보기",
+                                   value: nil, id: "journey.map.route", enabled: map.state.toolsEnabled,
+                                   diameter: 44) { map.openThemeSheet() }
+                    }
+                }
                 Spacer(minLength: 16)
-                VStack(spacing: 12) {
-                    toolButton(systemImage: "location.fill", label: JourneyMapDisplay.followLabel,
-                               value: JourneyMapDisplay.followValue(map.state.camera), id: "journey.map.follow",
-                               enabled: map.state.toolsEnabled) { map.followTapped() }
-                    toolButton(systemImage: "map", label: JourneyMapDisplay.themeLabel, value: nil,
-                               id: "journey.map.theme", enabled: map.state.toolsEnabled) { map.openThemeSheet() }
+                if running {
+                    VStack(spacing: 10) {
+                        followButton(map)
+                        toolButton(systemImage: "map", label: JourneyMapDisplay.themeLabel, value: nil,
+                                   id: "journey.map.theme", enabled: map.state.toolsEnabled) { map.openThemeSheet() }
+                    }
                 }
             }
             notices.frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 16).padding(.top, 8)
+        .padding(.horizontal, 16)
     }
 
     @ViewBuilder private var roundControl: some View {
@@ -125,9 +153,9 @@ struct JourneyTimerView: View {
 
     private func roundButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
         Button { guardedTap(action) } label: {
-            Image(systemName: systemImage).font(.system(size: 20, weight: .bold))
-                .frame(width: 48, height: 48)
-                .background(.black.opacity(0.6), in: Circle())
+            Image(systemName: systemImage).font(.system(size: 14, weight: .bold))
+                .fmGlassCircle(diameter: 46)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .dynamicTypeSize(...DynamicTypeSize.accessibility3)
@@ -135,12 +163,30 @@ struct JourneyTimerView: View {
         .accessibilityIdentifier(id)
     }
 
+    /// 따라가기(R13): 흰 12.5% 채움에 흰 1pt 테두리, 조준경 아이콘.
+    private func followButton(_ map: JourneyMapController) -> some View {
+        Button { map.followTapped() } label: {
+            Image(systemName: "scope").font(.system(size: 18, weight: .regular))
+                .frame(width: 43, height: 43)
+                .background(Color.white.opacity(0.125), in: Circle())
+                .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!map.state.toolsEnabled)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityLabel(JourneyMapDisplay.followLabel)
+        .accessibilityValue(JourneyMapDisplay.followValue(map.state.camera))
+        .accessibilityIdentifier("journey.map.follow")
+    }
+
     private func toolButton(systemImage: String, label: String, value: String?, id: String, enabled: Bool,
-                            action: @escaping () -> Void) -> some View {
+                            diameter: CGFloat = 46, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage).font(.system(size: 18, weight: .semibold))
-                .frame(width: 48, height: 48)
-                .background(.black.opacity(0.6), in: Circle())
+            Image(systemName: systemImage).font(.system(size: 17, weight: .regular))
+                .fmGlassCircle(diameter: diameter)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -158,16 +204,24 @@ struct JourneyTimerView: View {
         let stacked = dynamicTypeSize.isAccessibilitySize
         return layout {
             remainingColumn.frame(maxWidth: stacked ? nil : .infinity, alignment: .leading)
-            stopsColumn(map).frame(maxWidth: stacked ? nil : .infinity, alignment: stacked ? .leading : .center)
-            distanceColumn(map).frame(maxWidth: stacked ? nil : .infinity, alignment: stacked ? .leading : .trailing)
+            stopsColumn(map, alignment: stacked ? .leading : .center)
+                .frame(maxWidth: stacked ? nil : .infinity, alignment: stacked ? .leading : .center)
+            distanceColumn(map, alignment: stacked ? .leading : .trailing)
+                .frame(maxWidth: stacked ? nil : .infinity, alignment: stacked ? .leading : .trailing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16).padding(.vertical, 14)
         .environment(\.colorScheme, .dark)
     }
 
+    /// 시안 R13: 숫자는 30 Bold 흰색, 단위는 15 Regular 흰 64%.
+    private func valueText(_ number: String, unit: String) -> Text {
+        Text(number).font(FontCatalog.fixed(valueSize, weight: .bold))
+            + Text(" " + unit).font(FontCatalog.fixed(unitSize)).foregroundColor(FMDesign.overlayLabel)
+    }
+
     private var remainingColumn: some View {
-        infoColumn(label: "남은 시간", value: Text(minutesText))
+        infoColumn(label: "남은 시간", value: valueText("\(controller.remainingMinutes)", unit: "min"), alignment: .leading)
             .contentTransition(reduceMotion ? .identity : .numericText())
             .animation(reduceMotion ? nil : .default, value: controller.remainingMinutes)
             .accessibilityElement(children: .ignore)
@@ -177,29 +231,29 @@ struct JourneyTimerView: View {
             .accessibilityFocused($remainingFocused)
     }
 
-    private func stopsColumn(_ map: JourneyMapController) -> some View {
+    private func stopsColumn(_ map: JourneyMapController, alignment: HorizontalAlignment) -> some View {
         infoColumn(label: JourneyMapDisplay.remainingStopsLabel,
-                   value: Text(JourneyMapDisplay.stopsText(map.remainingStops)) + Text(" 개").font(FontCatalog.fixed(unitSize)))
+                   value: valueText(JourneyMapDisplay.stopsText(map.remainingStops), unit: "개"), alignment: alignment)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(JourneyMapDisplay.remainingStopsLabel)
             .accessibilityValue(JourneyMapDisplay.stopsAccessibilityValue(map.remainingStops))
             .accessibilityIdentifier("journey.timer.stops")
     }
 
-    private func distanceColumn(_ map: JourneyMapController) -> some View {
+    private func distanceColumn(_ map: JourneyMapController, alignment: HorizontalAlignment) -> some View {
         infoColumn(label: JourneyMapDisplay.remainingDistanceLabel,
-                   value: Text(JourneyMapDisplay.distanceText(tenthsKm: map.remainingDistanceTenthsKm))
-                       + Text(" km").font(FontCatalog.fixed(unitSize)))
+                   value: valueText(JourneyMapDisplay.distanceText(tenthsKm: map.remainingDistanceTenthsKm), unit: "km"),
+                   alignment: alignment)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(JourneyMapDisplay.remainingDistanceLabel)
             .accessibilityValue(JourneyMapDisplay.distanceAccessibilityValue(tenthsKm: map.remainingDistanceTenthsKm))
             .accessibilityIdentifier("journey.timer.distance")
     }
 
-    private func infoColumn(label: String, value: Text) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(FontCatalog.fixed(labelSize)).foregroundStyle(.white.opacity(0.64))
-            value.font(FontCatalog.fixed(valueSize, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
+    private func infoColumn(label: String, value: Text, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(label).font(FontCatalog.fixed(labelSize)).foregroundStyle(FMDesign.overlayLabel)
+            value.lineLimit(1).minimumScaleFactor(0.6)
         }
     }
 
@@ -316,30 +370,4 @@ private struct MapSync: Equatable {
 private struct BottomInfoHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-}
-
-/// A strong pause dim with a smooth, lighter band around MapKit's native attribution.
-private struct PausedJourneyShade: View {
-    let bottomInset: CGFloat
-
-    var body: some View {
-        GeometryReader { proxy in
-            let legal = min(0.9, max(0.15, (proxy.size.height - bottomInset - 20) / max(1, proxy.size.height)))
-            LinearGradient(stops: [
-                .init(color: .black.opacity(0.55), location: 0),
-                .init(color: .black.opacity(0.68), location: 0.6),
-                .init(color: .black.opacity(0.94), location: 1)
-            ], startPoint: .top, endPoint: .bottom)
-            .mask {
-                LinearGradient(stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: max(0, legal - 0.08)),
-                    .init(color: .black.opacity(0.3), location: legal),
-                    .init(color: .black, location: min(1, legal + 0.08)),
-                    .init(color: .black, location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-            }
-        }
-        .allowsHitTesting(false).accessibilityHidden(true)
-    }
 }

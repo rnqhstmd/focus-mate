@@ -268,7 +268,7 @@ struct RecordsView: View {
             if let failure = services.failNextSave {
                 Button { failure.arm() } label: {
                     Text("다음 저장 실패").font(.system(size: 1)).foregroundStyle(.clear)
-                        .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                        .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
                 }
                 .accessibilityLabel("다음 저장 실패").accessibilityIdentifier("test.records.failNextSave")
             }
@@ -278,7 +278,7 @@ struct RecordsView: View {
     private func debugButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label).font(.system(size: 1)).foregroundStyle(.clear)
-                .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
         }
         .accessibilityLabel(label).accessibilityIdentifier(id)
     }

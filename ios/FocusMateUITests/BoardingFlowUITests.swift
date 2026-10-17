@@ -69,7 +69,9 @@ final class BoardingFlowUITests: XCTestCase {
         boardBus.tap()
         XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
 
-        h.app.navigationBars.buttons.firstMatch.tap()
+        // 승차 화면은 시안대로 뒤로 버튼이 없다(AC-14 변경). 테스트 전용 경로로 승차권에 돌아간다.
+        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
+        h.tap("test.boarding.back")
         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         h.element("board.back").tap()
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
@@ -153,7 +155,7 @@ final class BoardingFlowUITests: XCTestCase {
         try recognizeAndWaitHeld(h)
         XCTAssertEqual(try activeTask(h), taskA)
 
-        h.app.navigationBars.buttons.firstMatch.tap()
+        h.tap("test.boarding.back")
         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         let release = h.element("test.releaseBoardingHold")
         XCTAssertTrue(release.waitForExistence(timeout: timeout))
@@ -178,7 +180,7 @@ final class BoardingFlowUITests: XCTestCase {
             case "screen.main": h.element("time.back").tap()
             case "screen.time": h.element("preparation.close").tap()
             case "screen.preparation": h.element("board.back").tap()
-            default: h.app.navigationBars.buttons.firstMatch.tap()
+            default: h.tap("test.boarding.back")
             }
             XCTAssertTrue(h.element(expected).waitForExistence(timeout: timeout), expected)
         }

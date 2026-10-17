@@ -36,7 +36,11 @@ struct RootView: View {
             .navigationDestination(for: Destination.self) { DestinationScreen(destination: $0, model: model, onCardCustomization: startCardCustomization, services: services) }
             .newJourneyConfirmation(isPresented: $confirmsNewJourney) { apply(model.confirmNewJourney()) }
         }
-        .onChange(of: model.path) { _, _ in mainActionFailed = false }
+        .onChange(of: model.path) { _, _ in
+            mainActionFailed = false
+            // 저장 안내는 저장 직후 화면(마이페이지)에서만 보인다. 다른 화면으로 옮기면 지운다(R42 승차 화면에 남지 않게).
+            savedCardNotice = false
+        }
         .onOpenURL { applyWidgetDecision(model.handleWidgetURL($0)) }
         .onChange(of: model.launchState) { _, _ in
             if let decision = model.consumePendingWidgetURL() { applyWidgetDecision(decision) }
@@ -121,7 +125,7 @@ struct RootView: View {
             if services.testClock != nil, model.presentedRoute == .main, model.path.isEmpty, let failure = services.failNextSave {
                 Button { failure.arm() } label: {
                     Text("메인 다음 저장 실패").font(.system(size: 1)).foregroundStyle(.clear)
-                        .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                        .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
                 }
                 .accessibilityLabel("메인 다음 저장 실패")
                 .accessibilityIdentifier("test.main.failNextSave")

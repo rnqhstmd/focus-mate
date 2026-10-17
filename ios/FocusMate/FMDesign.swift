@@ -59,6 +59,15 @@ enum FMDesign {
     }
 }
 
+extension FMDesign {
+    /// 위에서 본 버스 그림의 몸체 색. 지선은 시안 값(#2E9E4F), 나머지는 노선 종류 색.
+    static func busBodyColor(kind: String) -> Color {
+        kind == "지선" ? Color(hex: 0x2E9E4F) : routeColor(kind: kind)
+    }
+    /// 여행 지도에서 지나온 구간(시안 흰 27%를 항공 사진 위에서 보이도록 조금 밝게).
+    static let routePassed = Color.white.opacity(0.45)
+}
+
 extension Color {
     /// sRGB colour from a 0xRRGGBB literal.
     init(hex: UInt32) {
@@ -129,6 +138,15 @@ struct FMCircleButtonStyle: ButtonStyle {
 }
 
 extension View {
+    /// 여행 지도 위 원형 버튼 재질(시안 C-2): #080808 80% 위에 흰 14.5% 덧칠.
+    func fmGlassCircle(diameter: CGFloat = 46) -> some View {
+        self.frame(width: diameter, height: diameter)
+            .background {
+                Circle().fill(Color(hex: 0x080808).opacity(0.8))
+                    .overlay(Circle().fill(Color.white.opacity(0.145)))
+            }
+    }
+
     func fmPanel(padding: CGFloat = 22) -> some View {
         self.padding(padding)
             .background(FMDesign.panel, in: RoundedRectangle(cornerRadius: 24))

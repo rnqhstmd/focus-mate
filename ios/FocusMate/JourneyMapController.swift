@@ -54,6 +54,11 @@ final class JourneyMapController {
 
     func userMovedCamera() { state.userMovedCamera() }
     func followTapped() { if state.followTapped() { retarget() } }
+    /// 일시정지 중에도 쓰는 "현재 정류장으로"(R15): 카메라를 버스 위치로 되돌린다.
+    func recenter() {
+        state.recenter()
+        retarget()
+    }
     func openThemeSheet() { state.openThemeSheet() }
     func dismissThemeSheet() { state.dismissThemeSheet() }
     func select(theme: JourneyMapTheme) { state.select(theme: theme) }

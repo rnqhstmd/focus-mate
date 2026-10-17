@@ -1,16 +1,49 @@
 import SwiftUI
 
 /// Shared saved or draft artwork. Editing affordances belong to the editor, never the saved card.
+/// 시안(R27·R38 등)에는 서울 점지도가 없고, 모든 카드 왼쪽 아래에 카드 번호가 있다(BR-4는 시안 우선으로 변경).
 struct PassFace: View {
-    static let aspectRatio: CGFloat = 352 / 221.1875
-    static let referenceWidth: CGFloat = 352
+    /// 요소 배치 기준. 시안은 화면마다 카드 비율과 글자 위치를 따로 정해 두었다.
+    struct Layout: Equatable {
+        let referenceWidth: CGFloat
+        let aspectRatio: CGFloat
+        let cornerRadius: CGFloat
+        let brand: CGPoint
+        let title: CGPoint
+        let subtitle: CGPoint
+        let number: CGPoint
+        let chip: CGRect
+        let wave: CGRect
+
+        /// 마이페이지·발급·꾸미기(352 x 221).
+        static let wide = Layout(referenceWidth: 352, aspectRatio: 352 / 221.1875, cornerRadius: 16,
+                                 brand: CGPoint(x: 20, y: 17), title: CGPoint(x: 84.47, y: 89.16),
+                                 subtitle: CGPoint(x: 84.47, y: 137.08), number: CGPoint(x: 20, y: 198),
+                                 chip: CGRect(x: 26.78, y: 96.25, width: 40.68, height: 30.68),
+                                 wave: CGRect(x: 320, y: 15, width: 12, height: 19))
+        /// 승차·하차 태그(R27·R12·R42·R28·R29, 270 x 158).
+        static let ticket = Layout(referenceWidth: 270, aspectRatio: 270 / 158, cornerRadius: 14,
+                                   brand: CGPoint(x: 21, y: 18), title: CGPoint(x: 65, y: 64),
+                                   subtitle: CGPoint(x: 65, y: 98), number: CGPoint(x: 21, y: 134),
+                                   chip: CGRect(x: 22, y: 69, width: 30, height: 22),
+                                   wave: CGRect(x: 236, y: 16, width: 12, height: 19))
+    }
+
+    static let aspectRatio: CGFloat = Layout.wide.aspectRatio
+    static let referenceWidth: CGFloat = Layout.wide.referenceWidth
+    /// 예전 점지도 에셋 이름. 시안에서 빠져 더는 그리지 않는다(에셋은 남겨 둠).
     static let dotsAssetName = "PassDots"
+    static let textColor = Color(hex: 0xF1F2F3)
+    static let strokeColor = Color(hex: 0x51565A)
+
     var style: CardStyle = .standard
-    var dotsOpacity: Double = 0.85
+    var layout: Layout = .wide
+    /// "FM · 0842 3017". 없으면(발급 전) 번호 줄을 그리지 않는다.
+    var numberText: String? = nil
 
     var body: some View {
         Color.clear
-            .aspectRatio(Self.aspectRatio, contentMode: .fit)
+            .aspectRatio(layout.aspectRatio, contentMode: .fit)
             .overlay { artwork.environment(\.dynamicTypeSize, .large).accessibilityHidden(true).allowsHitTesting(false) }
             .accessibilityElement()
             .accessibilityLabel(PassIdentity.displayName)
@@ -20,22 +53,15 @@ struct PassFace: View {
 
     private var artwork: some View {
         GeometryReader { proxy in
-            let s = proxy.size.width / Self.referenceWidth
-            let shape = RoundedRectangle(cornerRadius: 16 * s, style: .continuous)
+            let s = proxy.size.width / layout.referenceWidth
+            let shape = RoundedRectangle(cornerRadius: layout.cornerRadius * s, style: .continuous)
             ZStack(alignment: .topLeading) {
                 style.background.swiftUIColor
                 if style.isStandard {
-                    Image(Self.dotsAssetName).resizable().scaledToFit()
-                        .frame(width: proxy.size.width * 0.78)
-                        .opacity(dotsOpacity)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                        .offset(x: proxy.size.width * 0.12)
-                    Text("Focus Mate").font(FontCatalog.text(11 * s, weight: .bold))
-                        .offset(x: 20 * s, y: 17.2 * s)
-                    Text(PassIdentity.displayName).font(FontCatalog.text(20 * s, weight: .bold))
-                        .offset(x: 84.47 * s, y: 89.16 * s)
+                    Text(PassIdentity.displayName).font(FontCatalog.text(18 * s, weight: .bold))
+                        .offset(x: layout.title.x * s, y: layout.title.y * s)
                     Text("나를 위한 시간, 한 장으로.").font(FontCatalog.text(9 * s))
-                        .offset(x: 84.47 * s, y: 137.08 * s)
+                        .offset(x: layout.subtitle.x * s, y: layout.subtitle.y * s)
                 }
                 ForEach(style.photos) { photo in
                     if let image = UIImage(data: photo.data) {
@@ -45,15 +71,34 @@ struct PassFace: View {
                             .position(x: proxy.size.width * photo.centerX, y: proxy.size.height * photo.centerY)
                     }
                 }
-                chip.frame(width: 40.68 * s, height: 30.68 * s)
-                    .offset(x: 26.78 * s, y: 96.25 * s)
+                label("Focus Mate", size: 10 * s, weight: .bold, at: layout.brand, scale: s)
+                if let numberText {
+                    label(numberText, size: 7 * s, weight: .regular, at: layout.number, scale: s)
+                }
+                chip.frame(width: layout.chip.width * s, height: layout.chip.height * s)
+                    .offset(x: layout.chip.minX * s, y: layout.chip.minY * s)
                 Image(systemName: "wave.3.right").resizable().scaledToFit()
-                    .frame(width: 18 * s, height: 22 * s)
-                    .offset(x: 319 * s, y: 14.65 * s)
+                    .frame(width: layout.wave.width * s, height: layout.wave.height * s)
+                    .foregroundStyle(style.isStandard ? Color(hex: 0xD5DED7) : .white)
+                    .offset(x: layout.wave.minX * s, y: layout.wave.minY * s)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Self.textColor)
             .clipShape(shape)
-            .overlay(shape.stroke(Color.white.opacity(0.08), lineWidth: 1))
+            .overlay(shape.strokeBorder(Self.strokeColor, lineWidth: 1))
+        }
+    }
+
+    /// 기본 카드는 글자만, 꾸민 카드는 사진 위에서도 읽히도록 어두운 알약(#080B0C 80%) 위에 둔다.
+    @ViewBuilder
+    private func label(_ text: String, size: CGFloat, weight: FMFontWeight, at point: CGPoint, scale s: CGFloat) -> some View {
+        if style.isStandard {
+            Text(text).font(FontCatalog.text(size, weight: weight))
+                .offset(x: point.x * s, y: point.y * s)
+        } else {
+            Text(text).font(FontCatalog.text(size, weight: weight)).foregroundStyle(Color(hex: 0xD3D6D8))
+                .padding(.horizontal, 5 * s).padding(.vertical, 1.5 * s)
+                .background(Color(hex: 0x080B0C).opacity(0.8), in: RoundedRectangle(cornerRadius: 3 * s))
+                .offset(x: point.x * s, y: (point.y - 2) * s)
         }
     }
 

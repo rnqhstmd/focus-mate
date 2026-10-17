@@ -19,6 +19,8 @@ enum JourneyLifecycleText {
 
     static let abandonTitle = "여행을 그만둘까요?"
     static let abandonMessage = "지금 도달한 정류장에서 다음 여행을 시작할 수 있어요. 완료 기록은 남기지 않습니다."
+    /// 확인 창(R16)은 두 문장을 줄을 나눠 보인다. 낭독은 `abandonMessage` 그대로다.
+    static let abandonMessageLines = "지금 도달한 정류장에서 다음 여행을 시작할 수 있어요.\n완료 기록은 남기지 않습니다."
     static let continueTrip = "계속 여행"
     static let quitTrip = "그만두기"
     static let abandonButton = "포기하기"

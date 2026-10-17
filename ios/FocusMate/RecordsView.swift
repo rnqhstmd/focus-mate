@@ -31,9 +31,9 @@ struct RecordsView: View {
             SceneMapBackdrop(model: model, showsStationAnnotation: false)
                 .frame(height: 120)
             VStack(alignment: .leading, spacing: 20) {
-                Text("여행 기록").font(FontCatalog.text(23, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
+                Text("여행 기록").font(FontCatalog.text(23, weight: .bold, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
                 HStack(spacing: 4) {
-                    Text("잔디").font(FontCatalog.text(13, bold: true, relativeTo: .subheadline))
+                    Text("잔디").font(FontCatalog.text(13, weight: .bold, relativeTo: .subheadline))
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .background(FMDesign.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                         .accessibilityAddTraits(.isSelected)
@@ -121,7 +121,7 @@ struct RecordsView: View {
                     Button("\(String(year))년") { browser.selectYear(year, records: records) }
                 }
             } label: {
-                Text("\(String(browser.year))년").font(FontCatalog.text(18, bold: true, relativeTo: .title3))
+                Text("\(String(browser.year))년").font(FontCatalog.text(18, weight: .bold, relativeTo: .title3))
                     .padding(.horizontal, 14).frame(minHeight: 44)
                     .foregroundStyle(FMDesign.panel)
                     .background(FMDesign.primary, in: RoundedRectangle(cornerRadius: 8))
@@ -206,7 +206,7 @@ struct RecordsView: View {
     @ViewBuilder private var dayList: some View {
         let visible = browser.visibleRecords(in: records)
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일").font(FontCatalog.text(16, bold: true, relativeTo: .headline))
+            Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일").font(FontCatalog.text(16, weight: .bold, relativeTo: .headline))
             if let empty = browser.emptyState(records: records) {
                 Text(empty == .noRecords ? "첫 여행을 마치면 잔디에 색이 채워져요. 하루하루 나만의 시간을 모아보세요."
                                          : "이날은 완료한 여행이 없어요.")
@@ -224,7 +224,7 @@ struct RecordsView: View {
         let content = RecordListItemContent(record: record, timeZone: timeZone)
         return VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(content.task).font(FontCatalog.text(16, bold: true, relativeTo: .headline))
+                Text(content.task).font(FontCatalog.text(16, weight: .bold, relativeTo: .headline))
                 Text("\(content.timeText) · \(content.minutesText) · \(content.tag)").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
                 Text(content.routeText).font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
                 if !content.memo.isEmpty { Text(content.memo) }

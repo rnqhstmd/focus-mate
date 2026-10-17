@@ -66,7 +66,7 @@ struct JourneyTimerView: View {
                 VStack(spacing: 24) {
                     if controller.status == .paused {
                         Text("일시정지됨")
-                            .font(.system(.title3, weight: .medium))
+                            .font(FontCatalog.style(.title3))
                             .foregroundStyle(.white.opacity(0.73))
                             .padding(.top, 16)
                     }
@@ -179,7 +179,7 @@ struct JourneyTimerView: View {
 
     private func stopsColumn(_ map: JourneyMapController) -> some View {
         infoColumn(label: JourneyMapDisplay.remainingStopsLabel,
-                   value: Text(JourneyMapDisplay.stopsText(map.remainingStops)) + Text(" 개").font(.system(size: unitSize)))
+                   value: Text(JourneyMapDisplay.stopsText(map.remainingStops)) + Text(" 개").font(FontCatalog.fixed(unitSize)))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(JourneyMapDisplay.remainingStopsLabel)
             .accessibilityValue(JourneyMapDisplay.stopsAccessibilityValue(map.remainingStops))
@@ -189,7 +189,7 @@ struct JourneyTimerView: View {
     private func distanceColumn(_ map: JourneyMapController) -> some View {
         infoColumn(label: JourneyMapDisplay.remainingDistanceLabel,
                    value: Text(JourneyMapDisplay.distanceText(tenthsKm: map.remainingDistanceTenthsKm))
-                       + Text(" km").font(.system(size: unitSize)))
+                       + Text(" km").font(FontCatalog.fixed(unitSize)))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(JourneyMapDisplay.remainingDistanceLabel)
             .accessibilityValue(JourneyMapDisplay.distanceAccessibilityValue(tenthsKm: map.remainingDistanceTenthsKm))
@@ -198,8 +198,8 @@ struct JourneyTimerView: View {
 
     private func infoColumn(label: String, value: Text) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: labelSize)).foregroundStyle(.white.opacity(0.64))
-            value.font(.system(size: valueSize, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
+            Text(label).font(FontCatalog.fixed(labelSize)).foregroundStyle(.white.opacity(0.64))
+            value.font(FontCatalog.fixed(valueSize, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
         }
     }
 
@@ -209,7 +209,7 @@ struct JourneyTimerView: View {
         VStack(spacing: 32) {
             Spacer(minLength: 0)
             Text(minutesText)
-                .font(.system(size: 64, weight: .bold))
+                .font(FontCatalog.fixed(64, weight: .bold))
                 .lineLimit(1).minimumScaleFactor(0.5)
                 .contentTransition(reduceMotion ? .identity : .numericText())
                 .animation(reduceMotion ? nil : .default, value: controller.remainingMinutes)
@@ -242,7 +242,7 @@ struct JourneyTimerView: View {
     private func controlButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
         Button { guardedTap(action) } label: {
             Label(title, systemImage: systemImage)
-                .font(.headline).foregroundStyle(.black)
+                .font(FontCatalog.style(.headline, weight: .semibold)).foregroundStyle(.black)
                 .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
                 .background(Color(white: 0.95), in: Capsule())
         }
@@ -261,13 +261,13 @@ struct JourneyTimerView: View {
 
     @ViewBuilder private var notices: some View {
         if controller.showsTransitionFailure {
-            Text(JourneyTimerDisplay.transitionFailureText).font(.subheadline).foregroundStyle(.orange)
+            Text(JourneyTimerDisplay.transitionFailureText).font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("journey.timer.saveFailure")
         }
         if controller.showsSaveWarning {
             Text(controller.status == .arrived ? JourneyTimerDisplay.arrivalWarningText : JourneyTimerDisplay.checkpointWarningText)
-                .font(.subheadline).foregroundStyle(.orange)
+                .font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("journey.timer.saveWarning")
         }

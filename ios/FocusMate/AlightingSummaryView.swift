@@ -34,21 +34,21 @@ struct AlightingSummaryView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Label("하차 완료", systemImage: "checkmark.circle")
-                            .font(.caption).foregroundStyle(Color(red: 0.65, green: 0.8, blue: 0.69))
+                            .font(FontCatalog.style(.caption)).foregroundStyle(Color(red: 0.65, green: 0.8, blue: 0.69))
                         Text("나를 위한 \(summary.minutesText)")
-                            .font(.system(.title, weight: .bold))
+                            .font(FontCatalog.style(.title, weight: .bold))
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("screen.alightingSummary")
                         Text("이번 여행을 기록했어요.")
-                            .font(.subheadline).foregroundStyle(FMDesign.secondaryText)
+                            .font(FontCatalog.style(.subheadline)).foregroundStyle(FMDesign.secondaryText)
                         Divider().overlay(.white.opacity(0.15))
                         VStack(alignment: .leading, spacing: 8) {
                             if let record = record(summary) {
-                                Text(record.tag).font(.caption).foregroundStyle(tagColor(record.tagColor))
+                                Text(record.tag).font(FontCatalog.style(.caption)).foregroundStyle(tagColor(record.tagColor))
                             }
-                            Text(summary.task).font(.system(.title3, weight: .semibold))
+                            Text(summary.task).font(FontCatalog.style(.title3, weight: .semibold))
                                 .accessibilityIdentifier("summary.task")
-                            Text("이번 여행에서 한 일").font(.caption).foregroundStyle(FMDesign.secondaryText)
+                            Text("이번 여행에서 한 일").font(FontCatalog.style(.caption)).foregroundStyle(FMDesign.secondaryText)
                         }
                         Divider().overlay(.white.opacity(0.15))
                         let details = dynamicTypeSize.isAccessibilitySize
@@ -60,14 +60,14 @@ struct AlightingSummaryView: View {
                         }
                         if let record = record(summary) {
                             Text("\(record.bus) · \(record.from) → \(record.to)")
-                                .font(.caption).foregroundStyle(FMDesign.secondaryText)
+                                .font(FontCatalog.style(.caption)).foregroundStyle(FMDesign.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Divider().overlay(.white.opacity(0.15))
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("메모 남기기").font(.subheadline)
-                                Text("선택").font(.caption).foregroundStyle(FMDesign.secondaryText)
+                                Text("메모 남기기").font(FontCatalog.style(.subheadline))
+                                Text("선택").font(FontCatalog.style(.caption)).foregroundStyle(FMDesign.secondaryText)
                             }
                             TextField("기억하고 싶은 생각", text: $memoInput, axis: .vertical)
                                 .lineLimit(3...6)
@@ -81,7 +81,7 @@ struct AlightingSummaryView: View {
                                     draft.update(input)
                                     if draft.text != input { memoInput = draft.text }
                                 }
-                            Text(draft.counterText).font(.caption2).foregroundStyle(FMDesign.secondaryText)
+                            Text(draft.counterText).font(FontCatalog.style(.caption2)).foregroundStyle(FMDesign.secondaryText)
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                                 .accessibilityLabel(draft.counterText)
                                 .accessibilityIdentifier("summary.memoCounter")
@@ -140,8 +140,8 @@ struct AlightingSummaryView: View {
 
     private func row(_ title: String, _ value: String, id: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(FMDesign.secondaryText).accessibilityHidden(true)
-            Text(value).font(.system(.body, weight: .semibold)).accessibilityLabel(value).accessibilityIdentifier(id)
+            Text(title).font(FontCatalog.style(.caption)).foregroundStyle(FMDesign.secondaryText).accessibilityHidden(true)
+            Text(value).font(FontCatalog.style(.body, weight: .semibold)).accessibilityLabel(value).accessibilityIdentifier(id)
         }
     }
 

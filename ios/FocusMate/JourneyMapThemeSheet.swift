@@ -11,7 +11,7 @@ struct JourneyMapThemeSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(JourneyMapDisplay.themeLabel).font(.headline).accessibilityAddTraits(.isHeader)
+                    Text(JourneyMapDisplay.themeLabel).font(FontCatalog.style(.headline, weight: .semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button("닫기") { map.dismissThemeSheet() }
                         .frame(minWidth: 44, minHeight: 44)

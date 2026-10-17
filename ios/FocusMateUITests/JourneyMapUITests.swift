@@ -111,15 +111,15 @@ final class JourneyMapUITests: XCTestCase {
 
     // MARK: AC-19, 20, 21
 
-    // 깨짐: 시트 기본 선택(어두운 지도·정류장 켜짐)이 다르거나 시트가 열리지 않는다.
-    func testAC19_테마_시트는_어두운_지도와_정류장_켜짐으로_열린다() {
+    // 깨짐: 시트 기본 선택(위성·정류장 켜짐, 시안 3D 항공 사진)이 다르거나 시트가 열리지 않는다.
+    func testAC19_테마_시트는_위성과_정류장_켜짐으로_열린다() {
         let h = running()
         openSheet(h)
         for id in ["journey.map.theme.dark", "journey.map.theme.satellite", "journey.map.stops"] {
             XCTAssertTrue(h.element(id).waitForExistence(timeout: timeout), "Missing: \(id)")
         }
-        XCTAssertTrue(h.element("journey.map.theme.dark").isSelected)
-        XCTAssertFalse(h.element("journey.map.theme.satellite").isSelected)
+        XCTAssertTrue(h.element("journey.map.theme.satellite").isSelected)
+        XCTAssertFalse(h.element("journey.map.theme.dark").isSelected)
         XCTAssertEqual(h.value("journey.map.stops"), "켜짐")
     }
 
@@ -127,13 +127,13 @@ final class JourneyMapUITests: XCTestCase {
     func testAC20_테마를_바꾸면_선택_표시가_따라_바뀐다() {
         let h = running()
         openSheet(h)
-        h.tap("journey.map.theme.satellite")
-        XCTAssertTrue(h.waitUntil { h.element("journey.map.theme.satellite").isSelected })
-        XCTAssertFalse(h.element("journey.map.theme.dark").isSelected)
-
         h.tap("journey.map.theme.dark")
         XCTAssertTrue(h.waitUntil { h.element("journey.map.theme.dark").isSelected })
         XCTAssertFalse(h.element("journey.map.theme.satellite").isSelected)
+
+        h.tap("journey.map.theme.satellite")
+        XCTAssertTrue(h.waitUntil { h.element("journey.map.theme.satellite").isSelected })
+        XCTAssertFalse(h.element("journey.map.theme.dark").isSelected)
     }
 
     // 깨짐: 정류장 토글이 마커만 지우지 않고 경로·버스·목적지까지 지우거나, 다시 켜도 코스 정류장 6개로 복구되지 않는다.
@@ -195,7 +195,7 @@ final class JourneyMapUITests: XCTestCase {
 
     private func changeMapState(_ h: FocusMateUIHarness) {
         openSheet(h)
-        h.tap("journey.map.theme.satellite")
+        h.tap("journey.map.theme.dark")
         h.tap("journey.map.stops")
         XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))
         closeSheet(h)
@@ -223,7 +223,7 @@ final class JourneyMapUITests: XCTestCase {
         h.tap("journey.timer.resume")
         XCTAssertTrue(h.waitForValue("journey.map.follow", "따라가는 중"))
         openSheet(h)
-        XCTAssertTrue(h.element("journey.map.theme.dark").isSelected)
+        XCTAssertTrue(h.element("journey.map.theme.satellite").isSelected)
         XCTAssertEqual(h.value("journey.map.stops"), "켜짐")
     }
 
@@ -235,7 +235,7 @@ final class JourneyMapUITests: XCTestCase {
 
         h.dragMap()
         openSheet(h)
-        h.tap("journey.map.theme.satellite")
+        h.tap("journey.map.theme.dark")
         h.tap("journey.map.stops")
         closeSheet(h)
         h.tap("journey.map.follow")

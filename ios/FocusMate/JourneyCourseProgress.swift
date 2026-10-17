@@ -8,6 +8,8 @@ struct CourseJourney: Equatable {
     let segmentMeters: [Int]
     /// 0을 포함한 k+1개.
     let cumulativeSeconds: [Int]
+    /// 노선 종류("간선"·"지선"·"마을" 등). 지도 노선선 색에만 쓴다.
+    let routeKind: String
 
     var totalSeconds: Int { cumulativeSeconds.last! }
     var totalStops: Int { segmentSeconds.count }
@@ -20,6 +22,7 @@ struct CourseJourney: Equatable {
         segmentSeconds = leg.segmentSeconds
         segmentMeters = leg.segmentMeters
         cumulativeSeconds = leg.cumulativeSeconds
+        routeKind = catalog.routes.indices.contains(leg.routeIndex) ? catalog.routes[leg.routeIndex].kind : ""
     }
 
     /// 저장된 여정에서 구간을 다시 만든다. 노선·출발 정류장이 없거나, 구간이 없거나, 다시 계산한 도착지가 저장값과 다르면 nil이다(BR-12).

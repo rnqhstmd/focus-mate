@@ -135,19 +135,19 @@ struct CardTagScreen: View {
     private func lcd(time: String) -> some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Focus Mate").font(.system(size: 9)).foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.76))
+                Text("Focus Mate").font(FontCatalog.fixed(9)).foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.76))
                 Spacer()
-                Text(time).font(.system(size: 10, weight: .semibold)).monospacedDigit()
+                Text(time).font(FontCatalog.fixed(10, weight: .semibold)).monospacedDigit()
             }
             Divider()
             Group {
                 if controller.isRecognized {
                     VStack(spacing: 6) {
-                        Text(PassIdentity.displayName).font(.system(size: 18, weight: .semibold))
+                        Text(PassIdentity.displayName).font(FontCatalog.fixed(18, weight: .semibold))
                         Image(systemName: "checkmark").font(.title3).foregroundStyle(Color(red: 0.7, green: 0.85, blue: 0.75))
                     }
                 } else {
-                    Text(kind.readyLCDText).font(.system(size: 18, weight: .semibold))
+                    Text(kind.readyLCDText).font(FontCatalog.fixed(18, weight: .semibold))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -202,11 +202,11 @@ struct CardTagScreen: View {
     @ViewBuilder private var notices: some View {
         VStack(spacing: 8) {
             if controller.showsTapHint {
-                Text("카드를 위로 밀어 단말기에 대주세요").font(.subheadline)
+                Text("카드를 위로 밀어 단말기에 대주세요").font(FontCatalog.style(.subheadline))
                     .accessibilityIdentifier("\(prefix).tapHint")
             }
             if controller.showsSaveFailure {
-                Text(kind.failureText).font(.subheadline).foregroundStyle(.orange)
+                Text(kind.failureText).font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                     .accessibilityIdentifier("\(prefix).saveFailure")
             }
         }

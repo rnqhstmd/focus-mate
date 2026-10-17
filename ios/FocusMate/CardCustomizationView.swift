@@ -130,7 +130,7 @@ struct CardCustomizationView: View {
                 Image(systemName: "chevron.left").font(.system(size: 22))
                     .frame(width: 52, height: 52).overlay(Circle().stroke(.white, lineWidth: 2))
             }.accessibilityLabel("닫기").accessibilityIdentifier("cardCustomization.close")
-            Text("카드 꾸미기").font(FontCatalog.text(20, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.cardCustomization")
+            Text("카드 꾸미기").font(FontCatalog.text(20, weight: .bold, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.cardCustomization")
             Spacer(minLength: 0)
             Button { controller.undo() } label: { Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44) }
                 .disabled(locked || !controller.canUndo).accessibilityLabel("되돌리기").accessibilityIdentifier("cardCustomization.undo")
@@ -139,7 +139,7 @@ struct CardCustomizationView: View {
 
     private var colors: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("배경색").font(FontCatalog.text(15, bold: true, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
+            Text("배경색").font(FontCatalog.text(15, weight: .bold, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
             HStack(spacing: 0) {
                 ForEach(palette, id: \.0) { entry in
                     let isSelected = entry.2 == controller.draft.background
@@ -167,7 +167,7 @@ struct CardCustomizationView: View {
     private var photos: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("사진").font(FontCatalog.text(15, bold: true, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
+                Text("사진").font(FontCatalog.text(15, weight: .bold, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
                 Spacer()
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: CardCustomizationPolicy.maximumPhotos - controller.draft.photos.count,
                              selectionBehavior: .ordered, matching: .images) {

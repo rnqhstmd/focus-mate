@@ -9,7 +9,6 @@ final class PassFaceAccessibilityTests: XCTestCase {
     func testDecorativeCardCompositionIsInvariantAtAccessibilityTextSize() throws {
         // Regression: inherited Dynamic Type enlarges the fixed card's lettering into overlap/clipping.
         // This component is one accessibility image; surrounding editor text must still scale.
-        FontCatalog.register()
         let regular = try render(.large)
         let repeatedRegular = try render(.large)
         let accessibility = try render(.accessibility5)

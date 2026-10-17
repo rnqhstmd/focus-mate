@@ -145,7 +145,7 @@ private struct JourneyScreen: View {
                     if briefing.showsStart {
                         Button { briefing.confirm() } label: {
                             Text("시작")
-                                .font(.system(.body, weight: .semibold)).padding(.horizontal, 24)
+                                .font(FontCatalog.style(.body, weight: .semibold)).padding(.horizontal, 24)
                                 .frame(minWidth: 160, minHeight: 52)
                                 .foregroundStyle(.black)
                                 .background(Color(white: 0.95), in: Capsule())
@@ -158,7 +158,7 @@ private struct JourneyScreen: View {
                         .accessibilityFocused($startFocused)
                     }
                     if briefing.showsSaveFailure {
-                        Text("출발을 저장하지 못했어요. 다시 눌러주세요.").font(.subheadline).foregroundStyle(.orange)
+                        Text("출발을 저장하지 못했어요. 다시 눌러주세요.").font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                             .accessibilityIdentifier("journey.saveFailure")
                     }
                 }
@@ -187,14 +187,14 @@ private struct JourneyScreen: View {
     @ViewBuilder private var sentences: some View {
         if briefing.showsAll {
             VStack(spacing: 12) {
-                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(.system(.title2, weight: .semibold)) }
+                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(FontCatalog.style(.title2, weight: .semibold)) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityValue(DepartureBriefingController.sentences.joined(separator: " "))
             .accessibilityIdentifier("journey.briefingSentence")
         } else {
             let sentence = DepartureBriefingController.sentences[briefing.visibleIndex]
-            Text(sentence).font(.system(.title2, weight: .semibold))
+            Text(sentence).font(FontCatalog.style(.title2, weight: .semibold))
                 .id(briefing.visibleIndex)
                 .transition(.opacity)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: briefing.visibleIndex)

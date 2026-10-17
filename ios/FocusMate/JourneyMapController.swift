@@ -29,6 +29,11 @@ final class JourneyMapController {
 
     /// 출발 → 도착 실제 노선 구간. 닫는 선이 없다.
     var routePoints: [CoursePoint] { journey.stops.map(\.point) }
+    /// 지나온 구간: 출발 → 현재 버스 위치. 남은 구간: 버스 위치 → 도착.
+    var travelledPoints: [CoursePoint] { Array(routePoints.prefix(bus.segmentFrom + 1)) + [bus.point] }
+    var remainingPoints: [CoursePoint] { [bus.point] + Array(routePoints.dropFirst(bus.segmentFrom + 1)) }
+    /// 버스가 이미 지난(도달한) 정류장인지. 다음 정류장 앞까지가 지난 정류장이다.
+    func isPassed(_ stop: CourseStop) -> Bool { stop.index < nextStopIndex }
     var visibleStops: [CourseStop] { state.showsStops ? journey.stops : [] }
     var destinationStop: CourseStop { journey.stops.last! }
     var nextStop: CourseStop { journey.stops[nextStopIndex] }

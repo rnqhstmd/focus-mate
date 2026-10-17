@@ -23,10 +23,10 @@ struct MainHomeView: View {
                 SceneMapBackdrop(model: model, bottomInset: footerHeight + geometry.safeAreaInsets.bottom + 40,
                                  showsStationAnnotation: model.activeJourneyCard != nil)
                     .ignoresSafeArea()
+                // 지도 공통 덮개(33%) 위에 제목 영역만 옅게 받친다.
                 LinearGradient(stops: [
-                    .init(color: FMDesign.background.opacity(0.92), location: 0),
-                    .init(color: FMDesign.background.opacity(0.55), location: 0.28),
-                    .init(color: .clear, location: 0.55)
+                    .init(color: .black.opacity(0.35), location: 0),
+                    .init(color: .clear, location: 0.35)
                 ], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea().allowsHitTesting(false)
                 VStack(spacing: 0) {
@@ -56,7 +56,7 @@ struct MainHomeView: View {
 
     private var tools: some View {
         HStack(spacing: 10) {
-            Text("Focus Mate").font(FontCatalog.text(12, bold: true, relativeTo: .caption)).tracking(1.4)
+            Text("Focus Mate").font(FontCatalog.text(12, weight: .bold, relativeTo: .caption)).tracking(1.4)
                 .lineLimit(1).minimumScaleFactor(0.6)
                 .foregroundStyle(FMDesign.secondaryText)
             Spacer(minLength: 8)
@@ -64,11 +64,9 @@ struct MainHomeView: View {
             tool(symbol: "person.crop.circle", destination: .profile)
             tool(symbol: "gearshape", destination: .settings)
             Button(action: customizeCard) {
-                Image(systemName: "creditcard").font(.system(size: 19))
-                    .frame(width: 44, height: 44)
-                    .background(FMDesign.panel.opacity(0.85), in: Circle())
+                Image(systemName: "creditcard")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(FMCircleButtonStyle())
             .accessibilityLabel("카드 꾸미기")
             .accessibilityIdentifier("open.cardCustomization")
         }
@@ -76,11 +74,9 @@ struct MainHomeView: View {
 
     private func tool(symbol: String, destination: Destination) -> some View {
         Button { openDestination(destination) } label: {
-            Image(systemName: symbol).font(.system(size: 19))
-                .frame(width: 44, height: 44)
-                .background(FMDesign.panel.opacity(0.85), in: Circle())
+            Image(systemName: symbol)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FMCircleButtonStyle())
         .accessibilityLabel(destination.mainMenuTitle)
         .accessibilityIdentifier("open.\(destination.rawValue)")
     }
@@ -92,7 +88,7 @@ struct MainHomeView: View {
                     .foregroundStyle(FMDesign.secondaryText)
             }
             Text(welcomeTitle)
-                .font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 22 : 28, bold: true, relativeTo: .title))
+                .font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 22 : 28, weight: .bold, relativeTo: .title))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
         }
@@ -122,7 +118,7 @@ struct MainHomeView: View {
                 .accessibilityLabel("현재 정류장")
                 .accessibilityIdentifier("screen.main")
             if let station = model.snapshot?.currentStation {
-                Text(station.name).font(FontCatalog.text(20, bold: true, relativeTo: .title3))
+                Text(station.name).font(FontCatalog.text(20, weight: .bold, relativeTo: .title3))
                     .accessibilityValue(station.name).accessibilityIdentifier("main.currentStation")
                 Text(model.currentStationBound ?? " ").font(FontCatalog.text(12, relativeTo: .caption))
                     .foregroundStyle(FMDesign.secondaryText)
@@ -141,7 +137,7 @@ struct MainHomeView: View {
                     Text("현재 정류장").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
                         .accessibilityIdentifier("screen.main")
                     if let station = model.snapshot?.currentStation {
-                        Text(station.name).font(FontCatalog.text(17, bold: true, relativeTo: .headline)).accessibilityValue(station.name)
+                        Text(station.name).font(FontCatalog.text(17, weight: .bold, relativeTo: .headline)).accessibilityValue(station.name)
                             .accessibilityIdentifier("main.currentStation")
                         Text(model.currentStationBound ?? " ").font(FontCatalog.text(12, relativeTo: .caption))
                             .accessibilityValue(model.currentStationBound ?? "").accessibilityIdentifier("main.bound")
@@ -173,12 +169,7 @@ struct MainHomeView: View {
 
     private var startButton: some View {
         Button { openDestination(.preparation) } label: {
-            HStack {
-                Spacer(minLength: 0)
-                Text(model.mainStartTitle)
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.right").accessibilityHidden(true)
-            }
+            Text(model.mainStartTitle).frame(maxWidth: .infinity)
         }
         .accessibilityIdentifier("open.preparation")
     }

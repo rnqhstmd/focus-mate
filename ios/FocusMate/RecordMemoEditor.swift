@@ -25,7 +25,7 @@ struct RecordMemoEditor: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
                 Text("이번 여행은 어땠나요?")
-                    .font(FontCatalog.text(18, bold: true, relativeTo: .headline))
+                    .font(FontCatalog.text(18, weight: .bold, relativeTo: .headline))
                     .accessibilityAddTraits(.isHeader)
                 TextField("이번 여행을 한 줄로 남겨보세요", text: $input)
                     .textFieldStyle(.plain)
@@ -58,7 +58,7 @@ struct RecordMemoEditor: View {
                     Button("취소", action: onClose).font(FontCatalog.text(15)).accessibilityIdentifier("recordMemo.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("저장", action: save).font(FontCatalog.text(15, bold: true)).accessibilityIdentifier("recordMemo.save")
+                    Button("저장", action: save).font(FontCatalog.text(15, weight: .bold)).accessibilityIdentifier("recordMemo.save")
                 }
             }
         }

@@ -1,4 +1,3 @@
-import CoreText
 import SwiftUI
 
 @MainActor
@@ -17,7 +16,6 @@ struct PreparationView: View {
   init(model: AppModel) {
     self.model = model
     _taskInput = State(initialValue: model.preparation.task)
-    _ = PreparationTypography.registered
   }
 
   var body: some View {
@@ -25,7 +23,7 @@ struct PreparationView: View {
       VStack(spacing: 0) {
         if let journey = model.preparedJourney {
           Label("\(journey.busKind) \(journey.busNumber) · \(journey.destination)", systemImage: "bus.fill")
-            .font(PreparationTypography.medium(13, relativeTo: .caption))
+            .font(FontCatalog.text(13, relativeTo: .caption))
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(FMDesign.panel.opacity(0.85), in: Capsule())
             .padding(.top, 12).padding(.horizontal, 12)
@@ -35,7 +33,7 @@ struct PreparationView: View {
           ScrollViewReader { proxy in
             ScrollView {
               VStack(alignment: .leading, spacing: 22) {
-                Text("무엇을 할까요?").font(PreparationTypography.bold(22, relativeTo: .title2))
+                Text("무엇을 할까요?").font(FontCatalog.text(22, weight: .bold, relativeTo: .title2))
                   .accessibilityIdentifier("screen.preparation")
                 ScrollView(.horizontal, showsIndicators: false) {
                   LazyHGrid(
@@ -47,7 +45,7 @@ struct PreparationView: View {
                         model.preparation.chooseTag(id: tag.id)
                       } label: {
                         Label(tag.name, systemImage: tag.icon.systemImage)
-                          .font(PreparationTypography.bold(17, relativeTo: .body)).fixedSize()
+                          .font(FontCatalog.text(17, weight: .bold, relativeTo: .body)).fixedSize()
                           .padding(.horizontal, 14).frame(height: tagHeight)
                           .foregroundStyle(selected ? .white : tag.color.tint)
                           .background(tag.color.tint.opacity(selected ? 0.35 : 0.2), in: Capsule())
@@ -82,7 +80,7 @@ struct PreparationView: View {
                       model.preparation.setTask(value)
                       taskInput = model.preparation.task
                     }
-                    .font(PreparationTypography.medium(17, relativeTo: .body)).padding(16)
+                    .font(FontCatalog.text(17, relativeTo: .body)).padding(16)
                     .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
                     .overlay(
                       RoundedRectangle(cornerRadius: 16).stroke(
@@ -185,7 +183,7 @@ struct PreparationView: View {
         model.preparation.sound.title,
         systemImage: model.preparation.sound == .none ? "speaker.slash" : "speaker.wave.2"
       )
-      .font(PreparationTypography.bold(17, relativeTo: .body)).padding(14)
+      .font(FontCatalog.text(17, weight: .bold, relativeTo: .body)).padding(14)
       .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : nil)
       .background(.white.opacity(0.06), in: Capsule())
       .overlay(Capsule().stroke(.white.opacity(0.16)))
@@ -199,7 +197,7 @@ struct PreparationView: View {
       taskEditing = false
       model.showBoardingPass()
     } label: {
-      Text("승차권 보기").font(PreparationTypography.bold(17, relativeTo: .body)).padding(16)
+      Text("승차권 보기").font(FontCatalog.text(17, weight: .bold, relativeTo: .body)).padding(16)
         .frame(maxWidth: .infinity)
         .foregroundStyle(model.canConfirmPreparation ? .black : .white.opacity(0.45))
         .background(model.canConfirmPreparation ? .white : .white.opacity(0.08), in: Capsule())
@@ -231,7 +229,7 @@ private struct TagEditorView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        Text("태그 만들기").font(PreparationTypography.bold(20, relativeTo: .title3))
+        Text("태그 만들기").font(FontCatalog.text(20, weight: .bold, relativeTo: .title3))
         Spacer()
         Button {
           dismiss()
@@ -242,25 +240,25 @@ private struct TagEditorView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 8) {
           Label(previewName, systemImage: draft.icon.systemImage)
-            .font(PreparationTypography.medium(17, relativeTo: .body))
+            .font(FontCatalog.text(17, relativeTo: .body))
             .foregroundStyle(draft.color.tint).padding(14).frame(maxWidth: .infinity, minHeight: 56)
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.16)))
             .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 4) {
-            Text("이름").font(PreparationTypography.medium(12, relativeTo: .caption))
+            Text("이름").font(FontCatalog.text(12, relativeTo: .caption))
             TextField("태그 이름", text: $draft.name)
-              .font(PreparationTypography.medium(17, relativeTo: .body)).padding(12)
+              .font(FontCatalog.text(17, relativeTo: .body)).padding(12)
               .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
               .overlay(RoundedRectangle(cornerRadius: 14).stroke(draft.color.tint))
               .focused($nameEditing).autocorrectionDisabled().textInputAutocapitalization(.never)
               .accessibilityLabel("태그 이름").accessibilityIdentifier("tagEditor.name")
             if let issue {
-              Text(issue.message).font(.body).foregroundStyle(.red).accessibilityIdentifier(
+              Text(issue.message).font(FontCatalog.style(.body)).foregroundStyle(.red).accessibilityIdentifier(
                 "tagEditor.error")
             }
           }
           VStack(alignment: .leading, spacing: 4) {
-            Text("아이콘").font(PreparationTypography.medium(12, relativeTo: .caption))
+            Text("아이콘").font(FontCatalog.text(12, relativeTo: .caption))
             LazyVGrid(
               columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6
             ) {
@@ -282,7 +280,7 @@ private struct TagEditorView: View {
             }
           }
           VStack(alignment: .leading, spacing: 4) {
-            Text("색").font(PreparationTypography.medium(12, relativeTo: .caption))
+            Text("색").font(FontCatalog.text(12, relativeTo: .caption))
             LazyVGrid(
               columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6
             ) {
@@ -315,7 +313,7 @@ private struct TagEditorView: View {
           nameEditing = true
         }
       } label: {
-        Text("태그 저장").font(PreparationTypography.bold(17, relativeTo: .body))
+        Text("태그 저장").font(FontCatalog.text(17, weight: .bold, relativeTo: .body))
           .padding(16).frame(maxWidth: .infinity).foregroundStyle(.black).background(
             .white, in: Capsule())
       }.buttonStyle(.plain).accessibilityIdentifier("tagEditor.save")
@@ -341,7 +339,7 @@ private struct SoundSelectionView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         HStack {
-          Text("소리 선택").font(PreparationTypography.bold(22, relativeTo: .title2))
+          Text("소리 선택").font(FontCatalog.text(22, weight: .bold, relativeTo: .title2))
           Spacer()
           Button {
             close()
@@ -363,7 +361,7 @@ private struct SoundSelectionView: View {
             } label: {
               VStack(spacing: 10) {
                 Image(systemName: sound.systemImage).font(.title2).accessibilityHidden(true)
-                Text(sound.title).font(PreparationTypography.medium(15, relativeTo: .subheadline))
+                Text(sound.title).font(FontCatalog.text(15, relativeTo: .subheadline))
               }.frame(maxWidth: .infinity).padding(.vertical, 16)
                 .foregroundStyle(selected ? .white : .white.opacity(0.8))
                 .background(
@@ -378,7 +376,7 @@ private struct SoundSelectionView: View {
           }
         }
         if let error = model.soundPreview.errorMessage {
-          Text(error).font(PreparationTypography.medium(17, relativeTo: .body)).foregroundStyle(
+          Text(error).font(FontCatalog.text(17, relativeTo: .body)).foregroundStyle(
             .red
           ).accessibilityIdentifier("sound.error")
         }
@@ -388,7 +386,7 @@ private struct SoundSelectionView: View {
             previewTask = Task { await model.soundPreview.togglePreview() }
           } label: {
             Text(model.soundPreview.phase == .stopped ? "선택한 소리 미리 듣기" : "미리 듣기 중지")
-              .font(PreparationTypography.bold(17, relativeTo: .body)).padding(16).frame(
+              .font(FontCatalog.text(17, weight: .bold, relativeTo: .body)).padding(16).frame(
                 maxWidth: .infinity
               )
               .overlay(Capsule().stroke(.white.opacity(0.2)))
@@ -399,7 +397,7 @@ private struct SoundSelectionView: View {
             model.preparation.setSound(model.soundPreview.selectedSound)
             close()
           } label: {
-            Text("소리 저장").font(PreparationTypography.bold(17, relativeTo: .body)).padding(16).frame(
+            Text("소리 저장").font(FontCatalog.text(17, weight: .bold, relativeTo: .body)).padding(16).frame(
               maxWidth: .infinity
             )
             .foregroundStyle(.black).background(.white, in: Capsule())
@@ -426,10 +424,10 @@ private struct SoundSelectionView: View {
 extension PreparationTagColor {
   fileprivate var tint: Color {
     switch self {
-    case .sand: Color(red: 0.84, green: 0.70, blue: 0.47)
-    case .blue: Color(red: 0.53, green: 0.67, blue: 0.96)
-    case .purple: Color(red: 0.71, green: 0.60, blue: 0.87)
-    case .green: Color(red: 0.55, green: 0.73, blue: 0.67)
+    case .sand: FMDesign.tagReading
+    case .blue: FMDesign.tagWork
+    case .purple: FMDesign.tagStudy
+    case .green: FMDesign.tagRest
     case .pink: Color(red: 0.90, green: 0.66, blue: 0.77)
     }
   }
@@ -466,19 +464,3 @@ private func phaseName(_ phase: SoundPreviewController.Phase) -> String {
   }
 #endif
 
-@MainActor
-private enum PreparationTypography {
-  static let registered: Void = {
-    for name in ["SeoulAlrim-Bold", "SeoulAlrim-Medium"] {
-      if let url = Bundle.main.url(forResource: name, withExtension: "ttf") {
-        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-      }
-    }
-  }()
-  static func bold(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
-    .custom("SeoulAlrimTTF-Bold", size: size, relativeTo: style)
-  }
-  static func medium(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
-    .custom("SeoulAlrimTTF-Medium", size: size, relativeTo: style)
-  }
-}

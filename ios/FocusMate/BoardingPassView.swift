@@ -21,7 +21,7 @@ struct BoardingPassView: View {
                 let content = BoardingPassContent(details: details, now: .now, timeZone: .current)
                 VStack {
                     Text("\(details.originName) → \(details.journey.destination)")
-                        .font(.caption.weight(.medium))
+                        .font(FontCatalog.style(.caption))
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(FMDesign.panel.opacity(0.8), in: Capsule())
                         .padding(.top, 12).padding(.horizontal, 24)
@@ -40,7 +40,7 @@ struct BoardingPassView: View {
                 .scrollBounceBehavior(.basedOnSize)
                 .safeAreaInset(edge: .bottom) { boardButton }
             } else {
-                Text("준비를 다시 확인해주세요").font(.headline).padding(24)
+                Text("준비를 다시 확인해주세요").font(FontCatalog.style(.headline, weight: .semibold)).padding(24)
                     .accessibilityIdentifier("board.unavailable")
             }
           }
@@ -57,13 +57,13 @@ struct BoardingPassView: View {
             Color.clear.frame(width: 1, height: 1).accessibilityElement()
                 .accessibilityLabel(content.routeAccessibilityLabel).accessibilityIdentifier("board.route")
             row(("출발", content.originName, "board.origin"), ("도착", content.destinationName, "board.destination"),
-                valueFont: .custom("SeoulAlrimTTF-Bold", size: min(content.stationFontSize, 24), relativeTo: .title2), lineLimit: 2)
+                valueFont: FontCatalog.text(min(content.stationFontSize, 24), weight: .bold, relativeTo: .title2), lineLimit: 2)
             row(("정류장", content.stopsText, "board.stops"), ("거리", content.distanceText, "board.distance"),
-                valueFont: .subheadline.monospacedDigit().weight(.semibold))
+                valueFont: FontCatalog.style(.subheadline, weight: .semibold).monospacedDigit())
             row(("탑승", content.boardingText, "board.boarding"), ("날짜", content.dateText, "board.date"),
-                valueFont: .subheadline.monospacedDigit().weight(.semibold))
+                valueFont: FontCatalog.style(.subheadline, weight: .semibold).monospacedDigit())
             row(("태그", content.tagName, "board.tag"), ("할 일", content.task, "board.task"),
-                valueFont: .subheadline.weight(.semibold), lineLimit: 3)
+                valueFont: FontCatalog.style(.subheadline, weight: .semibold), lineLimit: 3)
                 .padding(.top, 18)
         }
         .padding(22)
@@ -88,7 +88,7 @@ struct BoardingPassView: View {
     private func cell(_ item: (label: String, value: String, id: String), valueFont: Font, lineLimit: Int,
                       alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 6) {
-            Text(item.label).font(.footnote).foregroundStyle(.secondary)
+            Text(item.label).font(FontCatalog.style(.footnote)).foregroundStyle(.secondary)
             Text(item.value).font(valueFont).lineLimit(lineLimit).minimumScaleFactor(0.7)
                 .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
                 .accessibilityValue(item.value).accessibilityIdentifier(item.id)
@@ -98,11 +98,9 @@ struct BoardingPassView: View {
 
     private var boardButton: some View {
         Button { model.openBoarding() } label: {
-            Text("버스에 탑승하기 →").font(.headline).foregroundStyle(.black)
-                .frame(maxWidth: .infinity, minHeight: 44).padding(.vertical, 12)
-                .background(.white, in: Capsule())
+            Text("버스에 탑승하기 →")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FMPrimaryButtonStyle(size: .compact))
         .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         .accessibilityLabel("버스에 탑승하기").accessibilityIdentifier("board.boardBus")
         .padding(.horizontal, 24).padding(.bottom, 12)

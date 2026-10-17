@@ -21,7 +21,7 @@ struct JourneyAbandonBar: View {
         VStack(spacing: 8) {
             if isPaused {
                 Button { flow.request(isPaused: isPaused) } label: {
-                    Text(JourneyLifecycleText.abandonButton).font(.headline)
+                    Text(JourneyLifecycleText.abandonButton).font(FontCatalog.style(.headline, weight: .semibold))
                         .frame(minWidth: 160, minHeight: 44).padding(.vertical, 8).padding(.horizontal, 24)
                         .overlay(Capsule().stroke(Color(white: 0.6), lineWidth: 1))
                 }
@@ -35,7 +35,7 @@ struct JourneyAbandonBar: View {
             }
             // 같은 문구를 타이머가 이미 보이고 있으면 식별자가 겹치지 않게 그리지 않는다.
             if flow.showsFailure && !timer.showsTransitionFailure {
-                Text(JourneyLifecycleText.saveFailure).font(.subheadline).foregroundStyle(.orange)
+                Text(JourneyLifecycleText.saveFailure).font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                     .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                     .accessibilityIdentifier("journey.timer.saveFailure")

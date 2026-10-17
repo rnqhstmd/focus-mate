@@ -39,7 +39,7 @@ struct DestinationScreen: View {
                 PreparationView(model: model)
             } else {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(destination.title).font(.largeTitle.bold())
+                    Text(destination.title).font(FontCatalog.style(.largeTitle, weight: .bold))
                         .accessibilityIdentifier("screen.\(destination.rawValue)")
                     Spacer()
                 }

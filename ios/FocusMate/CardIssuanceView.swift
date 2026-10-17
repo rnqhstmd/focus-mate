@@ -29,16 +29,16 @@ struct CardIssuanceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Focus Mate")
-                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                        .font(FontCatalog.style(.subheadline, weight: .semibold))
                         .padding(.top, 12).padding(.bottom, 46)
                     Text(displayTitle)
-                        .font(FontCatalog.text(28, bold: true, relativeTo: .title))
+                        .font(FontCatalog.text(28, weight: .bold, relativeTo: .title))
                         .lineSpacing(5)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityValue(isIssued ? CardIssuanceCopy.issuedTitle : CardIssuanceCopy.readyTitle)
                         .accessibilityIdentifier("card.title")
                     Text(showsCard ? "오늘부터, 나만의 시간으로.\n이 카드가 매 여정에 함께해요." : "독서도, 작업도, 잠깐의 쉼도.\n한 장의 카드로 나만의 여정을 시작해요.")
-                        .font(.subheadline).lineSpacing(5)
+                        .font(FontCatalog.style(.subheadline)).lineSpacing(5)
                         .foregroundStyle(Color(red: 0.76, green: 0.80, blue: 0.77))
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 18)
@@ -53,12 +53,12 @@ struct CardIssuanceView: View {
                 VStack(spacing: 18) {
                     if controller.phase == .failed {
                         Text(CardIssuanceCopy.issueError)
-                            .font(.footnote).fixedSize(horizontal: false, vertical: true)
+                            .font(FontCatalog.style(.footnote)).fixedSize(horizontal: false, vertical: true)
                             .accessibilityValue(CardIssuanceCopy.issueError)
                             .accessibilityIdentifier("card.issueError")
                     }
                     Text(showsCard ? CardIssuanceCopy.issuedHint : CardIssuanceCopy.readyHint)
-                        .font(.footnote).foregroundStyle(Color(red: 0.67, green: 0.73, blue: 0.68))
+                        .font(FontCatalog.style(.footnote)).foregroundStyle(Color(red: 0.67, green: 0.73, blue: 0.68))
                         .multilineTextAlignment(.center)
                     actionButton
                 }.padding(.top, 12).padding(.bottom, 12)
@@ -95,7 +95,7 @@ struct CardIssuanceView: View {
                 } else {
                     VStack(spacing: 15) {
                         Image(systemName: "creditcard").font(.system(size: 31, weight: .light))
-                        Text("당신의 여정이 담길 한 장").font(.footnote)
+                        Text("당신의 여정이 담길 한 장").font(FontCatalog.style(.footnote))
                     }
                     .foregroundStyle(Color(red: 0.65, green: 0.72, blue: 0.67))
                     .frame(maxWidth: .infinity, minHeight: 184)
@@ -105,7 +105,7 @@ struct CardIssuanceView: View {
             }
             if isIssued {
                 Label("발급 완료", systemImage: "checkmark.circle")
-                    .font(.footnote).foregroundStyle(Color(red: 0.71, green: 0.83, blue: 0.73))
+                    .font(FontCatalog.style(.footnote)).foregroundStyle(Color(red: 0.71, green: 0.83, blue: 0.73))
             }
         }
         .frame(maxWidth: 292)

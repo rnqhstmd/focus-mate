@@ -18,13 +18,13 @@ struct InitialStationSearchView: View {
             VStack(alignment: .leading, spacing: 16) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("출발 정류장").font(.title2.bold()).accessibilityIdentifier("screen.initialStationEntry")
-                    Text("출발 정류장을 골라주세요.").font(.subheadline).foregroundStyle(FMDesign.secondaryText)
+                    Text("출발 정류장").font(FontCatalog.style(.title2, weight: .bold)).accessibilityIdentifier("screen.initialStationEntry")
+                    Text("출발 정류장을 골라주세요.").font(FontCatalog.style(.subheadline)).foregroundStyle(FMDesign.secondaryText)
                     if let notice = model.stationResetNotice {
                         Text(notice.text).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("search.resetNotice")
                     }
-                    Text("정류장 검색").font(.caption).foregroundStyle(FMDesign.secondaryText)
+                    Text("정류장 검색").font(FontCatalog.style(.caption)).foregroundStyle(FMDesign.secondaryText)
                     TextField("정류장 이름 또는 번호", text: $search.query)
                         .textFieldStyle(.plain).padding(14)
                         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
@@ -46,7 +46,7 @@ struct InitialStationSearchView: View {
             Button("확인") {
                 if let selected { model.confirmInitialStation(selected) }
             }
-            .buttonStyle(FMPrimaryButtonStyle()).frame(maxWidth: .infinity)
+            .buttonStyle(FMPrimaryButtonStyle(size: .compact)).frame(maxWidth: .infinity)
             .disabled(selected == nil)
             .accessibilityHint("고른 정류장에서 출발해요").accessibilityIdentifier("search.confirm")
         }
@@ -90,7 +90,7 @@ struct InitialStationSearchView: View {
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(option.name).font(.headline)
+                    Text(option.name).font(FontCatalog.style(.headline, weight: .semibold))
                     if let ars = option.ars { Text(ars).foregroundStyle(.secondary) }
                     if let bound = option.boundLabel { Text(bound).foregroundStyle(.secondary) }
                 }

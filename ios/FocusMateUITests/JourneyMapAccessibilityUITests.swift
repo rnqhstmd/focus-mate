@@ -90,8 +90,8 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
         XCTAssertTrue(h.waitForValue("journey.map.follow", "따라가는 중"))
 
         openSheet(h)
-        h.tap("journey.map.theme.satellite")
-        XCTAssertTrue(h.waitForValue("journey.map.theme.satellite", "선택됨"))
+        h.tap("journey.map.theme.dark")
+        XCTAssertTrue(h.waitForValue("journey.map.theme.dark", "선택됨"))
         h.tap("journey.map.stops")
         XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))
 
@@ -137,13 +137,13 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
     func testAC35_테마_시트_항목은_선택_상태를_값으로_낭독한다() {
         let h = running()
         openSheet(h)
-        XCTAssertEqual(h.value("journey.map.theme.dark"), "선택됨")
-        XCTAssertEqual(h.value("journey.map.theme.satellite"), "선택 안 됨")
+        XCTAssertEqual(h.value("journey.map.theme.satellite"), "선택됨")
+        XCTAssertEqual(h.value("journey.map.theme.dark"), "선택 안 됨")
         XCTAssertEqual(h.value("journey.map.stops"), "켜짐")
 
-        h.tap("journey.map.theme.satellite")
-        XCTAssertTrue(h.waitForValue("journey.map.theme.satellite", "선택됨"))
-        XCTAssertTrue(h.waitForValue("journey.map.theme.dark", "선택 안 됨"))
+        h.tap("journey.map.theme.dark")
+        XCTAssertTrue(h.waitForValue("journey.map.theme.dark", "선택됨"))
+        XCTAssertTrue(h.waitForValue("journey.map.theme.satellite", "선택 안 됨"))
 
         h.tap("journey.map.stops")
         XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))

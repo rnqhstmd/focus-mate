@@ -23,12 +23,16 @@ struct JourneyMapView: View {
             position = new
             if new.positionedByUser { map.userMovedCamera() }
         }), interactionModes: [.pan, .zoom, .rotate]) {
-            MapPolyline(coordinates: map.routePoints.map(\.coordinate))
-                .stroke(Color(red: 0.36, green: 0.62, blue: 1), lineWidth: 5)
+            // 남은 구간은 흐린 흰색, 지나온 구간은 노선 종류 색(지선 초록·간선 파랑).
+            MapPolyline(coordinates: map.remainingPoints.map(\.coordinate))
+                .stroke(FMDesign.routeRemaining, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            MapPolyline(coordinates: map.travelledPoints.map(\.coordinate))
+                .stroke(FMDesign.routeColor(kind: map.journey.routeKind),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             ForEach(map.visibleStops, id: \.id) { stop in
                 Annotation("", coordinate: stop.point.coordinate) {
-                    Circle().fill(.white).frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
+                    Circle().fill(map.isPassed(stop) ? FMDesign.stopPassed : .white).frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(FMDesign.stopStroke, lineWidth: 1.5))
                 }
                 .annotationTitles(.hidden)
             }
@@ -39,7 +43,7 @@ struct JourneyMapView: View {
             Annotation("", coordinate: map.bus.point.coordinate) {
                 Image(systemName: "location.north.fill")
                     .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                    .padding(6).background(Circle().fill(Color(red: 0.2, green: 0.45, blue: 0.95)))
+                    .padding(6).background(Circle().fill(FMDesign.routeColor(kind: map.journey.routeKind)))
                     .rotationEffect(.degrees(map.bus.headingDegrees - renderedHeading))
             }
             .annotationTitles(.hidden)
@@ -51,6 +55,8 @@ struct JourneyMapView: View {
             MapPitchToggle().mapControlVisibility(.hidden)
             MapScaleView().mapControlVisibility(.hidden)
         }
+        .overlay { FMMapScrim() }
+        .background(FMDesign.mapBase)
         .safeAreaPadding(.bottom, bottomInset)
         .onMapCameraChange(frequency: .onEnd) { context in renderedHeading = context.camera.heading }
         .onChange(of: map.cameraTarget) { _, target in
@@ -70,11 +76,11 @@ struct JourneyMapView: View {
         }
     }
 
-    /// 실제 장소(POI)는 가상 코스와 헷갈리지 않게 숨긴다(BR-1).
+    /// 실제 장소(POI)는 가상 코스와 헷갈리지 않게 숨긴다(BR-1). 위성은 라벨 없는 3D 항공 사진(시안 기본)이다.
     private var mapStyle: MapStyle {
         switch map.state.theme {
         case .dark: .standard(elevation: .realistic, pointsOfInterest: .excludingAll)
-        case .satellite: .hybrid(elevation: .realistic, pointsOfInterest: .excludingAll)
+        case .satellite: .imagery(elevation: .realistic)
         }
     }
 

@@ -56,13 +56,13 @@ struct ProfileView: View {
         let stats = ProfileStatsDisplay(model.profileStats)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text(ProfileCopy.headline).font(FontCatalog.text(23, bold: true, relativeTo: .title2))
+                Text(ProfileCopy.headline).font(FontCatalog.text(23, weight: .bold, relativeTo: .title2))
                     .accessibilityIdentifier("profile.headline")
                 Text(ProfileCopy.subhead).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                     .padding(.top, 8).accessibilityIdentifier("profile.subhead")
                 PassFace(style: model.currentCardStyle, dotsOpacity: 0.25).frame(maxWidth: .infinity)
                     .padding(.top, 32).accessibilityIdentifier("profile.card")
-                Text(PassIdentity.displayName).font(FontCatalog.text(17, bold: true, relativeTo: .title3))
+                Text(PassIdentity.displayName).font(FontCatalog.text(17, weight: .bold, relativeTo: .title3))
                     .padding(.top, 16).accessibilityIdentifier("profile.cardName")
                 Text(ProfileCopy.cardTagline).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
                     .padding(.top, 4).accessibilityIdentifier("profile.cardTagline")
@@ -99,7 +99,7 @@ struct ProfileView: View {
     // 제목 Text의 screen.profile이 한 요소로만 잡히게 한다.
     private var title: some View {
         HStack {
-            Text(Destination.profile.title).font(FontCatalog.text(20, bold: true, relativeTo: .title2)).fixedSize()
+            Text(Destination.profile.title).font(FontCatalog.text(20, weight: .bold, relativeTo: .title2)).fixedSize()
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.profile")
         }
@@ -160,7 +160,7 @@ private struct ProfileStatView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(value).font(FontCatalog.text(24, bold: true, relativeTo: .title)).lineLimit(1).minimumScaleFactor(0.6)
+            Text(value).font(FontCatalog.text(24, weight: .bold, relativeTo: .title)).lineLimit(1).minimumScaleFactor(0.6)
                 .accessibilityIdentifier("\(identifier).value")
             Text(label).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
         }

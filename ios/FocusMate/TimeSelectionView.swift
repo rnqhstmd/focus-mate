@@ -27,7 +27,7 @@ struct TimeSelectionView: View {
                             VStack(alignment: .leading, spacing: 16) {
                                 if dynamicTypeSize.isAccessibilitySize { origin }
                                 Text("시간부터 골라볼까요?")
-                                    .font(FontCatalog.text(24, bold: true, relativeTo: .title2))
+                                    .font(FontCatalog.text(24, weight: .bold, relativeTo: .title2))
                                     .multilineTextAlignment(.center).frame(maxWidth: .infinity)
                                     .accessibilityIdentifier("screen.time")
                                 duration.frame(maxWidth: .infinity)
@@ -41,7 +41,7 @@ struct TimeSelectionView: View {
                         .scrollIndicators(.hidden)
                         .accessibilityIdentifier("time.contentScroll")
                         Button(model.journeyProceedState.title) { model.proceedToPreparation() }
-                            .buttonStyle(FMPrimaryButtonStyle())
+                            .buttonStyle(FMPrimaryButtonStyle(size: .compact))
                             .disabled(!model.journeyProceedState.isEnabled)
                             .accessibilityIdentifier("time.proceed")
                     }
@@ -64,11 +64,11 @@ struct TimeSelectionView: View {
     private var duration: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             if model.journeyPlan.minutes >= 60 {
-                Text("\(model.journeyPlan.minutes / 60)").font(.system(size: 40, weight: .semibold, design: .rounded))
+                Text("\(model.journeyPlan.minutes / 60)").font(FontCatalog.fixed(40, weight: .semibold))
                 Text("h").font(FontCatalog.text(18, relativeTo: .title3))
             }
             Text("\(model.journeyPlan.minutes >= 60 ? model.journeyPlan.minutes % 60 : model.journeyPlan.minutes)")
-                .font(.system(size: 40, weight: .semibold, design: .rounded))
+                .font(FontCatalog.fixed(40, weight: .semibold))
             Text("min").font(FontCatalog.text(18, relativeTo: .title3))
         }
         .monospacedDigit()
@@ -83,7 +83,7 @@ struct TimeSelectionView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Label("출발", systemImage: "mappin.circle.fill")
                     .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
-                Text(station.name).font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 20 : 18, bold: true, relativeTo: .title3))
+                Text(station.name).font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 20 : 18, weight: .bold, relativeTo: .title3))
                     .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
                 if let bound = model.currentStationBound {
                     Text(bound).font(FontCatalog.text(dynamicTypeSize.isAccessibilitySize ? 15 : 13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
@@ -130,11 +130,11 @@ struct TimeSelectionView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Label("\(candidate.busKind) \(candidate.busNumber)", systemImage: "bus.fill")
-                        .font(FontCatalog.text(17, bold: true, relativeTo: .headline))
+                        .font(FontCatalog.text(17, weight: .bold, relativeTo: .headline))
                         .fixedSize(horizontal: false, vertical: true)
                     if isSelected { Image(systemName: "checkmark.circle.fill") }
                 }
-                Text(candidate.destination).font(FontCatalog.text(17, bold: true, relativeTo: .headline)).fixedSize(horizontal: false, vertical: true)
+                Text(candidate.destination).font(FontCatalog.text(17, weight: .bold, relativeTo: .headline)).fixedSize(horizontal: false, vertical: true)
                 Text("\(candidate.minutes)분 · \(candidate.stops)정류장 · \(candidate.distanceText)")
                     .font(FontCatalog.text(12, relativeTo: .caption)).fixedSize(horizontal: false, vertical: true)
             }
@@ -182,7 +182,7 @@ private struct MinuteRuler: View {
                     tick.addLine(to: CGPoint(x: x, y: major ? 44 : 30))
                     context.stroke(tick, with: .color(FMDesign.primary.opacity(major ? 0.65 : 0.3)), lineWidth: major ? 2 : 1)
                     if major {
-                        context.draw(Text("\(minute)").font(.caption2).foregroundColor(FMDesign.secondaryText),
+                        context.draw(Text("\(minute)").font(FontCatalog.style(.caption2)).foregroundColor(FMDesign.secondaryText),
                                      at: CGPoint(x: x, y: 62))
                     }
                 }

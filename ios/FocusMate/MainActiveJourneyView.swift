@@ -10,10 +10,10 @@ struct ActiveJourneyCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(content.title).font(FontCatalog.text(21, bold: true, relativeTo: .headline))
-                Text(content.task).font(FontCatalog.text(17, bold: true))
+                Text(content.title).font(FontCatalog.text(21, weight: .bold, relativeTo: .headline))
+                Text(content.task).font(FontCatalog.text(17, weight: .bold))
                 Text(content.busText).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
-                if let remaining = content.remainingText { Text(remaining).font(FontCatalog.text(20, bold: true, relativeTo: .title3)) }
+                if let remaining = content.remainingText { Text(remaining).font(FontCatalog.text(20, weight: .bold, relativeTo: .title3)) }
                 Text(content.routeText).font(FontCatalog.text(13, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -25,7 +25,7 @@ struct ActiveJourneyCardView: View {
                 Button(action: onResume) {
                     Text(JourneyLifecycleText.resumeButton).frame(minHeight: 44)
                 }
-                .buttonStyle(FMPrimaryButtonStyle())
+                .buttonStyle(FMPrimaryButtonStyle(size: .compact))
                 .accessibilityLabel(JourneyLifecycleText.resumeButtonLabel)
                 .accessibilityIdentifier("main.resumeJourney")
             }
@@ -33,7 +33,7 @@ struct ActiveJourneyCardView: View {
                 Button(action: onAlight) {
                     Text(JourneyLifecycleText.alightButton).frame(minHeight: 44)
                 }
-                .buttonStyle(FMPrimaryButtonStyle())
+                .buttonStyle(FMPrimaryButtonStyle(size: .compact))
                 .accessibilityIdentifier("open.alighting")
             }
         }

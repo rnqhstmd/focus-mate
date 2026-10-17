@@ -90,6 +90,8 @@ struct RootView: View {
                 #endif
             }
         }
+        // 글꼴을 지정하지 않은 글자도 시안 글꼴(Noto Sans KR)로 그린다.
+        .font(FontCatalog.style(.body))
         .preferredColorScheme(.dark)
         .onChange(of: model.isCleanupConfirmationPresented) { _, presented in
             if case .failed = model.launchState { recoveryFocus = presented ? .confirmation : .error }
@@ -188,11 +190,11 @@ struct RootView: View {
         case let .failed(issue):
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("저장된 상태 확인").font(.title.bold()).accessibilityIdentifier("screen.storageError")
+                    Text("저장된 상태 확인").font(FontCatalog.style(.title, weight: .bold)).accessibilityIdentifier("screen.storageError")
                         .accessibilityAddTraits(.isHeader).accessibilityFocused($recoveryFocus, equals: .error)
                     Text(message(for: issue)).accessibilityValue(message(for: issue)).accessibilityIdentifier("storage.error")
                     if model.isCleanupConfirmationPresented {
-                        Text("저장 데이터 정리").font(.headline).accessibilityIdentifier("storage.cleanupConfirmation")
+                        Text("저장 데이터 정리").font(FontCatalog.style(.headline, weight: .semibold)).accessibilityIdentifier("storage.cleanupConfirmation")
                             .accessibilityAddTraits(.isHeader).accessibilityFocused($recoveryFocus, equals: .confirmation)
                         Text("카드, 여행, 기록 데이터가 초기화돼요.")
                         Text("같은 원본을 앱 내부에 보존한 뒤 정리해요.")

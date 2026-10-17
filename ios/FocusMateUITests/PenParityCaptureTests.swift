@@ -484,6 +484,8 @@ final class PenParityCaptureTests: XCTestCase {
         let h = openCustomization()
         decorateCard(h)
         saveCustomization(h)
+        // 시안 R41에는 저장 안내 띠가 없다. 띠는 몇 초 뒤 스스로 사라진다.
+        XCTAssertTrue(h.waitUntil(timeout: timeout) { !h.element("cardCustomization.savedNotice").exists }, "저장 안내 띠가 사라지지 않음")
         capture("R41-profile-custom")
     }
 

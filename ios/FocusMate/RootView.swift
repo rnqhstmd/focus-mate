@@ -9,6 +9,7 @@ struct RootView: View {
     @State private var showsCustomization = false
     @State private var cardImportTask: Task<Void, Never>?
     @State private var savedCardNotice = false
+    @State private var savedNoticeHide: Task<Void, Never>?
     @State private var announceSavedCard = false
     @State private var confirmsNewJourney = false
     @State private var mainActionFailed = false
@@ -77,6 +78,12 @@ struct RootView: View {
                 announceSavedCard = false
                 savedCardNotice = true
                 cardFocus = true
+                // 시안 R41에는 띠가 없다. 저장 직후 잠깐 보여 주고 스스로 사라진다(낭독은 아래 알림으로 한 번).
+                savedNoticeHide?.cancel()
+                savedNoticeHide = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(4))
+                    if !Task.isCancelled { savedCardNotice = false }
+                }
                 #if DEBUG
                 if let testRecorder { testRecorder.announce("카드 외형을 저장했어요.") }
                 else { SystemAccessibilityAnnouncer().announce("카드 외형을 저장했어요.") }
@@ -88,10 +95,11 @@ struct RootView: View {
             if let customization {
                 #if DEBUG
                 CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization,
-                                      saved: saveCompleted, testBootstrap: testBootstrap)
+                                      saved: saveCompleted, numberText: model.currentCardNumberText, testBootstrap: testBootstrap)
                     .overlay(alignment: .bottomLeading) { testDiagnostics }
                 #else
-                CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization, saved: saveCompleted)
+                CardCustomizationView(controller: customization, importTask: $cardImportTask, close: dismissCustomization, saved: saveCompleted,
+                                      numberText: model.currentCardNumberText)
                 #endif
             }
         }
@@ -158,6 +166,10 @@ struct RootView: View {
         if model.presentedRoute == .main, case .ready = model.launchState {
             content
                 .safeAreaInset(edge: .bottom, spacing: 0) { saveFailureNotice }
+        } else if model.presentedRoute == .cardEntry, case .ready = model.launchState {
+            // 시안 R35~R37: 발급 화면은 안전 영역 바로 아래에서 시작하고 버튼이 홈 표시줄 바로 위에 온다.
+            content
+                .safeAreaInset(edge: .bottom, spacing: 0) { saveFailureNotice }
         } else if model.presentedRoute == .initialStationEntry, case .ready = model.launchState {
             // 시안 R03: 지도 위에 떠 있는 패널이 화면 가장자리 기준으로 자리 잡는다.
             content
@@ -176,10 +188,14 @@ struct RootView: View {
             Text("저장에 실패했어요. 변경 내용의 재실행 복원을 보장할 수 없어요.")
                 .accessibilityIdentifier("storage.saveFailure")
                 .foregroundStyle(FMDesign.secondaryText)
-                .padding(.horizontal, model.presentedRoute == .main ? 24 : 0)
-                .padding(.vertical, model.presentedRoute == .main ? 12 : 0)
+                .padding(.horizontal, insetsSaveFailure ? 24 : 0)
+                .padding(.vertical, insetsSaveFailure ? 12 : 0)
                 .background(FMDesign.background)
         }
+    }
+
+    private var insetsSaveFailure: Bool {
+        model.path.isEmpty && (model.presentedRoute == .main || model.presentedRoute == .cardEntry)
     }
 
     private func updateWidgetEntryBlock() {
@@ -235,7 +251,7 @@ struct RootView: View {
     @ViewBuilder private var route: some View {
         switch model.presentedRoute {
         case .cardEntry:
-            CardIssuanceView(controller: issuance)
+            CardIssuanceView(controller: issuance, numberText: model.currentCardNumberText)
         case .initialStationEntry:
             InitialStationSearchView(model: model)
         case .main:

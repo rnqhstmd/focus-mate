@@ -423,3 +423,73 @@
 - R23: × 대신 뒤로 버튼, 예시 안내 줄 없음(그만큼 위로 붙음), 제목 " · 전체 기간", 태그 칩 줄 추가. 도넛·범례·요약은 시안과 같은 모양.
 - R24: 예시 안내 줄 몫만큼 패널이 낮다(위끝 ≈232 vs 200).
 - R20: 프로토타입 문구·동작 줄이기·링크가 없어 패널이 낮다. 뒤로 버튼 있음(시안은 ×).
+
+## F단계 — R35·R36·R37·R38·R39·R40·R41 (2026-10-17)
+
+근거: `diff/F.md`, `G-global.md`. 카드 앞면 공통(C1·C3~C7: 점지도 제거·번호·글자색·테두리·알약)은 C단계에서 끝나 이번에는 화면별 크기·위치와 남은 차이만 했다. 속도 우선 지시로 캡처 비교 2회(시안 PNG와 나란히 붙인 50pt 격자 비교 이미지, `scratchpad/ftools/sbs-R*.png`).
+
+### 한 것
+
+**PassFace(공용 카드 앞면)**
+- `Layout.issue`(292x184, 발급 화면): 시안대로 글자를 줄이지 않는다 — Focus Mate 10·제목 23·부제 10·번호 8pt, 칩 34x25, 비접촉 아이콘 (258,15). `Layout`에 `brandSize/titleSize/subtitleSize/numberSize`(기본 10/18/9/7)를 더했다.
+- 글자 세로 위치 보정 `PassFace.frameTop(glyphTop:size:)`: 시안 좌표는 글자 상자(줄 높이 = 글자 크기) 위끝인데 Noto 줄 높이가 1.448배라 모든 카드 글자가 2~4pt 아래에 있었다. 크기 × 0.224만큼 올린다(`.wide`·`.ticket`·`.issue` 모두, R27·R42 태그 카드 포함).
+- 꾸민 카드 알약: Focus Mate 알약 위끝 = brand.y(17), 번호 알약 위끝 = number.y − 4(194), 세로 안쪽 여백 1.5 → 0.8로 시안 70x16·65x12에 맞췄다.
+- IC 칩 색 #C5B998 / 테두리 #80775D(R41-4, 모든 카드).
+
+**R35~R37 카드 발급** `CardIssuanceView`, `RootView`, `FMDesign`
+- 위치: RootView의 24pt 여백을 발급 라우트에서 빼서(`cardEntry` 분기, 저장 실패 안내는 아래 inset으로 유지) Focus Mate가 안전 영역 바로 아래(시안 y=66)에서 시작한다. 글자 x=28, 간격은 시안 글자 상자를 Noto 프레임으로 환산(제목 50·본문 20·슬롯 73·카드 31·발급 완료 17).
+- 글자: Focus Mate 16 Bold, 본문 14 #C1CDC4 줄 간격 24pt, 하단 안내 12 #AAB9AE. 시스템 글꼴 자리 모두 Noto.
+- 슬롯 막대 213x6, 평소 #040805/#566359, **발급 중에는 #819B88/#A6C8B0 초록으로 켜짐**(R36).
+- 빈 카드: `plus.rectangle` 20pt, 안내 13pt, 테두리 #6E8274 39%.
+- 발급·완료 카드: `PassFace(layout: .issue, numberText:)` — **카드 번호 표시**(`AppModel.currentCardNumberText`, 발급 직후 동기로 생김).
+- "발급 완료": 원 없는 체크 11 semibold + 13pt, #B4D4BB, 간격 10.
+- 하단 버튼: `FMPrimaryButtonStyle(size: .issuance)` 새 크기 — 53pt, 16pt, 비활성 #252525 바탕·#444444 테두리·#888888 글자(공통 비활성 #303A33과 다른 시안 값). 좌우 26.5, 홈 표시줄 위 5pt(시안 782~835).
+
+**R38/R41 마이페이지** `ProfileView`
+- **시스템 유리 원 뒤로 버튼 → 꺾쇠만**: `navigationBarBackButtonHidden(true)` + 툴바 제목 줄 안 꺾쇠 버튼(`profile.back`, 낭독 "뒤로", 44pt, #F4F4F4, `model.goBack()`). 내비 막대 버튼은 여전히 1개(`navigationBars.buttons.firstMatch`로 찾는 기존 테스트 그대로 동작, R42 캡처에서 확인).
+- **가장자리 스와이프 뒤로가기 유지**: D단계 `NavigationEdgeSwipeEnabler`를 붙였다(보이는 동안만 위임 교체, 떠날 때 복원).
+- **'데이터 출처' 행 제거**: E단계가 설정 자리표시 안에 만든 `settings.dataSource`(→ `.dataSource`)를 확인했다. `ProfileMenuItem.dataSource`·`openFromProfile(.dataSource)`는 모델 API라 남겼다.
+- 배경 #0D0F10, 부제·통계 라벨 #AEB5BB 12pt, 카드 문구 12pt #AFB7BD, 구분선 1pt #2C3134, 메뉴 아이콘→글자 간격 9, 꺾쇠 13pt #9DA5AB(오른쪽 6), 메뉴 글자 #F3F3F3, 통계 오른쪽 칸 x=213(간격 24). 세로 간격 전체를 시안에 맞춤(위 여백 25, 카드 이름 12.5, 통계 7.5 등).
+
+**R41 버그 수정: "카드 외형을 저장했어요." 띠가 사라지지 않음** `RootView`
+- 저장 직후 띠를 보이고 4초 뒤 스스로 숨긴다(`savedNoticeHide` 작업, 다시 저장하면 이전 타이머 취소). 경로 이동 시 지우는 C단계 처리와 VoiceOver 알림은 그대로. R41 캡처는 띠가 사라진 뒤 찍는다(사라짐 자체를 단언).
+
+**R39/R40 카드 꾸미기** `CardCustomizationView`
+- 미리보기 카드에 **카드 번호 표시**(`numberText`를 RootView에서 전달), 카드 x=25·352폭.
+- 머리줄: 꺾쇠 16pt #F4F4F4, 제목과 간격 8, 되돌리기 활성 #F3F3F3/비활성 #54595D, 오른쪽 18, 원 위끝 y=60.
+- 배경 #0D0F10. 안내 2줄 #B8BFC5 줄 간격 20.
+- 색 원: 39pt + 간격 9(첫 원 x=25), 테두리 #737A80, 선택 링 48pt #F4F4F4(배치에 영향 없음), 체크 11 semibold #F1F2F3/밝은 색 위 #121416.
+- "직접 고르기": 시스템 무지개 원 대신 시안 사각 견본(38x32 #111111+흰 15%, 안쪽 28x18 현재 배경색 + #777777 테두리). 시스템 `ColorPicker`는 견본 위에 2% 불투명으로 겹쳐 누름만 받는다(식별자 `cardCustomization.color.custom`·라벨 유지).
+- 사진: "사진 추가" 테두리 #555E65·글자 #F3F3F3·좌우 12, 썸네일 53pt(#5C6267 테두리), 선택 시 바깥 60pt 흰 링, 간격 11, 첫 x=29. 안내 #AEB5BB / #B0BAC2, "기본 검정 카드로 되돌리기" #B4BEC6 + 글자 아래 1pt 밑줄.
+- "사진 크기"·퍼센트 12pt #CCCCCC/#C8CFD4. **슬라이더·가로/세로 위치·앞/뒤/삭제 조절 UI는 유지**(시안 누락으로 봄).
+- 저장 버튼: `FMPrimaryButtonStyle()`(51pt, #444444 테두리, 15pt), 좌우 24.5, 안전 영역 바닥.
+
+**테스트 기대값 수정(실행 안 함, build-for-testing 컴파일만 확인)**
+- `ProfileUITests.testAC23_마이페이지의_버튼_구성은_뒤로와_카드꾸미기와_설정뿐이다`: 버튼 4 → 3, `profile.dataSource` 없음 확인.
+- `DataSourceUITests.openDataSource`: 마이페이지 → `profile.settings` → `settings.dataSource` 경유, 마이페이지에 `profile.dataSource`가 없음을 확인.
+- `PenParityCaptureTests.testR41_profileCustom`: 저장 안내 띠가 사라질 때까지 기다린 뒤 캡처.
+
+### 건너뛴 것(이유)
+- 마이페이지 "카드 꾸미기" 외곽선 연필 아이콘(지우개 끝): SF Symbols에 같은 모양이 없어 `pencil`(15pt) 유지 — B단계와 같은 아이콘 자산 문제.
+- 꾸미기 카드 테두리 #555C61: #51565A 하나로 통일(F.md C6 권장). 시안 PNG의 카드 테두리는 거의 안 보이고 앱은 1pt가 보인다.
+- R40 크기 조절 손잡이를 카드 안에 고정하는 것: 동작 변경([기능]). 사진 배치 값 차이(데이터)로 위치가 다르다.
+- R40 시안의 퍼센트가 라벨 위 줄(y=725)에 따로 놓인 배치: 시안이 슬라이더를 빼고 그린 흔적으로 보고 같은 줄 유지.
+- 직접 고르기 견본은 표시만 시안 모양이고, 누르면 여전히 시스템 색 선택기가 뜬다.
+
+### 테스트 결과
+- build-for-testing 2회 성공(앱·단위·UI 타깃, 오류 0).
+- PenParityCaptureTests R35·R36·R37·R38·R39·R40·R41·R42: 2회, 매번 **8개 실행, 실패 0**(각 약 128초). 캡처 `scratchpad/app/` 갱신.
+- 그 밖의 단위/UI 테스트는 실행하지 않았다(사용자 지시).
+
+### 마지막 회귀에서 확인(미실행)
+- UI: `ProfileUITests`(전체 — 꺾쇠 뒤로 버튼 교체·AC16 뒤로·AC23 버튼 수·저장 안내 띠 자동 숨김(4초 안 확인)·XXXL 스크롤), `DataSourceUITests`(전체 — 설정 경유 진입), `CardCustomizationFlowTests`(전체 — 색 원·직접 고르기 겹침·썸네일·저장 안내 띠 `successfulSave`), `CardIssuanceFlowTests`(전체 — 발급 화면 배치·버튼 isHittable·큰 글자), `CardStorageFlowTests`, `Phase1FlowTests`(설정 데이터 출처), `StorageRecoveryFlowTests`(발급 화면 저장 실패 안내 위치), `LargeTextUITests`, `SimulatorLargeTextRecoveryTests`, `BoardingTagUITests`·`AlightingFlowUITests`(카드 글자 위치 보정 — 좌표 단언 영향 없을 것으로 봄)
+- 단위: `PassFaceAccessibilityTests`, `PassFaceAssetTests`, `PassIdentityTests`, `ProfileModelTests`, `CardIssuanceControllerTests`
+- `PenParityCaptureTests`: testR27_boardTag·testR12_boardingDone·testR28_alightTag·testR29_alightDone(카드 글자 위치 보정 반영 확인), testR20_settings(데이터 출처 진입)
+
+### 남은 차이
+- 공통: 상태 표시줄(시스템).
+- R35·R36·R37: 1pt 안. 빈 카드 아이콘 2pt 위. 카드 번호는 데이터 차이.
+- R38·R41: 1~2pt 안. 카드 꾸미기 아이콘 모양(SF 연필 vs 외곽선 연필). 카드 테두리가 시안 PNG보다 잘 보인다.
+- R39: 1~2pt 안. 직접 고르기 견본 바탕이 시안보다 살짝 밝다.
+- R40: 사진·배치·퍼센트는 데이터 차이. 시안에 없는 슬라이더가 보인다(유지 결정). 손잡이 위치는 사진 배치에 따름.
+- R42: 카드 글자·알약 위치가 시안과 1pt 안으로 맞았다(보정 효과).

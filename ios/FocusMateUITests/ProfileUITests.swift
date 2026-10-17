@@ -260,14 +260,16 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
     }
 
-    // 깨짐 명명: 내비 버튼이 뒤로 외에 더 있거나 본문 버튼이 customize/settings/dataSource 3개가 아니면 실패
+    // 깨짐 명명: 내비 버튼이 뒤로 외에 더 있거나 본문 버튼이 customize/settings 2개가 아니면 실패
+    // (시안 R38: '데이터 출처' 줄은 설정 안으로 옮겼다)
     func testAC23_마이페이지의_버튼_구성은_뒤로와_카드꾸미기와_설정뿐이다() {
         let h = FocusMateUIHarness.launch(seed: "ready")
         _ = openProfile(h)
         let nav = h.app.navigationBars.firstMatch
         XCTAssertTrue(nav.waitForExistence(timeout: timeout))
         XCTAssertEqual(nav.buttons.count, 1)
-        XCTAssertEqual(h.app.buttons.count, 4)  // 뒤로, 카드 꾸미기, 설정, 데이터 출처(profile.dataSource)
+        XCTAssertEqual(h.app.buttons.count, 3)  // 뒤로(꺾쇠), 카드 꾸미기, 설정
+        XCTAssertFalse(h.element("profile.dataSource").exists)
     }
 
     // MARK: - 최대 글자 크기

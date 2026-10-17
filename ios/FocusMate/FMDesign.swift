@@ -79,26 +79,38 @@ extension Color {
 /// White pill CTA: capsule, 1pt #444444, 15pt Regular black, no icon.
 struct FMPrimaryButtonStyle: ButtonStyle {
     enum Size {
-        /// Main and issuance CTA (51pt).
+        /// Main CTA (51pt).
         case regular
         /// CTA inside panels and lists (43pt; touch target stays ≥ 44 with the stroke).
         case compact
+        /// Card issuance CTA (R35~R37: 53pt, 16pt, disabled #252525 fill + #444444 stroke + #888888 text).
+        case issuance
 
-        var height: CGFloat { self == .regular ? 51 : 44 }
+        var height: CGFloat {
+            switch self {
+            case .regular: 51
+            case .compact: 44
+            case .issuance: 53
+            }
+        }
+        var fontSize: CGFloat { self == .issuance ? 16 : 15 }
     }
 
     var size: Size = .regular
     @Environment(\.isEnabled) private var isEnabled
 
+    private var disabledFill: Color { size == .issuance ? Color(hex: 0x252525) : FMDesign.ctaDisabledFill }
+    private var disabledText: Color { size == .issuance ? Color(hex: 0x888888) : FMDesign.ctaDisabledText }
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(FontCatalog.text(15, relativeTo: .headline))
+            .font(FontCatalog.text(size.fontSize, relativeTo: .headline))
             .multilineTextAlignment(.center)
             .padding(.horizontal, 18).padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: size.height)
-            .foregroundStyle(isEnabled ? Color.black : FMDesign.ctaDisabledText)
-            .background(isEnabled ? Color.white : FMDesign.ctaDisabledFill, in: Capsule())
-            .overlay { Capsule().strokeBorder(isEnabled ? FMDesign.ctaStroke : FMDesign.ctaDisabledFill, lineWidth: 1) }
+            .foregroundStyle(isEnabled ? Color.black : disabledText)
+            .background(isEnabled ? Color.white : disabledFill, in: Capsule())
+            .overlay { Capsule().strokeBorder(isEnabled || size == .issuance ? FMDesign.ctaStroke : disabledFill, lineWidth: 1) }
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.8 : 1)
     }

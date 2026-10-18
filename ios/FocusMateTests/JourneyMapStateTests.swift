@@ -8,11 +8,11 @@ final class JourneyMapStateTests: XCTestCase {
     // MARK: - 초기값
 
     // 깨짐: 초기 카메라/테마/정차역/시트 기본값 중 하나라도 바뀌면 실패
-    func test1_AC13_초기값은_따라가기_위성_정차역표시_시트닫힘이다() {
+    func test1_AC13_초기값은_따라가기_일반지도_정차역표시_시트닫힘이다() {
         let state = JourneyMapState(status: .running)
 
         XCTAssertEqual(state.camera, .follow)
-        XCTAssertEqual(state.theme, .satellite)
+        XCTAssertEqual(state.theme, .dark)
         XCTAssertTrue(state.showsStops)
         XCTAssertFalse(state.isThemeSheetPresented)
         XCTAssertTrue(state.toolsEnabled)

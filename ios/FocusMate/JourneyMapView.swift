@@ -15,6 +15,11 @@ struct JourneyMapView: View {
     @State private var showsMarks = false
     /// 버스 그림의 화면 회전 각도(투영으로 구함). 아직 못 구했으면 방위 - 카메라 방위로 대신한다.
     @State private var busScreenAngle: Double?
+    /// 화면에 그리는 버스의 노선선 위 거리. 타이머는 1초마다 바뀌므로 그 사이를 이어 그린다(nil이면 실제 값).
+    @State private var shownDistance: Double?
+    /// 선을 자르는 거리. 선을 매 프레임 다시 만들면 MapKit이 겹침 선을 지웠다 그려 깜빡이므로, 이어 그리기를 시작할 때
+    /// 한 번만(버스 바로 뒤 지점) 정한다. 버스 그림이 그 사이 남은 선 위를 지나간다.
+    @State private var lineDistance: Double?
     private var shapes: RouteShapeStore { RouteShapeStore.shared }
 
     init(map: JourneyMapController, bottomInset: CGFloat) {
@@ -34,6 +39,7 @@ struct JourneyMapView: View {
                 .onChange(of: map.bus) { _, _ in updateBusAngle(proxy) }
                 .onChange(of: map.cameraTarget) { _, _ in updateBusAngle(proxy) }
         }
+        .task(id: map.busDistance) { await glide(to: map.busDistance) }
         .task(id: map.segmentRequests.first?.key) {
             map.apply(shape: shapes.shape(for: map.segmentRequests))
             await shapes.load(map.segmentRequests)
@@ -63,20 +69,25 @@ struct JourneyMapView: View {
             if new.positionedByUser { map.userMovedCamera() }
         }), interactionModes: [.pan, .zoom, .rotate]) {
             // 덮개(검정 33%)를 지도 안 다각형으로 깔아 노선선·표식이 그 위에 선명하게 그려지게 한다(R06과 같은 방식).
-            if showsMarks {
+            // 일반(어두운) 지도는 이미 어둡고, 3D 지도에서 덮개 판이 노선선과 섞여 선이 군데군데 흐려지므로 위성에서만 깐다.
+            if showsMarks && map.state.theme == .satellite {
                 MapPolygon(coordinates: Self.scrimBox(around: map.destinationStop.point.coordinate))
                     .foregroundStyle(FMDesign.mapScrim)
             }
-            // 노선 전체(탈 구간 앞뒤 포함)는 흐린 흰 선. 그 위에 지나온 구간은 흰 선, 앞으로 갈 구간은 노선색 굵은 선
-            // (항공 사진 위에서 보이게 어두운 외곽선을 아래에 깐다). 모두 도로 경로를 따른다.
-            MapPolyline(coordinates: map.contextPoints.map(\.coordinate))
-                .stroke(FMDesign.routeRemaining, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-            MapPolyline(coordinates: map.travelledPoints.map(\.coordinate))
+            // 탈 구간 앞뒤 노선은 흐린 흰 선, 지나온 구간은 흰 선, 앞으로 갈 구간은 노선색 굵은 선. 모두 도로 경로를 따른다.
+            // 3D 지도에서는 겹친 선끼리 앞뒤가 섞여 끊겨 보이고 깜빡이므로 선을 서로 겹치지 않게 나눠 그리고, 건물에 가리지 않게
+            // 지도 글자 위 층에 둔다.
+            ForEach(Array(map.contextLines.enumerated()), id: \.offset) { _, line in
+                MapPolyline(coordinates: line.map(\.coordinate))
+                    .stroke(FMDesign.routeRemaining, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .mapOverlayLevel(level: .aboveLabels)
+            }
+            MapPolyline(coordinates: map.travelledPoints(to: lineSplit).map(\.coordinate))
                 .stroke(FMDesign.routePassed, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-            MapPolyline(coordinates: map.remainingPoints.map(\.coordinate))
-                .stroke(Color.black.opacity(0.55), style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
-            MapPolyline(coordinates: map.remainingPoints.map(\.coordinate))
+                .mapOverlayLevel(level: .aboveLabels)
+            MapPolyline(coordinates: map.remainingPoints(from: lineSplit).map(\.coordinate))
                 .stroke(routeColor, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                .mapOverlayLevel(level: .aboveLabels)
             // 버스가 서 있는 정류장 점은 버스 그림 위로 올라오므로(표식 순서는 정할 수 없다) 그리지 않는다.
             ForEach(showsMarks ? map.visibleStops.dropLast().filter { !map.isUnderBus($0) } : [], id: \.id) { stop in
                 Annotation("", coordinate: stop.point.coordinate, anchor: .center) { stopDot(stop) }
@@ -91,7 +102,7 @@ struct JourneyMapView: View {
                 }
                 .annotationTitles(.hidden)
             }
-            Annotation("", coordinate: map.bus.point.coordinate, anchor: .center) {
+            Annotation("", coordinate: map.shape.point(atDistance: busDistance).coordinate, anchor: .center) {
                 // 앞(위쪽)이 화면에서 진행 방향을 보게 돌린다. 기울인 카메라에서는 투영한 화면 각도를 쓴다.
                 BusTopMarker(color: FMDesign.busBodyColor(kind: map.journey.routeKind), width: 30)
                     .rotationEffect(.degrees(busScreenAngle ?? (map.bus.headingDegrees - renderedHeading)))
@@ -113,6 +124,28 @@ struct JourneyMapView: View {
         }
         .onChange(of: map.cameraTarget) { _, target in
             withAnimation(target.animated ? .linear(duration: 1) : nil) { position = .camera(Self.camera(for: target)) }
+        }
+    }
+
+    private var busDistance: Double { shownDistance ?? map.busDistance }
+    private var lineSplit: Double { lineDistance ?? map.busDistance }
+
+    /// 직전 화면 위치에서 새 위치까지 1초(타이머 간격) 동안 일정한 속도로 옮긴다. 카메라도 같은 1초 직선 움직임이라
+    /// 버스가 화면에서 제자리에 머문다. 동작 줄이기·도로 경로 교체 같은 큰 점프는 바로 옮긴다.
+    private func glide(to target: Double) async {
+        let from = shownDistance ?? target
+        guard !map.reducesMotion, abs(target - from) > 0.01, abs(target - from) < 300 else {
+            shownDistance = target
+            lineDistance = target
+            return
+        }
+        lineDistance = from
+        let start = ContinuousClock.now
+        while !Task.isCancelled {
+            let t = min(1, (ContinuousClock.now - start) / .seconds(1))
+            shownDistance = from + (target - from) * t
+            if t >= 1 { return }
+            try? await Task.sleep(for: .milliseconds(33))
         }
     }
 
@@ -156,7 +189,7 @@ struct JourneyMapView: View {
     /// 실제 장소(POI)는 가상 코스와 헷갈리지 않게 숨긴다(BR-1). 위성은 라벨 없는 3D 항공 사진(시안 기본)이다.
     private var mapStyle: MapStyle {
         switch map.state.theme {
-        case .dark: .standard(elevation: .realistic, pointsOfInterest: .excludingAll)
+        case .dark: FMDesign.cityMapStyle
         case .satellite: .imagery(elevation: .realistic)
         }
     }

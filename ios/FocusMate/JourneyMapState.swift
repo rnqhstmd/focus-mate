@@ -6,7 +6,7 @@ enum JourneyMapTheme: String { case dark, satellite }
 /// 지도 화면 상태(BR-3~5). 저장하지 않는 메모리 상태이고, 동작 줄이기 값은 담지 않는다(AC-32).
 struct JourneyMapState: Equatable {
     private(set) var camera: JourneyCameraMode = .follow
-    private(set) var theme: JourneyMapTheme = .satellite
+    private(set) var theme: JourneyMapTheme = .dark
     private(set) var showsStops = true
     private(set) var isThemeSheetPresented = false
     private(set) var status: JourneyTimerController.Status

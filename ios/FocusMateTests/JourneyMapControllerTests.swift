@@ -183,7 +183,7 @@ final class JourneyMapControllerTests: XCTestCase {
         let fresh = makeMap()
 
         XCTAssertEqual(fresh.state.camera, .follow)
-        XCTAssertEqual(fresh.state.theme, .satellite)
+        XCTAssertEqual(fresh.state.theme, .dark)
         XCTAssertTrue(fresh.state.showsStops)
         XCTAssertFalse(fresh.state.isThemeSheetPresented)
     }

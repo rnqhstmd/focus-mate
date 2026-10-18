@@ -112,15 +112,15 @@ final class JourneyMapUITests: XCTestCase {
 
     // MARK: AC-19, 20, 21
 
-    // 깨짐: 시트 기본 선택(위성·정류장 켜짐, 시안 3D 항공 사진)이 다르거나 시트가 열리지 않는다.
-    func testAC19_테마_시트는_위성과_정류장_켜짐으로_열린다() {
+    // 깨짐: 시트 기본 선택(일반 3D 지도·정류장 켜짐)이 다르거나 시트가 열리지 않는다.
+    func testAC19_테마_시트는_일반지도와_정류장_켜짐으로_열린다() {
         let h = running()
         openSheet(h)
         for id in ["journey.map.theme.dark", "journey.map.theme.satellite", "journey.map.stops"] {
             XCTAssertTrue(h.element(id).waitForExistence(timeout: timeout), "Missing: \(id)")
         }
-        XCTAssertTrue(h.element("journey.map.theme.satellite").isSelected)
-        XCTAssertFalse(h.element("journey.map.theme.dark").isSelected)
+        XCTAssertTrue(h.element("journey.map.theme.dark").isSelected)
+        XCTAssertFalse(h.element("journey.map.theme.satellite").isSelected)
         XCTAssertEqual(h.value("journey.map.stops"), "켜짐")
     }
 

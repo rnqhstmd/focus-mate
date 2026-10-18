@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 /// Shared surfaces from the Pen design (G-global 2). Disabled controls retain readable labels.
@@ -10,6 +11,9 @@ enum FMDesign {
     static let panelStroke = Color.white.opacity(0.2)
     /// Uniform black 33% (#00000055) over every map backdrop.
     static let mapScrim = Color.black.opacity(0.33)
+    /// 기본 지도: 3D 건물이 있는 일반 지도를 어둡고 차분하게(장소·교통 표시 없음). 위성은 지도 테마에서 고른다.
+    static let cityMapStyle: MapStyle = .standard(elevation: .realistic, emphasis: .muted,
+                                                  pointsOfInterest: .excludingAll, showsTraffic: false)
     static let rowFill = Color(hex: 0x111111)
     static let chipFill = Color(hex: 0x1A1A1A)
 

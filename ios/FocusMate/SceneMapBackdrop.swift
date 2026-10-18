@@ -202,7 +202,7 @@ struct SceneMapBackdrop: View {
                             .annotationTitles(labelsOrigin ? .hidden : .automatic)
                         }
                     }
-                    .mapStyle(.imagery(elevation: .realistic))
+                    .mapStyle(FMDesign.cityMapStyle)
                     .mapControls { }
                     .overlay { if !decorated { FMMapScrim() } }
                     // Large text can make the overlay taller than the map. Preserve a visible map region.
@@ -220,7 +220,7 @@ struct SceneMapBackdrop: View {
                     .id(stop.id)
                 } else if let fallbackCoordinate {
                     Map(initialPosition: Self.camera(at: fallbackCoordinate), interactionModes: [])
-                        .mapStyle(.imagery(elevation: .realistic))
+                        .mapStyle(FMDesign.cityMapStyle)
                         .mapControls { }
                         .overlay { FMMapScrim() }
                         .safeAreaPadding(.bottom, min(max(0, bottomInset), max(0, geometry.size.height - 160)))

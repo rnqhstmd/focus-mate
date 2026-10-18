@@ -87,7 +87,11 @@ struct RouteShape: Equatable {
 
     /// 두 위치 사이의 선(앞 위치 → 뒤 위치). 두 끝은 정확히 그 위치 점이다.
     func line(from a: Location, to b: Location) -> [CoursePoint] {
-        let da = distance(at: a), db = distance(at: b)
+        line(fromDistance: distance(at: a), toDistance: distance(at: b))
+    }
+
+    /// 두 거리 사이의 선. 화면에서 버스를 매끄럽게 옮길 때 소수 거리로 자른다.
+    func line(fromDistance da: Double, toDistance db: Double) -> [CoursePoint] {
         guard db > da else { return [point(atDistance: da), point(atDistance: da)] }
         var result = [point(atDistance: da)]
         for i in points.indices where distances[i] > da && distances[i] < db { result.append(points[i]) }

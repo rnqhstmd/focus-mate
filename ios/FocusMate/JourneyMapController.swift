@@ -38,9 +38,21 @@ final class JourneyMapController {
     var routePoints: [CoursePoint] { journey.stops.map(\.point) }
     /// 노선 전체(탈 구간 앞뒤 포함) 흐린 선.
     var contextPoints: [CoursePoint] { shape.points }
+    /// 탈 구간을 뺀 앞·뒤 흐린 선(겹쳐 그리지 않기 위해 나눈다). 길이가 없는 쪽은 뺀다.
+    var contextLines: [[CoursePoint]] {
+        let start = shape.distance(at: legLocation(0, 0)), end = shape.distance(at: legLocation(journey.totalStops, 0))
+        return [(0.0, start), (end, shape.totalMeters)].filter { $0.1 - $0.0 > 1 }
+            .map { shape.line(fromDistance: $0.0, toDistance: $0.1) }
+    }
     /// 지나온 구간: 출발 → 현재 버스 위치. 남은 구간: 버스 위치 → 도착. 둘 다 노선선(도로 경로) 위를 따른다.
     var travelledPoints: [CoursePoint] { shape.line(from: legLocation(0, 0), to: busLocation) }
     var remainingPoints: [CoursePoint] { shape.line(from: busLocation, to: legLocation(journey.totalStops, 0)) }
+    /// 버스의 노선선 위 거리(m). 화면은 직전 값에서 이 값까지 이어 그려 버스가 1초마다 뛰지 않게 한다.
+    var busDistance: Double { shape.distance(at: busLocation) }
+    /// 이어 그리는 중인 거리 `d`에서 자른 지나온·남은 선.
+    func travelledPoints(to d: Double) -> [CoursePoint] { shape.line(fromDistance: shape.distance(at: legLocation(0, 0)), toDistance: d) }
+    func remainingPoints(from d: Double) -> [CoursePoint] { shape.line(fromDistance: d, toDistance: shape.distance(at: legLocation(journey.totalStops, 0))) }
+    var reducesMotion: Bool { reduceMotion }
     /// 도로 경로에 쓸 구간 요청(노선 ID + 정류장 쌍).
     var segmentRequests: [RouteSegmentRequest] { journey.segmentRequests }
     /// 버스가 이미 지난(도달한) 정류장인지. 다음 정류장 앞까지가 지난 정류장이다.

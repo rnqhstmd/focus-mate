@@ -17,6 +17,8 @@ struct JourneyTimerView: View {
     /// 일시정지↔재개 버튼이 같은 자리에서 바뀌므로, 연타의 두 번째 탭이 반대 전환으로 들어가지 않게 잠깐 무시한다.
     @State private var lastControlTap: ContinuousClock.Instant?
     @State private var bottomHeight: CGFloat = 0
+    /// 노선 버튼으로 여닫는 정류장 진행 패널(R14).
+    @State private var showsStopPanel = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// 하단 지표 글자(웹 기준 라벨 12·단위 15·숫자 30)를 글자 크기 설정에 맞춰 키운다.
     @ScaledMetric(relativeTo: .caption) private var labelSize: CGFloat = 12
@@ -116,13 +118,18 @@ struct JourneyTimerView: View {
         let running = controller.status != .paused
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
-                VStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 10) {
                     roundControl
                     if running && controller.status != .arrived {
-                        // 노선 버튼(R13). 다음 정류장 패널(R14)은 이번 범위가 아니라 기존 지도 보기 시트(정류장 표시)를 연다.
-                        toolButton(systemImage: "point.topleft.down.to.point.bottomright.curvepath", label: "노선 보기",
-                                   value: nil, id: "journey.map.route", enabled: map.state.toolsEnabled,
-                                   diameter: 44) { map.openThemeSheet() }
+                        // 노선 버튼(R13): 정류장 진행 패널(R14)을 여닫는다.
+                        toolButton(systemImage: "point.topleft.down.to.point.bottomright.curvepath", label: "정류장 진행",
+                                   value: showsStopPanel ? "열림" : "닫힘", id: "journey.map.route",
+                                   enabled: map.state.toolsEnabled, diameter: 44) {
+                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { showsStopPanel.toggle() }
+                        }
+                        if showsStopPanel {
+                            JourneyStopPanel(map: map).fixedSize().transition(.opacity)
+                        }
                     }
                 }
                 Spacer(minLength: 16)

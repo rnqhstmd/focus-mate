@@ -3,7 +3,7 @@ import XCTest
 
 /// Pen 시안(R01~R42)과 1:1로 대조할 현재 앱 화면을 캡처한다. 기능 검증이 아니라 수집 도구다.
 /// 파일 이름 = 시안 이름. 저장 위치는 `TEST_RUNNER_FM_PEN_CAPTURE_DIR`(러너에는 `FM_PEN_CAPTURE_DIR`)로 바꿀 수 있다.
-/// 앱에 없는 화면(R14·R21·R22·R25)은 메서드를 두지 않는다 — INDEX.md 참고.
+/// 앱에 없는 화면(R21·R22·R25)은 메서드를 두지 않는다 — INDEX.md 참고.
 @MainActor
 final class PenParityCaptureTests: XCTestCase {
     private let timeout: TimeInterval = 8
@@ -321,6 +321,15 @@ final class PenParityCaptureTests: XCTestCase {
         h.tap("journey.timer.resume")
         wait(h, "journey.timer.pause")
         capture("R13-focus-map", settle: 2.0)
+    }
+
+    func testR14_nextStop() {
+        let h = launchJourneyScreen(seed: "lifePaused600")
+        h.tap("journey.timer.resume")
+        wait(h, "journey.timer.pause")
+        h.tap("journey.map.route")
+        wait(h, "journey.stopPanel")
+        capture("R14-next-stop", settle: 2.0)
     }
 
     func testR15_paused() {

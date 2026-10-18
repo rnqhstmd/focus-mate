@@ -75,6 +75,13 @@ extension AppModel {
         return journeyPlan.choose(routeID: routeID, origin: origin, catalog: catalog)
     }
 
+    /// 고른 여정의 구간 정류장 색인(준비·승차권 지도에 R06과 같은 노선선·정류장 점을 그린다).
+    func legStopIndices(for selection: JourneySelection) -> [Int]? {
+        guard let catalog = routeCatalog, let route = catalog.routeIndex(id: selection.busID),
+              let origin = catalog.stopIndex(id: selection.originStopID) else { return nil }
+        return RouteLegFinder.leg(route: route, originStop: origin, minutes: selection.minutes, in: catalog)?.stopIndices
+    }
+
     var preparedJourney: JourneySelection? {
         if case let .ready(selection) = journeyProceedState { return selection }
         return nil

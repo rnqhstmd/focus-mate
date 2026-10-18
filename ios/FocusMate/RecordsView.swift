@@ -26,36 +26,31 @@ struct RecordsView: View {
     private var timeZone: TimeZone { model.recordClock.timeZone() }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-            SceneMapBackdrop(model: model, showsStationAnnotation: false)
-                .frame(height: 120)
-            VStack(alignment: .leading, spacing: 20) {
-                Text("여행 기록").font(FontCatalog.text(23, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
-                HStack(spacing: 4) {
-                    Text("잔디").font(FontCatalog.text(13, bold: true, relativeTo: .subheadline))
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(FMDesign.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                        .accessibilityAddTraits(.isSelected)
-                    Button("분석 보기") { widgetEntry = nil; refreshBrowserToday(); showsAnalytics = true }
-                        .font(FontCatalog.text(13, relativeTo: .subheadline))
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("records.analytics.open")
-                }
-                .padding(3).background(FMDesign.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-                yearBar
+        // 시안 R19: 지도 위 떠 있는 패널. 순서는 제목 → 탭 → 안내 → 연도 머리줄 → 요약 → 연도 칩 → 잔디 상자 → 범례 → 구분선 → 날짜 목록.
+        // 간격은 시안 글자 위끝 기준에서 Noto 줄 높이(1.45em)를 뺀 값이다.
+        RecordsPanelScreen(model: model) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("여행 기록").font(FontCatalog.text(23, weight: .bold, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.records")
+                RecordsTabBar(tabs: [
+                    .init(title: "잔디", selected: true, identifier: nil, action: nil),
+                    .init(title: "분석", selected: false, identifier: "records.analytics.open") {
+                        widgetEntry = nil; refreshBrowserToday(); showsAnalytics = true
+                    },
+                ])
+                .padding(.top, 17)
+                Text("날짜를 눌러 둘러보세요.").font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+                    .padding(.top, 13)
+                yearBar.padding(.top, 23)
                 Text(RecordsCalendar.summary(year: browser.year, records: records, today: browser.today).text)
-                    .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText).accessibilityIdentifier("records.summary")
-                heatmap
-                dayList
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fmPanel()
-            .padding(.horizontal, 12).padding(.vertical, 20)
+                    .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(Color(hex: 0xC3CDC6)).accessibilityIdentifier("records.summary")
+                    .padding(.top, 15)
+                yearChips.padding(.top, 16)
+                heatmap.padding(.top, 22)
+                legend.padding(.top, 8)
+                Rectangle().fill(Color.white.opacity(0.14)).frame(height: 1).padding(.top, 28)
+                dayList.padding(.top, 15)
             }
         }
-        .background(FMDesign.background.ignoresSafeArea())
         .foregroundStyle(FMDesign.primary).tint(FMDesign.primary)
         .font(FontCatalog.text(15))
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
@@ -108,87 +103,119 @@ struct RecordsView: View {
         editing = EditingMemo(id: record.id, memo: record.memo)
     }
 
+    /// 시안 R19: 왼쪽 "2026년의 여행" 18 Bold, 오른쪽 "‹ 올해 ›"(갈매기 흰색, "올해" 11pt #D2DDD6).
     private var yearBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 0) {
+            Text("\(String(browser.year))년의 여행").font(FontCatalog.text(18, weight: .bold, relativeTo: .title3))
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
             Button { browser.moveYear(by: -1, records: records) } label: {
-                Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+                Image(systemName: "chevron.left").font(.system(size: 13, weight: .regular)).frame(minWidth: 44, minHeight: 44)
             }
             .disabled(!browser.canGoPreviousYear)
             .accessibilityLabel("이전 연도").accessibilityIdentifier("records.year.previous")
-            Menu {
-                ForEach(RecordsCalendar.yearOptions(records: records, today: browser.today, selectedYear: browser.year),
-                        id: \.self) { year in
-                    Button("\(String(year))년") { browser.selectYear(year, records: records) }
-                }
-            } label: {
-                Text("\(String(browser.year))년").font(FontCatalog.text(18, bold: true, relativeTo: .title3))
-                    .padding(.horizontal, 14).frame(minHeight: 44)
-                    .foregroundStyle(FMDesign.panel)
-                    .background(FMDesign.primary, in: RoundedRectangle(cornerRadius: 8))
+            Button { browser.selectYear(browser.today.year, records: records) } label: {
+                Text("올해").font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(Color(hex: 0xD2DDD6))
+                    .frame(minWidth: 44, minHeight: 44)
             }
-            .accessibilityIdentifier("records.year.picker")
+            .accessibilityIdentifier("records.year.current")
             Button { browser.moveYear(by: 1, records: records) } label: {
-                Image(systemName: "chevron.right").frame(minWidth: 44, minHeight: 44)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .regular)).frame(minWidth: 44, minHeight: 44)
             }
             .disabled(!browser.canGoNextYear)
             .accessibilityLabel("다음 연도").accessibilityIdentifier("records.year.next")
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, -10)
+        .frame(height: 26)
     }
 
+    /// 시안 R19 연도 칩: 64x44, 선택 #F3F6F3 반경 8 + 12pt #0A0A0A, 비선택 12pt #C5CDC7.
+    private var yearChips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(RecordsCalendar.yearOptions(records: records, today: browser.today, selectedYear: browser.year),
+                        id: \.self) { year in
+                    let selected = year == browser.year
+                    Button { browser.selectYear(year, records: records) } label: {
+                        Text(String(year)).font(FontCatalog.text(12, relativeTo: .caption))
+                            .foregroundStyle(selected ? FMDesign.panel : Color(hex: 0xC5CDC7))
+                            .padding(.horizontal, 8)
+                            .frame(minWidth: 64, minHeight: 44)
+                            .background(selected ? Color(hex: 0xF3F6F3) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(String(year))년")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier("records.year.\(year)")
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    /// 시안 R19 잔디 상자: 332x85 #0B100D, 흰 15% 테두리, 반경 6. 월 라벨은 상자 안 위, 칸 4pt·간격 1.5.
     private var heatmap: some View {
         let cells = RecordsCalendar.cells(year: browser.year, records: records, today: browser.today)
         let blanks = RecordsCalendar.leadingBlanks(year: browser.year)
         let selected = cells.first { $0.day == browser.selectedDay }
         let weeks = (cells.count + blanks + 6) / 7
+        let large = typeSize.isAccessibilitySize
+        let gap: CGFloat = large ? 3 : 1.5
+        let labelColor = Color(hex: 0xBFC8C1)
         return GeometryReader { geometry in
-            let gap: CGFloat = typeSize.isAccessibilitySize ? 3 : 1.5
-            let side: CGFloat = typeSize.isAccessibilitySize ? 14 : max(2, (geometry.size.width - 20 - CGFloat(weeks - 1) * gap) / CGFloat(weeks))
+            // 상자 안쪽: 왼쪽 요일 열까지 32, 오른쪽 10.
+            let side: CGFloat = large ? 14 : max(2, (geometry.size.width - 42 - CGFloat(weeks - 1) * gap) / CGFloat(weeks))
+            let pitch = side + gap
             let gridWidth = CGFloat(weeks) * side + CGFloat(weeks - 1) * gap
-            ScrollView(.horizontal, showsIndicators: typeSize.isAccessibilitySize) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: large) {
+                VStack(alignment: .leading, spacing: large ? 8 : 10) {
+                    ZStack(alignment: .topLeading) {
                         ForEach(1...12, id: \.self) { month in
+                            let index = cells.firstIndex { $0.day.month == month } ?? 0
                             Text("\(month)월").font(FontCatalog.text(8, relativeTo: .caption2))
-                                .frame(width: gridWidth / 12, alignment: .leading)
+                                .fixedSize()
+                                .offset(x: CGFloat((index + blanks) / 7) * pitch)
                         }
-                    }.padding(.leading, 20)
-                    HStack(alignment: .top, spacing: 5) {
+                    }
+                    .frame(width: gridWidth, alignment: .leading)
+                    .padding(.leading, 32)
+                    HStack(alignment: .top, spacing: 0) {
                         VStack(spacing: gap) {
                             ForEach(0..<7, id: \.self) { row in
                                 Text(row == 1 ? "월" : row == 3 ? "수" : row == 5 ? "금" : "")
                                     .font(FontCatalog.text(8, relativeTo: .caption2))
-                                    .frame(width: 15, height: side)
+                                    .fixedSize()
+                                    .frame(width: 8, height: side)
                             }
                         }
+                        .padding(.leading, 7).frame(width: 32, alignment: .leading)
                         LazyHGrid(rows: Array(repeating: GridItem(.fixed(side), spacing: gap), count: 7), spacing: gap) {
                             ForEach(0..<blanks, id: \.self) { _ in Color.clear.frame(width: side, height: side) }
                             ForEach(cells) { cell in
-                                RoundedRectangle(cornerRadius: min(3, side / 4))
+                                RoundedRectangle(cornerRadius: min(1, side / 4))
                                     .fill(Self.color(level: cell.level).opacity(cell.isFuture ? 0.3 : 1))
-                                    .overlay(RoundedRectangle(cornerRadius: min(3, side / 4))
-                                        .stroke(cell.day == browser.selectedDay ? FMDesign.primary : .clear, lineWidth: 1))
                                     .frame(width: side, height: side)
+                                    // 시안: 선택 날짜는 칸보다 1.5pt씩 큰 흰 테두리.
+                                    .overlay {
+                                        if cell.day == browser.selectedDay {
+                                            RoundedRectangle(cornerRadius: 2).stroke(.white, lineWidth: 1)
+                                                .frame(width: side + 3, height: side + 3)
+                                        }
+                                    }
                                     .onTapGesture { browser.select(cell.day) }
                             }
                         }
                     }
-                    HStack(spacing: 4) {
-                        Text("하루 여행 시간")
-                        Spacer(minLength: 8)
-                        Text("적음")
-                        ForEach(0..<5, id: \.self) { level in
-                            RoundedRectangle(cornerRadius: 1).fill(Self.color(level: level)).frame(width: 8, height: 8)
-                        }
-                        Text("많음")
-                    }
-                    .font(FontCatalog.text(9, relativeTo: .caption2))
-                    .frame(width: gridWidth + 20)
                 }
-                .foregroundStyle(FMDesign.secondaryText)
-                .padding(.vertical, 4)
+                .foregroundStyle(labelColor)
+                .padding(.top, 13).padding(.bottom, 12).padding(.trailing, 10)
             }
         }
-        .frame(height: typeSize.isAccessibilitySize ? 180 : 100)
+        .frame(height: large ? 180 : 85)
+        .background(Color(hex: 0x0B100D), in: RoundedRectangle(cornerRadius: 6))
+        .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Color.white.opacity(0.15), lineWidth: 1) }
         // 칸 365개를 하나씩 넘기지 않도록 격자 전체를 조정 가능한 요소 하나로 읽는다.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(String(browser.year))년 날짜별 여행 시간")
@@ -203,42 +230,81 @@ struct RecordsView: View {
         .accessibilityIdentifier("records.heatmap")
     }
 
+    /// 시안 R19 범례: 상자 아래 10pt #B8C4BC, 왼쪽 "하루 여행 시간", 오른쪽 9x9 칸 5개(간격 3) + "적음 → 많음".
+    private var legend: some View {
+        HStack(spacing: 0) {
+            Text("하루 여행 시간")
+            Spacer(minLength: 8)
+            HStack(spacing: 3) {
+                ForEach(0..<5, id: \.self) { level in
+                    RoundedRectangle(cornerRadius: 1).fill(Self.color(level: level)).frame(width: 9, height: 9)
+                }
+            }
+            .accessibilityHidden(true)
+            Text("적음 → 많음").padding(.leading, 5)
+        }
+        .font(FontCatalog.text(10, relativeTo: .caption2))
+        .foregroundStyle(Color(hex: 0xB8C4BC))
+    }
+
     @ViewBuilder private var dayList: some View {
         let visible = browser.visibleRecords(in: records)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일").font(FontCatalog.text(16, bold: true, relativeTo: .headline))
+        let dated = RecordsCalendar.records(on: browser.selectedDay, in: records)
+        VStack(alignment: .leading, spacing: 0) {
+            // 시안 R19: "10월 12일 월요일" 16 Bold, 오른쪽 "2회 · 1 h 15 min" 11pt #C3CDC6.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(browser.selectedDay.month)월 \(browser.selectedDay.day)일 \(browser.selectedDay.weekdayName)")
+                    .font(FontCatalog.text(16, weight: .bold, relativeTo: .headline))
+                Spacer(minLength: 0)
+                if !dated.isEmpty {
+                    Text("\(dated.count)회 · \(ProfileTimeText.display(minutes: dated.reduce(0) { $0 + $1.minutes }))")
+                        .font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(Color(hex: 0xC3CDC6))
+                }
+            }
             if let empty = browser.emptyState(records: records) {
                 Text(empty == .noRecords ? "첫 여행을 마치면 잔디에 색이 채워져요. 하루하루 나만의 시간을 모아보세요."
                                          : "이날은 완료한 여행이 없어요.")
+                    .font(FontCatalog.text(13, relativeTo: .subheadline))
                     .foregroundStyle(FMDesign.secondaryText).accessibilityIdentifier("records.empty")
+                    .padding(.top, 14)
             }
             ForEach(visible, id: \.id) { record in item(record) }
             if browser.hasMore(in: records) {
                 Button("더 보기") { browser.showMore() }.buttonStyle(FMSecondaryButtonStyle())
                     .accessibilityIdentifier("records.more")
+                    .padding(.top, 12)
             }
         }
     }
 
+    /// 시안 R19 기록 줄: 할 일 16 Bold → "출발 → 도착" 11pt #BFC6C1 → "태그 · 25 min · 버스" 11pt 태그 색.
     private func item(_ record: RecordSnapshot) -> some View {
         let content = RecordListItemContent(record: record, timeZone: timeZone)
-        return VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(content.task).font(FontCatalog.text(16, bold: true, relativeTo: .headline))
-                Text("\(content.timeText) · \(content.minutesText) · \(content.tag)").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
-                Text(content.routeText).font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
-                if !content.memo.isEmpty { Text(content.memo) }
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(content.task).font(FontCatalog.text(16, weight: .bold, relativeTo: .headline))
+                Text("\(record.from) → \(record.to)").font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
+                    .padding(.top, 6)
+                Text("\(content.tag) · \(content.minutesText) · \(record.bus)").font(FontCatalog.text(11, relativeTo: .caption))
+                    .foregroundStyle(Color(hexString: record.tagColor))
+                    .padding(.top, 7)
+                if !content.memo.isEmpty {
+                    Text(content.memo).font(FontCatalog.text(13, relativeTo: .subheadline)).padding(.top, 8)
+                }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(content.task), \(content.timeText) · \(content.minutesText) · \(content.tag), \(content.routeText)"
+                                + (content.memo.isEmpty ? "" : ", \(content.memo)"))
             .accessibilityIdentifier("records.item.\(record.id)")
+            // 시안에는 메모 버튼이 없지만 기록 메모를 고치는 유일한 길이라 작게 남긴다.
             Button(content.memoButtonTitle) { editing = EditingMemo(id: record.id, memo: record.memo) }
-                .buttonStyle(.plain).font(FontCatalog.text(12, relativeTo: .caption))
+                .buttonStyle(.plain).font(FontCatalog.text(11, relativeTo: .caption))
+                .foregroundStyle(Color(hex: 0xDDDDDD))
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("records.memo.\(record.id)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 18)
-        .overlay(alignment: .bottom) { Rectangle().fill(FMDesign.primary.opacity(0.14)).frame(height: 1) }
+        .padding(.top, 17)
     }
 
     private static func color(level: Int) -> Color {
@@ -268,7 +334,7 @@ struct RecordsView: View {
             if let failure = services.failNextSave {
                 Button { failure.arm() } label: {
                     Text("다음 저장 실패").font(.system(size: 1)).foregroundStyle(.clear)
-                        .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                        .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
                 }
                 .accessibilityLabel("다음 저장 실패").accessibilityIdentifier("test.records.failNextSave")
             }
@@ -278,7 +344,7 @@ struct RecordsView: View {
     private func debugButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label).font(.system(size: 1)).foregroundStyle(.clear)
-                .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
         }
         .accessibilityLabel(label).accessibilityIdentifier(id)
     }

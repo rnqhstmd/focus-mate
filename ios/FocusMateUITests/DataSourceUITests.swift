@@ -10,7 +10,8 @@ final class DataSourceUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    // 깨짐 명명: 마이페이지 행이 없거나 탭이 데이터 출처로 이동하지 않으면 실패.
+    // 깨짐 명명: 마이페이지 → 설정 안의 진입이 없거나 탭이 데이터 출처로 이동하지 않으면 실패.
+    // 시안 R38에는 마이페이지 '데이터 출처' 줄이 없어 설정(settings.dataSource) 안으로 옮겼다(F단계).
     func testAC49_마이페이지에서_데이터출처로_진입하면_제목이_데이터출처다() {
         let h = FocusMateUIHarness.launch(seed: "ready", extraArguments: ["--fm-ui-route-data", "fixture"])
         let screen = openDataSource(h)
@@ -67,8 +68,17 @@ final class DataSourceUITests: XCTestCase {
         let entry = h.element("open.profile")
         XCTAssertTrue(entry.waitForExistence(timeout: timeout), "open.profile 없음")
         entry.tap()
-        let row = h.element("profile.dataSource")
-        XCTAssertTrue(row.waitForExistence(timeout: timeout), "profile.dataSource 없음")
+        XCTAssertFalse(h.element("profile.dataSource").exists, "마이페이지에는 데이터 출처 줄이 없어야 한다")
+        let settings = h.element("profile.settings")
+        XCTAssertTrue(settings.waitForExistence(timeout: timeout), "profile.settings 없음")
+        var settingsSwipes = 0
+        while !settings.isHittable && settingsSwipes < 8 {
+            h.app.swipeUp()
+            settingsSwipes += 1
+        }
+        settings.tap()
+        let row = h.element("settings.dataSource")
+        XCTAssertTrue(row.waitForExistence(timeout: timeout), "settings.dataSource 없음")
         var swipes = 0
         while !row.isHittable && swipes < 8 {
             h.app.swipeUp()

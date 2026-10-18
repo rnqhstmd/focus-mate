@@ -63,13 +63,13 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
 
     // MARK: AC-30, 31
 
-    // 깨짐: 동작 줄이기에서 카메라 이동이 애니메이션이거나 방위가 0이 아니다.
-    func testAC30_동작_줄이기에서는_카메라가_애니메이션_없이_방위_0으로_움직인다() throws {
+    // 깨짐: 동작 줄이기에서 카메라 이동이 애니메이션이다(방위는 내비처럼 진행 방향을 따르되 즉시 바뀐다).
+    func testAC30_동작_줄이기에서는_카메라가_애니메이션_없이_움직인다() throws {
         let h = running(extra: reduceMotion)
         h.advance(10)
         let camera = try cameraDiagnostic(h)
         XCTAssertEqual(camera["animated"] as? Bool, false)
-        XCTAssertEqual(camera["heading"] as? Double, 0)
+        XCTAssertNotNil(camera["heading"] as? Double)
     }
 
     // 깨짐: 동작 줄이기가 꺼져 있는데 카메라 이동이 애니메이션되지 않는다.
@@ -90,14 +90,16 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
         XCTAssertTrue(h.waitForValue("journey.map.follow", "따라가는 중"))
 
         openSheet(h)
-        h.tap("journey.map.theme.satellite")
-        XCTAssertTrue(h.waitForValue("journey.map.theme.satellite", "선택됨"))
+        h.tap("journey.map.theme.dark")
+        XCTAssertTrue(h.waitForValue("journey.map.theme.dark", "선택됨"))
         h.tap("journey.map.stops")
         XCTAssertTrue(h.waitForValue("journey.map.stops", "꺼짐"))
 
         h.tap("journey.timer.pause")
         XCTAssertTrue(h.waitUntil { !h.element("journey.map.themeSheet").exists })
-        XCTAssertTrue(h.waitUntil { !h.element("journey.map.follow").isEnabled && !h.element("journey.map.theme").isEnabled })
+        // 시안 R15: 일시정지 중에는 지도 도구가 화면에서 빠진다(눌릴 수 없으면 된다).
+        let follow = h.element("journey.map.follow"), theme = h.element("journey.map.theme")
+        XCTAssertTrue(h.waitUntil { (!follow.exists || !follow.isEnabled) && (!theme.exists || !theme.isEnabled) })
     }
 
     // MARK: AC-33
@@ -128,7 +130,8 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
         XCTAssertEqual(theme.label, "지도 테마")
 
         h.tap("journey.timer.pause")
-        XCTAssertTrue(h.waitUntil { !follow.isEnabled && !theme.isEnabled })
+        // 시안 R15: 일시정지 중에는 지도 도구가 화면에서 빠진다(눌릴 수 없으면 된다).
+        XCTAssertTrue(h.waitUntil { (!follow.exists || !follow.isEnabled) && (!theme.exists || !theme.isEnabled) })
     }
 
     // MARK: AC-35
@@ -199,7 +202,7 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
 
     // MARK: AC-38
 
-    // 깨짐: 큰 글자에서 저장 경고가 재개 버튼·도구·지표를 가리거나 재개가 44pt 미만이다.
+    // 깨짐: 큰 글자에서 저장 경고가 재개 버튼·현재 정류장으로·지표를 가리거나 재개가 44pt 미만이다.
     func testAC38_큰_글자와_저장_경고가_함께여도_재개와_지표가_가려지지_않는다() throws {
         let h = running(extra: largeText)
         h.failNextSave { h.advance(10) }
@@ -211,7 +214,8 @@ final class JourneyMapAccessibilityUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(resume.frame.width, 44)
         XCTAssertGreaterThanOrEqual(resume.frame.height, 44)
 
-        for id in ["journey.timer.resume", "journey.map.follow", "journey.map.theme",
+        // 저장 실패로 일시정지되면 시안 R15대로 따라가기·테마 대신 "현재 정류장으로"가 보인다.
+        for id in ["journey.timer.resume", "journey.recenter",
                    "journey.timer.remaining", "journey.timer.stops", "journey.timer.distance"] {
             XCTAssertFalse(warning.frame.intersects(h.frame(id)), "저장 경고가 \(id)와 겹침")
         }

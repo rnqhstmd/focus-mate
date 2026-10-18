@@ -118,7 +118,8 @@ final class JourneyMapControllerTests: XCTestCase {
 
         XCTAssertEqual(map.state.camera, .follow)
         XCTAssertGreaterThan(map.cameraTarget.pitchDegrees, 0)
-        assertPoint(map.cameraTarget.center, equals: map.bus.point)
+        assertPoint(map.cameraTarget.focus, equals: map.bus.point)
+        XCTAssertEqual(map.cameraTarget.headingDegrees, map.bus.headingDegrees, accuracy: accuracy)
     }
 
     // MARK: AC-14 앱 갱신
@@ -147,7 +148,8 @@ final class JourneyMapControllerTests: XCTestCase {
         map.followTapped()
 
         XCTAssertEqual(map.state.camera, .follow)
-        assertPoint(map.cameraTarget.center, equals: forwardJourney.stops[2].point)
+        assertPoint(map.cameraTarget.focus, equals: forwardJourney.stops[2].point)
+        XCTAssertEqual(map.cameraTarget.headingDegrees, map.bus.headingDegrees, accuracy: accuracy)
         XCTAssertGreaterThan(map.cameraTarget.revision, revisionBefore)
     }
 
@@ -174,7 +176,7 @@ final class JourneyMapControllerTests: XCTestCase {
     func test8_AC27_새_컨트롤러는_이전_인스턴스의_변경과_무관하게_기본값으로_시작한다() {
         let old = makeMap()
         old.userMovedCamera()
-        old.select(theme: .satellite)
+        old.select(theme: .dark)
         old.setShowsStops(false)
         old.openThemeSheet()
 
@@ -198,7 +200,7 @@ final class JourneyMapControllerTests: XCTestCase {
         let statusBefore = rig.timer.status
 
         map.userMovedCamera()
-        map.select(theme: .satellite)
+        map.select(theme: .dark)
         map.setShowsStops(false)
         map.openThemeSheet()
         map.dismissThemeSheet()
@@ -211,16 +213,17 @@ final class JourneyMapControllerTests: XCTestCase {
 
     // MARK: AC-30 / 31 움직임 줄이기
 
-    // 깨짐: 움직임 줄이기를 무시하고 애니메이션 카메라나 heading 회전을 내면 실패한다.
-    func test10_AC30_움직임_줄이기가_켜지면_카메라는_애니메이션과_회전이_없다() {
+    // 깨짐: 움직임 줄이기를 무시하고 애니메이션 카메라를 내거나, 진행 방위(heading-up)를 따르지 않으면 실패한다.
+    func test10_AC30_움직임_줄이기가_켜지면_카메라는_애니메이션_없이_진행_방위로_바뀐다() {
         let map = makeMap(elapsed: 300, reduceMotion: true)
         XCTAssertFalse(map.cameraTarget.animated)
-        XCTAssertEqual(map.cameraTarget.headingDegrees, 0, accuracy: accuracy)
+        XCTAssertEqual(map.cameraTarget.headingDegrees, map.bus.headingDegrees, accuracy: accuracy)
 
         map.sync(status: .running, elapsedSeconds: 450)
 
         XCTAssertFalse(map.cameraTarget.animated)
-        XCTAssertEqual(map.cameraTarget.headingDegrees, 0, accuracy: accuracy)
+        XCTAssertEqual(JourneyCameraPolicy.shortestDelta(from: map.cameraTarget.headingDegrees, to: map.bus.headingDegrees),
+                       0, accuracy: JourneyCameraPolicy.headingThresholdDegrees)
     }
 
     // 깨짐: 기본은 애니메이션이 아니거나, 설정 변경이 이후 목표에 반영되지 않으면 실패한다.
@@ -247,7 +250,7 @@ final class JourneyMapControllerTests: XCTestCase {
             map.openThemeSheet()
             map.sync(status: .paused, elapsedSeconds: 300)
             map.sync(status: .running, elapsedSeconds: 300)
-            map.select(theme: .satellite)
+            map.select(theme: .dark)
             map.setShowsStops(false)
             map.leave()
         }
@@ -333,5 +336,18 @@ final class JourneyMapControllerTests: XCTestCase {
     // 깨짐: 카탈로그에 없는 출발 정류장을 허용하면 실패한다.
     func test19_init_알_수_없는_출발_정류장은_nil이다() {
         XCTAssertNil(CourseJourney(journey: snapshot(origin: "gone-stop"), catalog: catalog))
+    }
+
+    // MARK: 시안 노선선(지나온/남은 구간·지난 정류장)
+
+    // 깨짐: 지나온·남은 구간이 버스 위치에서 끊기지 않거나, 지난 정류장 판정이 다음 정류장과 어긋나거나, 노선 종류가 빠지면 실패한다.
+    func test20_노선선은_버스_위치에서_지나온_구간과_남은_구간으로_나뉜다() {
+        let map = makeMap(elapsed: 450)  // 구간 1의 절반(구간 300초)
+        let stops = forwardJourney.stops
+
+        XCTAssertEqual(map.journey.routeKind, "지선")
+        XCTAssertEqual(map.travelledPoints, [stops[0].point, stops[1].point, map.bus.point])
+        XCTAssertEqual(map.remainingPoints, [map.bus.point] + stops[2...].map(\.point))
+        XCTAssertEqual(stops.map(map.isPassed), [true, true, false, false, false, false])
     }
 }

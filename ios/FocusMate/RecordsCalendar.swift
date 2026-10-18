@@ -40,6 +40,13 @@ struct RecordDay: Hashable, Comparable {
         return RecordDay.from(moved, timeZone: Self.calendar.timeZone)
     }
 
+    /// 요일 이름("월요일"). 시안 R19 날짜 머리줄.
+    var weekdayName: String {
+        guard let date else { return "" }
+        let names = ["일", "월", "화", "수", "목", "금", "토"]
+        return names[Self.calendar.component(.weekday, from: date) - 1] + "요일"
+    }
+
     fileprivate var date: Date? {
         let components = DateComponents(year: year, month: month, day: day)
         guard let date = Self.calendar.date(from: components) else { return nil }

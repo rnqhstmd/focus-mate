@@ -417,4 +417,6 @@ extension AppModel: CardCustomizationSaving {
     }
 
     var currentCardStyle: CardStyle { snapshot?.currentCard?.style ?? .standard }
+    /// 카드 앞면 번호 표기("FM · 0842 3017"). 발급 전이면 nil.
+    var currentCardNumberText: String? { PassIdentity.current(in: snapshot)?.numberText }
 }

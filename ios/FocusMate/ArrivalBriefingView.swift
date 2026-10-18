@@ -18,7 +18,7 @@ struct ArrivalBriefingView: View {
                     sentences
                     if controller.showsConfirm {
                         Button { controller.confirm() } label: {
-                            Text("확인").font(.system(.body, weight: .semibold)).padding(.horizontal, 24)
+                            Text("확인").font(FontCatalog.style(.body, weight: .semibold)).padding(.horizontal, 24)
                                 .frame(minWidth: 160, minHeight: 52)
                                 .foregroundStyle(.black)
                                 .background(Color(white: 0.95), in: Capsule())
@@ -30,7 +30,7 @@ struct ArrivalBriefingView: View {
                         .accessibilityFocused($confirmFocused)
                     }
                     if controller.showsSaveFailure {
-                        Text(JourneyTimerDisplay.transitionFailureText).font(.subheadline).foregroundStyle(.orange)
+                        Text(JourneyTimerDisplay.transitionFailureText).font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                             .accessibilityIdentifier("alighting.saveFailure")
                     }
                 }
@@ -71,14 +71,14 @@ struct ArrivalBriefingView: View {
     @ViewBuilder private var sentences: some View {
         if controller.showsAll {
             VStack(spacing: 12) {
-                ForEach(controller.content.sentences, id: \.self) { Text($0).font(.system(.title2, weight: .semibold)) }
+                ForEach(controller.content.sentences, id: \.self) { Text($0).font(FontCatalog.style(.title2, weight: .semibold)) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(controller.content.sentences.joined(separator: " "))
             .accessibilityIdentifier("alighting.sentence")
         } else {
             let sentence = controller.content.sentences[controller.visibleIndex]
-            Text(sentence).font(.system(.title2, weight: .semibold))
+            Text(sentence).font(FontCatalog.style(.title2, weight: .semibold))
                 .id(controller.visibleIndex)
                 .transition(.opacity)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: controller.visibleIndex)

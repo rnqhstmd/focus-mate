@@ -3,7 +3,8 @@ import Foundation
 
 /// 승차 태그의 순수 기하 규칙. 화면 좌표(카드 기준 위치·태그 영역)만 받아 겹침·끌기 범위·터치 판정을 정한다.
 struct BoardingGeometry {
-    var tagAreaSize = CGSize(width: 238, height: 160)
+    /// 시안 R27·R28 단말기 안 태그 영역(149x76).
+    var tagAreaSize = CGSize(width: 149, height: 76)
     /// 겹친 면적 ÷ 태그 영역 면적이 이 값 이상이면 접촉이다(BR-7).
     var threshold: CGFloat = 0.30
     var maxHorizontal: CGFloat = 26
@@ -12,8 +13,8 @@ struct BoardingGeometry {
     var tapSlop: CGFloat = 8
     /// 낭독기·키보드 활성화 위치가 임계를 확실히 넘도록 더하는 여유 높이.
     var activationMargin: CGFloat = 8
-    /// 시안 kxUUR 기준 승차 화면의 카드 폭.
-    var cardWidth: CGFloat = 268
+    /// 시안 R27·R28 태그 화면의 카드 폭(270x158).
+    var cardWidth: CGFloat = 270
 
     /// 좌우는 ±maxHorizontal, 위로는 카드 위쪽이 태그 영역 위쪽에 닿을 때까지, 아래로는 maxDown까지만 움직인다.
     func clampedOffset(_ translation: CGSize, cardRest: CGRect, tagArea: CGRect) -> CGSize {

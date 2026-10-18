@@ -150,13 +150,15 @@ final class CardIssuanceFlowTests: XCTestCase {
 
     // MARK: AC-16
 
-    func testAC16_완료_화면의_어떤_요소에도_카드_번호가_노출되지_않는다() throws {
-        // 깨짐 명명: 라벨/값/텍스트 어디에든 숫자 8자리나 "FM ·"를 노출하면 실패한다.
+    func testAC16_완료_화면의_카드에는_시안_형식_번호만_보이고_원본_ID는_노출되지_않는다() throws {
+        // BR-4 시안 우선 변경(R37): 발급된 카드에 "FM · 0000 0000" 형식 번호를 보인다.
+        // 깨짐 명명: 번호가 시안 형식이 아니거나, 원본 ID의 8자리 연속 숫자가 라벨/값/텍스트로 노출되면 실패한다.
         let h = FocusMateUIHarness.launch(seed: "none")
         try issueAndWait(h)
         let id = try cardID(try h.snapshot())
         let digits = String(id.dropFirst(3))
         XCTAssertEqual(digits.count, 8)
+        let formatted = "FM · \(digits.prefix(4)) \(digits.suffix(4))"
 
         let elements = h.app.descendants(matching: .any).allElementsBoundByIndex
         XCTAssertGreaterThan(elements.count, 0)
@@ -167,7 +169,7 @@ final class CardIssuanceFlowTests: XCTestCase {
         }
         XCTAssertTrue(texts.contains("집중동행카드"), "조회가 카드 얼굴을 포함해야 한다")
         XCTAssertEqual(texts.filter { $0.contains(digits) }.count, 0)
-        XCTAssertEqual(texts.filter { $0.hasPrefix("FM ·") }.count, 0)
+        XCTAssertEqual(texts.filter { $0.hasPrefix("FM ·") && $0 != formatted }, [])
     }
 
     // MARK: AC-19

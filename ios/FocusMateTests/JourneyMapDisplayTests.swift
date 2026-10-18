@@ -24,12 +24,11 @@ final class JourneyMapDisplayTests: XCTestCase {
         XCTAssertEqual(JourneyMapDisplay.stopsAccessibilityValue(0), "0개")
     }
 
-    // 깨짐: 다음/도착 정류장 이름 중 하나라도 지도 낭독 값에서 빠지면 실패한다.
-    func test4_AC39_지도_낭독_값은_다음_정류장과_도착_정류장을_모두_포함한다() {
-        let value = JourneyMapDisplay.mapValue(next: "서울숲역", destination: "성수사거리")
-        XCTAssertTrue(value.contains("서울숲역"))
+    // 깨짐: 도착 정류장 이름이 지도 낭독 값에서 빠지면 실패한다. 다음 정류장 이름은 알리지 않는다.
+    func test4_AC39_지도_낭독_값은_도착_정류장만_포함한다() {
+        let value = JourneyMapDisplay.mapValue(destination: "성수사거리")
         XCTAssertTrue(value.contains("성수사거리"))
-        XCTAssertEqual(value, "다음 정류장 서울숲역, 도착 정류장 성수사거리")
+        XCTAssertEqual(value, "도착 정류장 성수사거리")
     }
 
     // 깨짐: 선택 상태 낭독 값이 뒤바뀌거나 바뀌면 실패한다.

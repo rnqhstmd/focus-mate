@@ -1,46 +1,45 @@
-import CoreGraphics
 import Foundation
 
-/// 승차권에 보이는 값. 버스 번호와 여행 시간은 화면에 쓰지 않고 낭독 라벨에만 넣는다.
+/// 승차권(시안 R11)에 보이는 값. 시안을 따라 버스 종류·번호와 여행 시간도 화면에 쓴다.
 struct BoardingPassContent: Equatable {
     let originName: String
     let destinationName: String
+    /// 노선 배지 왼쪽 작은 글자("지선").
+    let busKind: String
+    /// 노선 배지 번호("2014").
+    let busNumber: String
+    /// 여행 시간("25 min").
+    let minutesText: String
     let stopsText: String
+    /// 이동 거리("2.8 km", 숫자와 단위 사이 공백).
     let distanceText: String
-    let boardingText: String
-    let dateText: String
     let tagName: String
     let task: String
+    /// 태그·할 일 한 줄("독서 · 책 한 챕터 읽기").
+    let taskLine: String
     /// 낭독 라벨에 들어가는 버스 문구("유형 번호번 버스").
     let busText: String
-    /// 두 정류장 이름 중 긴 쪽 글자 수로 정하는 같은 크기(프로토타입 규칙: 4자 이하 28, 6자 이하 24, 9자 이하 20, 그 외 17).
-    let stationFontSize: CGFloat
     let routeAccessibilityLabel: String
 
-    init(details: PreparedJourneyDetails, now: Date, timeZone: TimeZone) {
+    init(details: PreparedJourneyDetails) {
         let journey = details.journey
         originName = details.originName
         destinationName = journey.destination
+        busKind = journey.busKind
+        busNumber = journey.busNumber
+        minutesText = "\(journey.minutes) min"
         stopsText = "\(journey.stops)개"
-        distanceText = details.distanceText
-        boardingText = "지금"
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let day = calendar.dateComponents([.year, .month, .day], from: now)
-        dateText = String(format: "%04d/%02d/%02d", day.year ?? 0, day.month ?? 0, day.day ?? 0)
+        distanceText = Self.spacedUnit(details.distanceText)
         tagName = details.tag.name
         task = details.task
-        stationFontSize = Self.fontSize(longest: max(originName.count, destinationName.count))
+        taskLine = "\(details.tag.name) · \(details.task)"
         busText = "\(journey.busKind) \(journey.busNumber)번 버스"
         routeAccessibilityLabel = "\(originName)에서 \(destinationName)까지, \(busText), \(journey.minutes)분 여행"
     }
 
-    private static func fontSize(longest: Int) -> CGFloat {
-        switch longest {
-        case ...4: 28
-        case ...6: 24
-        case ...9: 20
-        default: 17
-        }
+    /// "6.6km" → "6.6 km".
+    private static func spacedUnit(_ text: String) -> String {
+        guard text.hasSuffix("km"), !text.hasSuffix(" km") else { return text }
+        return String(text.dropLast(2)) + " km"
     }
 }

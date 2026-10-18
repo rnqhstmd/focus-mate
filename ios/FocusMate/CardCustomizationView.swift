@@ -7,6 +7,8 @@ struct CardCustomizationView: View {
     @Binding var importTask: Task<Void, Never>?
     let close: () -> Void
     let saved: () -> Void
+    /// 카드 번호("FM · 0842 3017"). 미리보기 카드 왼쪽 아래에 보인다(R39·R40).
+    var numberText: String? = nil
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var confirmsExit = false
     @State private var gestureOrigin: CardPhoto?
@@ -19,7 +21,7 @@ struct CardCustomizationView: View {
     @State private var importGate = UITestCardImportGate()
     #endif
 
-    private let background = FMDesign.background
+    private let background = Color(hex: 0x0D0F10)
     private let secondary = FMDesign.secondaryText
     private var locked: Bool { controller.isImporting || controller.isSaving }
     private var selected: CardPhoto? { controller.draft.photos.first { $0.id == controller.selectedPhotoID } }
@@ -37,14 +39,14 @@ struct CardCustomizationView: View {
             header
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    preview
-                    VStack(alignment: .leading, spacing: 6) {
+                    preview.padding(.horizontal, 1)
+                    VStack(alignment: .leading, spacing: 2.6) {
                         Text("사진을 자유롭게 배치해보세요.")
                         Text("IC 칩은 고정되고, 카드 밖은 잘려요.")
-                    }.font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(secondary)
-                        .padding(.top, 16)
-                    colors.padding(.top, 30)
-                    photos.padding(.top, 10)
+                    }.font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(Color(hex: 0xB8BFC5))
+                        .padding(.top, 14.3)
+                    colors.padding(.top, 28)
+                    photos.padding(.top, 21)
                     if let selected { tools(selected).padding(.top, 20) }
                     if controller.isImporting {
                         ProgressView("사진을 불러오는 중이에요.").padding(.top, 16)
@@ -56,12 +58,14 @@ struct CardCustomizationView: View {
                             .accessibilityFocused($noticeFocused)
                     }
                     Text("사진은 이 기기에만 저장돼요. 최대 6장까지 넣을 수 있어요.")
-                        .font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(secondary).padding(.top, 18)
+                        .font(FontCatalog.text(11, relativeTo: .caption)).foregroundStyle(Color(hex: 0xB0BAC2)).padding(.top, 18)
                     Button { controller.restoreDefault() } label: {
-                        Text("기본 검정 카드로 되돌리기").underline()
+                        // 시안: 글자 아래 3pt에 1pt 밑줄.
+                        Text("기본 검정 카드로 되돌리기")
+                            .overlay(alignment: .bottom) { Rectangle().frame(height: 1).offset(y: 1) }
                     }
-                        .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(secondary)
-                        .frame(minHeight: 44).padding(.top, 22)
+                        .font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(Color(hex: 0xB4BEC6))
+                        .frame(minHeight: 44).padding(.top, 26)
                         .disabled(locked).accessibilityIdentifier("cardCustomization.restoreDefault")
                 }
                 .padding(.horizontal, 24).padding(.bottom, 24)
@@ -76,11 +80,10 @@ struct CardCustomizationView: View {
                 #endif
                 if controller.save() { saved() }
             } label: {
-                Text("이 카드로 저장하기").font(FontCatalog.text(15, relativeTo: .headline))
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-            }.foregroundStyle(.black).background(.white, in: Capsule())
+                Text("이 카드로 저장하기").frame(maxWidth: .infinity)
+            }.buttonStyle(FMPrimaryButtonStyle())
                 .disabled(locked).accessibilityIdentifier("cardCustomization.save")
-                .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 3).background(background)
+                .padding(.horizontal, 24.5).padding(.top, 12).padding(.bottom, 0).background(background)
         }
         #if DEBUG
         .overlay(alignment: .topTrailing) {
@@ -123,86 +126,128 @@ struct CardCustomizationView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 8) {
             Button {
                 if controller.requestExit() == .confirmDiscard { confirmsExit = true } else { close() }
             } label: {
-                Image(systemName: "chevron.left").font(.system(size: 22))
+                Image(systemName: "chevron.left").font(.system(size: 16, weight: .regular)).foregroundStyle(Color(hex: 0xF4F4F4))
                     .frame(width: 52, height: 52).overlay(Circle().stroke(.white, lineWidth: 2))
             }.accessibilityLabel("닫기").accessibilityIdentifier("cardCustomization.close")
-            Text("카드 꾸미기").font(FontCatalog.text(20, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.cardCustomization")
+            Text("카드 꾸미기").font(FontCatalog.text(20, weight: .bold, relativeTo: .title2)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("screen.cardCustomization")
             Spacer(minLength: 0)
-            Button { controller.undo() } label: { Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44) }
+            Button { controller.undo() } label: {
+                Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44)
+                    .foregroundStyle(Color(hex: controller.canUndo && !locked ? 0xF3F3F3 : 0x54595D))
+            }
                 .disabled(locked || !controller.canUndo).accessibilityLabel("되돌리기").accessibilityIdentifier("cardCustomization.undo")
-        }.buttonStyle(.plain).padding(.leading, 14).padding(.trailing, 14).padding(.top, 0).padding(.bottom, 20)
+        }.buttonStyle(.plain).padding(.leading, 14).padding(.trailing, 18).padding(.top, -2).padding(.bottom, 21)
     }
 
     private var colors: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("배경색").font(FontCatalog.text(15, bold: true, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
-            HStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("배경색").font(FontCatalog.text(15, weight: .bold, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
+            HStack(spacing: 9) {
                 ForEach(palette, id: \.0) { entry in
                     let isSelected = entry.2 == controller.draft.background
                     Button { controller.setBackground(entry.2) } label: {
+                        // 시안: 39pt 원(#737A80 테두리), 선택하면 바깥 48pt 링. 링은 배치에 영향을 주지 않는다(터치 영역은 44).
                         Circle().fill(entry.2.swiftUIColor).frame(width: 39, height: 39)
-                            .overlay(Circle().stroke(secondary.opacity(0.6), lineWidth: 1))
-                            .overlay { if isSelected { Image(systemName: "checkmark").foregroundStyle(entry.0 == "sand" || entry.0 == "ivory" ? .black : .white) } }
-                            .frame(width: 48, height: 48)
-                            .overlay { if isSelected { Circle().stroke(.white, lineWidth: 2) } }
+                            .overlay(Circle().stroke(Color(hex: 0x737A80), lineWidth: 1))
+                            .overlay {
+                                if isSelected {
+                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(Color(hex: entry.0 == "sand" || entry.0 == "ivory" ? 0x121416 : 0xF1F2F3))
+                                }
+                            }
+                            .overlay { if isSelected { Circle().stroke(Color(hex: 0xF4F4F4), lineWidth: 2).frame(width: 48, height: 48) } }
+                            .contentShape(Circle().inset(by: -2.5))
                     }.buttonStyle(.plain).accessibilityLabel(entry.1)
                         .accessibilityAddTraits(isSelected ? .isSelected : [])
                         .accessibilityIdentifier("cardCustomization.color." + entry.0)
                 }
             }
-            ColorPicker("직접 고르기", selection: Binding(get: { controller.draft.background.swiftUIColor }, set: { value in
-                let ui = UIColor(value)
-                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                if ui.getRed(&r, green: &g, blue: &b, alpha: &a) { controller.setBackground(CardColor(red: r, green: g, blue: b)) }
-            }), supportsOpacity: false)
-            .font(FontCatalog.text(12)).foregroundStyle(secondary).frame(maxWidth: 110, minHeight: 44)
-            .accessibilityIdentifier("cardCustomization.color.custom")
+            .padding(.leading, 1).padding(.top, 15)
+            customColor.padding(.top, 13)
         }.disabled(locked)
     }
 
+    /// 시안 R39: "직접 고르기" + 사각 견본(현재 배경색). 시스템 ColorPicker는 견본 위에 거의 투명하게 겹쳐 누름만 받는다.
+    private var customColor: some View {
+        HStack(spacing: 14) {
+            Text("직접 고르기").font(FontCatalog.text(12)).foregroundStyle(Color(hex: 0xBDC5CB))
+            ZStack {
+                Rectangle().fill(Color(hex: 0x111111)).overlay(Color.white.opacity(0x25 / 255))
+                    .frame(width: 38, height: 32)
+                Rectangle().fill(controller.draft.background.swiftUIColor).frame(width: 28, height: 18)
+                    .overlay(Rectangle().stroke(Color(hex: 0x777777), lineWidth: 1))
+                ColorPicker("직접 고르기", selection: Binding(get: { controller.draft.background.swiftUIColor }, set: { value in
+                    let ui = UIColor(value)
+                    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                    if ui.getRed(&r, green: &g, blue: &b, alpha: &a) { controller.setBackground(CardColor(red: r, green: g, blue: b)) }
+                }), supportsOpacity: false)
+                .labelsHidden()
+                .scaleEffect(1.6)
+                .frame(width: 44, height: 44)
+                .opacity(0.02)
+                .accessibilityLabel("직접 고르기")
+                .accessibilityIdentifier("cardCustomization.color.custom")
+            }
+            .frame(width: 44, height: 44)
+        }
+        .frame(minHeight: 44)
+    }
+
     private var photos: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("사진").font(FontCatalog.text(15, bold: true, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
+                Text("사진").font(FontCatalog.text(15, weight: .bold, relativeTo: .headline)).accessibilityAddTraits(.isHeader)
                 Spacer()
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: CardCustomizationPolicy.maximumPhotos - controller.draft.photos.count,
                              selectionBehavior: .ordered, matching: .images) {
-                    Label("사진 추가", systemImage: "plus").font(FontCatalog.text(12))
-                        .padding(.horizontal, 14).frame(minHeight: 43)
-                        .background(Color(red: 24 / 255, green: 29 / 255, blue: 32 / 255), in: RoundedRectangle(cornerRadius: 9))
-                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(secondary.opacity(0.5)))
+                    Label("사진 추가", systemImage: "plus").font(FontCatalog.text(12)).foregroundStyle(Color(hex: 0xF3F3F3))
+                        .padding(.horizontal, 12).frame(minHeight: 43)
+                        .background(Color(hex: 0x181D20), in: RoundedRectangle(cornerRadius: 9))
+                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color(hex: 0x555E65)))
                 }.disabled(!controller.canAddPhotos).accessibilityIdentifier("cardCustomization.photoPicker")
             }
             if controller.draft.photos.isEmpty {
-                Text("좋아하는 풍경, 소중한 순간을 담아보세요.").font(FontCatalog.text(12)).foregroundStyle(secondary)
+                Text("좋아하는 풍경, 소중한 순간을 담아보세요.").font(FontCatalog.text(12)).foregroundStyle(Color(hex: 0xAEB5BB))
+                    .padding(.top, 22)
             } else {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 11) {
                         ForEach(Array(controller.draft.photos.enumerated()), id: \.element.id) { index, photo in
                             Button { controller.selectPhoto(photo.id) } label: {
                                 if let image = UIImage(data: photo.data) {
-                                    Image(uiImage: image).resizable().scaledToFill().frame(width: 58, height: 58).clipped()
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(controller.selectedPhotoID == photo.id ? .white : .clear, lineWidth: 2))
+                                    // 시안 R40: 53pt 썸네일(#5C6267 테두리), 선택하면 3.5pt 바깥에 60pt 흰 링.
+                                    Image(uiImage: image).resizable().scaledToFill().frame(width: 53, height: 53).clipped()
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: 0x5C6267), lineWidth: 1))
+                                        .overlay {
+                                            if controller.selectedPhotoID == photo.id {
+                                                RoundedRectangle(cornerRadius: 11).stroke(.white, lineWidth: 2).frame(width: 60, height: 60)
+                                            }
+                                        }
                                 }
                             }.buttonStyle(.plain).disabled(locked)
                                 .accessibilityLabel("사진 \(index + 1)")
                                 .accessibilityAddTraits(controller.selectedPhotoID == photo.id ? .isSelected : [])
                                 .accessibilityIdentifier("cardCustomization.photo." + photo.id.uuidString)
                         }
-                    }.padding(3)
+                    }.padding(.vertical, 4).padding(.leading, 5).padding(.trailing, 4)
                 }.accessibilityIdentifier("cardCustomization.photos")
+                    .padding(.top, 13)
             }
         }
     }
 
     private func tools(_ photo: CardPhoto) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { Text("사진 크기"); Spacer(); Text("\(Int(photo.widthFraction * 100))%") }
+            HStack {
+                Text("사진 크기").foregroundStyle(Color(hex: 0xCCCCCC))
+                Spacer()
+                Text("\(Int(photo.widthFraction * 100))%").foregroundStyle(Color(hex: 0xC8CFD4))
+            }.font(FontCatalog.text(12))
             Slider(value: Binding(get: { selected?.widthFraction ?? photo.widthFraction }, set: { value in
                 if let p = selected { place(p, width: value) }
             }), in: CardCustomizationPolicy.widthFractionRange)
@@ -249,7 +294,7 @@ struct CardCustomizationView: View {
             let size = canvas.size
             let style = previewStyle(size: size)
             ZStack {
-                PassFace(style: style, dotsOpacity: 0.25).accessibilityHidden(true)
+                PassFace(style: style, numberText: numberText).accessibilityHidden(true)
                 if let photo = style.photos.first(where: { $0.id == controller.selectedPhotoID }) {
                     let rect = photoRect(photo, size: size)
                     Rectangle().stroke(.white, lineWidth: 1).frame(width: rect.width, height: rect.height)

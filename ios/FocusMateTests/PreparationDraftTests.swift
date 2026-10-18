@@ -9,7 +9,7 @@ final class PreparationDraftTests: XCTestCase {
         XCTAssertNil(draft.selectedTag)
         XCTAssertNil(draft.selectedTagID)
         XCTAssertEqual(draft.task, "")
-        XCTAssertEqual(draft.sound, .bus)
+        XCTAssertEqual(draft.sound, .none)
         XCTAssertFalse(draft.isComplete)
     }
 

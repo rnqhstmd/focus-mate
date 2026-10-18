@@ -226,10 +226,22 @@ extension FocusMateUIHarness {
         try action()
     }
 
+    /// 여행 포기 확인 창(R16)은 시스템 alert가 아니라 직접 그린 창이다.
+    static let abandonDialogTitle = "여행을 그만둘까요?"
+    /// 새 여정 확인 창(R32)도 직접 그린 창이다(`main.newJourney.dialog`).
+    static let newJourneyDialogTitle = "새 여정을 시작할까요?"
+
     /// 제목 label로 찾은 시스템 alert (CardCustomizationFlowTests와 같은 방식).
+    /// 포기 확인(R16)·새 여정 확인(R32)은 시안대로 직접 그린 창(label = 제목)을 돌려준다.
     @MainActor
     func alert(titled title: String) -> XCUIElement {
-        app.alerts
+        if title == Self.abandonDialogTitle {
+            return app.descendants(matching: .any).matching(identifier: "journey.abandon.dialog").firstMatch
+        }
+        if title == Self.newJourneyDialogTitle {
+            return app.descendants(matching: .any).matching(identifier: "main.newJourney.dialog").firstMatch
+        }
+        return app.alerts
             .matching(NSPredicate(format: "label == %@", title))
             .firstMatch
     }
@@ -238,6 +250,10 @@ extension FocusMateUIHarness {
     @MainActor
     func alertButton(_ id: String, label: String) -> XCUIElement {
         let exactLabel = NSPredicate(format: "label == %@", label)
+        if id.hasPrefix("journey.abandon.") || id.hasPrefix("main.newJourney.") {
+            // 직접 그린 포기 확인 창(R16)의 버튼.
+            return app.buttons.matching(identifier: id).matching(exactLabel).firstMatch
+        }
         let identified = app.alerts.buttons
             .matching(identifier: id)
             .matching(exactLabel)

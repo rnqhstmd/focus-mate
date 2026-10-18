@@ -46,10 +46,10 @@ final class Phase1FlowTests: XCTestCase {
 
         let initialSnapshot = try diagnosticValue("test.snapshot", in: app)
         let initialBytes = try diagnosticValue("test.persistedBytes", in: app)
+        // 시안 R01: 메인 도구는 기록·마이페이지 2개다. 설정은 마이페이지 안에서 연다(ProfileUITests).
         let destinations = [
             (button: "open.preparation", screen: "screen.time"),
             (button: "기록", screen: "screen.records"),
-            (button: "설정", screen: "screen.settings"),
             (button: "마이페이지", screen: "screen.profile"),
         ]
 
@@ -60,7 +60,9 @@ final class Phase1FlowTests: XCTestCase {
             XCTAssertEqual(try diagnosticValue("test.snapshot", in: app), initialSnapshot)
             XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), initialBytes)
 
-            let backButton = app.navigationBars.buttons.firstMatch
+            // 시간 화면(R04)은 시스템 내비 막대 대신 패널 안 뒤로 버튼을 쓴다.
+            let backButton = destination.screen == "screen.time"
+                ? element("time.back", in: app) : app.navigationBars.buttons.firstMatch
             XCTAssertTrue(backButton.waitForExistence(timeout: timeout))
             backButton.tap()
             XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
@@ -163,13 +165,25 @@ final class Phase1FlowTests: XCTestCase {
         XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
 
         // 기록은 W09a에서 실제 화면(연도 이동·잔디·목록)이 되어 진입·복귀만 확인한다.
+        // 설정은 시안 R01에서 메인 도구가 아니라 마이페이지 안에서 연다.
         let destinations = [
             (button: "기록", screen: "screen.records", placeholder: false),
-            (button: "설정", screen: "screen.settings", placeholder: true),
+            // 설정 자리표시 안에는 '데이터 출처' 진입(공공데이터 출처 표기)이 있다.
+            (button: "profile.settings", screen: "screen.settings", placeholder: false),
         ]
 
         for destination in destinations {
-            app.buttons[destination.button].tap()
+            if destination.button == "profile.settings" {
+                app.buttons["마이페이지"].tap()
+                XCTAssertTrue(element("screen.profile", in: app).waitForExistence(timeout: timeout))
+                let settings = element("profile.settings", in: app)
+                XCTAssertTrue(settings.waitForExistence(timeout: timeout))
+                var swipes = 0
+                while !settings.isHittable && swipes < 3 { app.swipeUp(); swipes += 1 }
+                settings.tap()
+            } else {
+                app.buttons[destination.button].tap()
+            }
             XCTAssertTrue(element(destination.screen, in: app).waitForExistence(timeout: timeout))
 
             let navigationBar = app.navigationBars.firstMatch
@@ -178,10 +192,17 @@ final class Phase1FlowTests: XCTestCase {
             if destination.placeholder {
                 XCTAssertEqual(app.buttons.count, navigationBar.buttons.count)
             }
+            if destination.button == "profile.settings" {
+                XCTAssertTrue(element("settings.dataSource", in: app).exists)
+            }
 
             let backButton = navigationBar.buttons.firstMatch
             XCTAssertTrue(backButton.exists)
             backButton.tap()
+            if destination.button == "profile.settings" {
+                XCTAssertTrue(element("screen.profile", in: app).waitForExistence(timeout: timeout))
+                app.navigationBars.buttons.firstMatch.tap()
+            }
             XCTAssertTrue(element("screen.main", in: app).waitForExistence(timeout: timeout))
         }
     }

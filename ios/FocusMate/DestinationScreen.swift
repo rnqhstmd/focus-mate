@@ -26,6 +26,8 @@ struct DestinationScreen: View {
             RecordsView(model: model, services: services)
         } else if destination == .dataSource {
             DataSourceView(model: model)
+        } else if destination == .settings {
+            SettingsPlaceholderView(model: model)
         } else {
             placeholderOrTime
         }
@@ -39,7 +41,7 @@ struct DestinationScreen: View {
                 PreparationView(model: model)
             } else {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(destination.title).font(.largeTitle.bold())
+                    Text(destination.title).font(FontCatalog.style(.largeTitle, weight: .bold))
                         .accessibilityIdentifier("screen.\(destination.rawValue)")
                     Spacer()
                 }
@@ -69,4 +71,50 @@ struct DestinationScreen: View {
         return json
     }
     #endif
+}
+
+/// 설정 자리표시(시안 R20 패널 모양만). 설정 기능(동작 줄이기 등)은 아직 없다.
+/// 공공데이터 출처 표기 의무 때문에 '데이터 출처' 진입은 여기에 둔다(마이페이지 줄은 F단계에서 뺀다).
+@MainActor
+struct SettingsPlaceholderView: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            SceneMapBackdrop(model: model, showsStationAnnotation: false)
+                .ignoresSafeArea()
+            // 시안 R20: 아래 시트(좌우 12, 바닥 25, 반경 28, 흰 20% 테두리), 안쪽 23, 제목 위 33.
+            VStack(alignment: .leading, spacing: 0) {
+                Text(Destination.settings.title).font(FontCatalog.text(22, weight: .bold, relativeTo: .title2))
+                    .foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("screen.settings")
+                Text("Focus Mate").font(FontCatalog.text(15, relativeTo: .body)).foregroundStyle(FMDesign.hintText)
+                    .padding(.top, 25)
+                Button { model.open(.dataSource) } label: {
+                    HStack(spacing: 6) {
+                        Text(Destination.dataSource.title).underline()
+                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .regular)).accessibilityHidden(true)
+                    }
+                    .font(FontCatalog.text(11, relativeTo: .footnote))
+                    .foregroundStyle(Color(hex: 0xDDDDDD))
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Destination.dataSource.title)
+                .accessibilityIdentifier("settings.dataSource")
+                .padding(.top, 14)
+            }
+            .padding(.top, 28).padding(.horizontal, 23).padding(.bottom, 26)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(FMDesign.panel, in: RoundedRectangle(cornerRadius: 28))
+            .overlay { RoundedRectangle(cornerRadius: 28).strokeBorder(FMDesign.panelStroke, lineWidth: 1) }
+            .padding(.horizontal, 12).padding(.bottom, 25)
+            .ignoresSafeArea(.container, edges: .bottom)
+        }
+        .background(FMDesign.background.ignoresSafeArea())
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
 }

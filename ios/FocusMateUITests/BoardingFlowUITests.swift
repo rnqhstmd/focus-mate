@@ -52,9 +52,6 @@ final class BoardingFlowUITests: XCTestCase {
         XCTAssertFalse(try h.diagnostic("board.destination").isEmpty)
         XCTAssertEqual(try h.diagnostic("board.stops"), "12개")
         XCTAssertFalse(try h.diagnostic("board.distance").isEmpty)
-        XCTAssertEqual(try h.diagnostic("board.boarding"), "지금")
-        let date = try h.diagnostic("board.date")
-        XCTAssertNotNil(date.range(of: #"^\d{4}/\d{2}/\d{2}$"#, options: .regularExpression), date)
         XCTAssertEqual(try h.diagnostic("board.tag"), "독서")
         XCTAssertEqual(try h.diagnostic("board.task"), "보고서 읽기")
 
@@ -62,10 +59,9 @@ final class BoardingFlowUITests: XCTestCase {
         XCTAssertTrue(route.waitForExistence(timeout: timeout))
         XCTAssertTrue(route.label.contains("2014"), route.label)
         XCTAssertTrue(route.label.contains("60분"), route.label)
-        let leaking = h.app.staticTexts.allElementsBoundByIndex.filter {
-            $0.identifier != "board.route" && ($0.label.contains("2014") || $0.label.contains("60분"))
-        }
-        XCTAssertEqual(leaking.count, 0, leaking.map(\.label).joined(separator: ","))
+        // 시안 R11(규칙 변경): 노선 배지와 여행 시간을 화면에 쓴다.
+        XCTAssertEqual(h.element("board.bus").label, "지선 2014")
+        XCTAssertEqual(try h.diagnostic("board.minutes"), "60 min")
 
         let boardBus = h.app.buttons["board.boardBus"]
         XCTAssertTrue(boardBus.waitForExistence(timeout: timeout))
@@ -73,9 +69,11 @@ final class BoardingFlowUITests: XCTestCase {
         boardBus.tap()
         XCTAssertTrue(h.element("screen.boarding").waitForExistence(timeout: timeout))
 
-        h.app.navigationBars.buttons.firstMatch.tap()
+        // 승차 화면은 시안대로 뒤로 버튼이 없다(AC-14 변경). 테스트 전용 경로로 승차권에 돌아간다.
+        XCTAssertEqual(h.app.navigationBars.buttons.count, 0)
+        h.tap("test.boarding.back")
         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
-        h.app.navigationBars.buttons.firstMatch.tap()
+        h.element("board.back").tap()
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
 
         let journey = try XCTUnwrap(try h.snapshot()["journey"] as? [String: Any])
@@ -157,7 +155,7 @@ final class BoardingFlowUITests: XCTestCase {
         try recognizeAndWaitHeld(h)
         XCTAssertEqual(try activeTask(h), taskA)
 
-        h.app.navigationBars.buttons.firstMatch.tap()
+        h.tap("test.boarding.back")
         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         let release = h.element("test.releaseBoardingHold")
         XCTAssertTrue(release.waitForExistence(timeout: timeout))
@@ -165,7 +163,7 @@ final class BoardingFlowUITests: XCTestCase {
         XCTAssertFalse(h.element("screen.journey").waitForExistence(timeout: 1))
         XCTAssertEqual(try activeTask(h), taskA)
 
-        h.app.navigationBars.buttons.firstMatch.tap()
+        h.element("board.back").tap()
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
         fillPreparation(h, task: taskB, replacing: taskA)
         confirmAndBoard(h)
@@ -176,7 +174,14 @@ final class BoardingFlowUITests: XCTestCase {
         XCTAssertEqual(active["task"] as? String, taskB)
 
         for expected in ["screen.board", "screen.preparation", "screen.time", "screen.main"] {
-            h.app.navigationBars.buttons.firstMatch.tap()
+            // 시간 화면(R04)은 시스템 내비 막대 대신 패널 안 뒤로 버튼을 쓴다.
+            // 승차권(R11)·준비(R07)도 패널 안 버튼으로 돌아간다.
+            switch expected {
+            case "screen.main": h.element("time.back").tap()
+            case "screen.time": h.element("preparation.close").tap()
+            case "screen.preparation": h.element("board.back").tap()
+            default: h.tap("test.boarding.back")
+            }
             XCTAssertTrue(h.element(expected).waitForExistence(timeout: timeout), expected)
         }
         XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))

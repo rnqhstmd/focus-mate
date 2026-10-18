@@ -11,7 +11,8 @@ enum JourneyMapDisplay {
     static let remainingStopsLabel = "남은 정류장"
     static let remainingDistanceLabel = "남은 거리"
 
-    static func mapValue(next: String, destination: String) -> String { "다음 정류장 \(next), 도착 정류장 \(destination)" }
+
+    static func mapValue(destination: String) -> String { "도착 정류장 \(destination)" }
     static func followValue(_ mode: JourneyCameraMode) -> String { mode == .follow ? "따라가는 중" : "자유 탐색 중" }
     static func selectedValue(_ on: Bool) -> String { on ? "선택됨" : "선택 안 됨" }
     static func switchValue(_ on: Bool) -> String { on ? "켜짐" : "꺼짐" }

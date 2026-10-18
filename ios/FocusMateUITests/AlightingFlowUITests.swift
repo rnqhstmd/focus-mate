@@ -101,7 +101,8 @@ final class AlightingFlowUITests: XCTestCase {
     }
 
     // 깨짐: 확인 뒤 하차 태그로 가지 않거나, 카드에 초점이 없거나, 뒤로가기가 보이거나,
-    // 카드 탭만으로 저장·하차 처리가 되거나, 터치 안내가 없거나, LCD에 카드 번호·옛 문구가 나온다.
+    // 카드 탭만으로 저장·하차 처리가 되거나, 터치 안내가 없거나, LCD 상태 값이 카드 이름이 아니다.
+    // 시안 R29: 인식 뒤 LCD에 "하차 완료"가 보이는 것은 시안 표시다(옛 "하차 완료 텍스트 금지" 기대 삭제).
     func testAC6_7_8_9_21_하차_태그는_카드에_초점이_있고_뒤로가_없으며_탭만으로는_완료되지_않고_활성화하면_카드_이름이_보인다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "alightPaused1499")
         resumeFromMain(h)
@@ -120,7 +121,8 @@ final class AlightingFlowUITests: XCTestCase {
         card.tap()
         let hint = h.element("alighting.tapHint")
         XCTAssertTrue(hint.waitForExistence(timeout: timeout), "터치 뒤 안내가 없음")
-        XCTAssertTrue(hint.label.contains("카드를 위로 밀어 단말기에 대주세요"), hint.label)
+        // 시안 R28: 하차 화면은 안내 문구를 늘 보인다.
+        XCTAssertTrue(hint.label.contains("카드를 위의 단말기로 올려주세요"), hint.label)
         XCTAssertEqual(try h.writeAttempts(), before)
         XCTAssertTrue(h.element("alighting.tag").exists)
         XCTAssertFalse(h.element("screen.alightingSummary").exists)
@@ -128,7 +130,6 @@ final class AlightingFlowUITests: XCTestCase {
         activateCard(h)
 
         XCTAssertTrue(h.waitForValue("alighting.lcdStatus", "집중동행카드"), h.value("alighting.lcdStatus") ?? "nil")
-        XCTAssertFalse(h.app.staticTexts["하차 완료"].exists)
         XCTAssertFalse(h.element("alighting.lcdStatus").label.contains("하차 완료"))
     }
 
@@ -199,15 +200,14 @@ final class AlightingFlowUITests: XCTestCase {
 
     // MARK: ④ 복원 (AC-4, 13, 14, 21)
 
-    // 깨짐: 도착 카드에 새 여정 시작이 남거나 하차하기가 없다.
-    func testAC21_도착_여정_카드에는_하차하기만_있고_새_여정_시작은_없다() throws {
+    // 깨짐: 도착 카드에 하차 버튼(시안 문구 "이전 여정 이어가기")이나 "새 여정 시작"이 없다(AC-21 시안 우선 변경, R34).
+    func testAC21_도착_여정_카드에는_하차_버튼과_새_여정_시작이_있다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "alightArrived")
 
         let alight = h.app.buttons["open.alighting"]
         XCTAssertTrue(alight.waitForExistence(timeout: timeout))
-        XCTAssertEqual(alight.label, "하차하기")
-        XCTAssertFalse(h.element("open.preparation").exists)
-        XCTAssertFalse(h.app.buttons["새 여정 시작"].exists)
+        XCTAssertEqual(alight.label, "이전 여정 이어가기")
+        XCTAssertEqual(h.app.buttons["open.preparation"].label, "새 여정 시작")
         XCTAssertFalse(h.app.buttons["이어가기"].exists)
         XCTAssertFalse(h.element("main.resumeJourney").exists)
     }

@@ -5,48 +5,51 @@ import XCTest
 
 final class BoardingRulesTests: XCTestCase {
     private let geometry = BoardingGeometry()
-    private let tagArea = CGRect(x: 0, y: 0, width: 238, height: 160)
+    /// 시안 R27·R28 태그 영역 149x76(면적 11324), 카드 270x158.
+    private let tagArea = CGRect(x: 0, y: 0, width: 149, height: 76)
 
     /// 태그 영역과 폭이 같은 카드를 아래쪽 가장자리에서 `overlapHeight`만큼만 걸치게 둔다.
     private func card(overlapHeight: CGFloat) -> CGRect {
-        CGRect(x: 0, y: 160 - overlapHeight, width: 238, height: 168)
+        CGRect(x: 0, y: 76 - overlapHeight, width: 149, height: 158)
     }
 
     private func restingCard(width: CGFloat) -> CGRect {
-        CGRect(x: 119 - width / 2 + 7, y: 300, width: width, height: 168)
+        CGRect(x: 74.5 - width / 2 + 7, y: 300, width: width, height: 158)
     }
 
     // MARK: AC-6/7/9, BR-7
 
     // 깨짐: 임계를 0.30에서 0.299 이하로 낮추면 29.9% 케이스가 접촉으로 판정되어 실패
     func testAC6_겹침_29_9퍼센트는_접촉이_아니다() {
-        let c = card(overlapHeight: 47.84) // 238*47.84 / 38080 = 0.299
+        let c = card(overlapHeight: 22.72) // 149*22.72 / 11324 = 0.2989
         XCTAssertEqual(geometry.overlapRatio(card: c, tagArea: tagArea), 0.299, accuracy: 0.0005)
         XCTAssertFalse(geometry.isContact(card: c, tagArea: tagArea))
     }
 
     // 깨짐: 비교를 > 로 바꾸면(경계 제외) 정확히 30%에서 실패
     func testAC6_겹침_정확히_30퍼센트는_접촉이다() {
-        let c = card(overlapHeight: 48) // 238*48 = 11424 = 38080 * 0.30
-        XCTAssertEqual(geometry.overlapRatio(card: c, tagArea: tagArea), 0.30, accuracy: 0.0001)
-        XCTAssertTrue(geometry.isContact(card: c, tagArea: tagArea))
+        // 149x76에서는 30%(높이 22.8)가 이진 소수로 정확히 표현되지 않아, 경계 검사만 정확히 나누어떨어지는 영역으로 본다.
+        let boundaryTag = CGRect(x: 0, y: 0, width: 100, height: 50)
+        let c = CGRect(x: 0, y: 35, width: 100, height: 158) // 100*15 = 1500 = 5000 * 0.30
+        XCTAssertEqual(geometry.overlapRatio(card: c, tagArea: boundaryTag), 0.30, accuracy: 0.0001)
+        XCTAssertTrue(geometry.isContact(card: c, tagArea: boundaryTag))
     }
 
     // 깨짐: 임계를 0.301 이상으로 올리면 실패
     func testAC6_겹침_30_1퍼센트는_접촉이다() {
-        let c = card(overlapHeight: 48.16) // 0.301
+        let c = card(overlapHeight: 22.88) // 0.30105
         XCTAssertTrue(geometry.isContact(card: c, tagArea: tagArea))
     }
 
-    // 깨짐: 분모를 카드 면적으로 바꾸면(268x168 카드는 0.30 이하가 됨) 실패 (BR-7)
+    // 깨짐: 분모를 카드 면적으로 바꾸면(270x158 카드는 0.30 이하가 됨) 실패 (BR-7)
     func testBR7_겹침_비율은_태그_영역_면적을_분모로_한다() {
-        let wide = CGRect(x: -15, y: 80, width: 268, height: 168) // 교집합 238x80 = 19040
+        let wide = CGRect(x: -60.5, y: 38, width: 270, height: 158) // 교집합 149x38 = 5662
         XCTAssertEqual(geometry.overlapRatio(card: wide, tagArea: tagArea), 0.5, accuracy: 0.0001)
     }
 
     // 깨짐: 교집합이 없을 때 음수나 NaN을 돌려주면 실패
     func testAC6_겹치지_않으면_비율은_0이다() {
-        let far = CGRect(x: 0, y: 400, width: 238, height: 168)
+        let far = CGRect(x: 0, y: 400, width: 149, height: 158)
         XCTAssertEqual(geometry.overlapRatio(card: far, tagArea: tagArea), 0, accuracy: 0.0001)
     }
 
@@ -67,7 +70,7 @@ final class BoardingRulesTests: XCTestCase {
 
     // MARK: AC-8 (주 검증)
 
-    private var rest: CGRect { restingCard(width: 268).offsetBy(dx: 0, dy: 0) }
+    private var rest: CGRect { restingCard(width: 270).offsetBy(dx: 0, dy: 0) }
 
     // 깨짐: 좌우 한계를 제거하거나 26이 아닌 값으로 바꾸면 실패
     func testAC8_오른쪽으로_100_끌면_26으로_제한된다() {
@@ -113,19 +116,22 @@ final class BoardingRulesTests: XCTestCase {
     }
 
     // 깨짐: 활성 위치가 마진 없이 정확히 30%에 못 미치거나 카드 폭 의존을 무시하면 실패
-    func testAC10_활성_위치는_카드_폭_268에서_접촉_임계_이상이다() { assertActivation(width: 268) }
+    func testAC10_활성_위치는_카드_폭_270에서_접촉_임계_이상이다() { assertActivation(width: 270) }
 
-    // 깨짐: min(카드폭, 태그폭) 대신 카드폭만 쓰면 238 이하 카드에서 실패
-    func testAC10_활성_위치는_카드_폭_238에서_접촉_임계_이상이다() { assertActivation(width: 238) }
+    // 깨짐: min(카드폭, 태그폭) 대신 카드폭만 쓰면 149 이하 카드에서 실패
+    func testAC10_활성_위치는_카드_폭_149에서_접촉_임계_이상이다() { assertActivation(width: 149) }
+
+    // 깨짐: 태그보다 좁은 카드에서 겹침 높이를 카드 폭에 맞춰 늘리지 않으면 실패
+    func testAC10_활성_위치는_카드_폭_120에서_접촉_임계_이상이다() { assertActivation(width: 120) }
 
     // 깨짐: 분모를 태그 폭으로 고정하지 않고 카드 폭으로 쓰면 300에서 겹침 부족 또는 과다로 실패
     func testAC10_활성_위치는_카드_폭_300에서_접촉_임계_이상이다() { assertActivation(width: 300) }
 
-    // 깨짐: 카드 위쪽을 tagArea.maxY - h 대신 다른 기준에 두면 실패 (h = 48 + 8 = 56 → 104)
-    func testAC10_활성_위치의_카드_위쪽은_태그_아래_가장자리에서_56만큼_위다() {
-        let rest = restingCard(width: 238)
+    // 깨짐: 카드 위쪽을 tagArea.maxY - h 대신 다른 기준에 두면 실패 (h = 0.3*76 + 8 = 30.8 → 76 - 30.8 = 45.2)
+    func testAC10_활성_위치의_카드_위쪽은_태그_아래_가장자리에서_30_8만큼_위다() {
+        let rest = restingCard(width: 149)
         let offset = geometry.activationOffset(cardRest: rest, tagArea: tagArea)
-        XCTAssertEqual(rest.minY + offset.height, 104, accuracy: 0.001)
+        XCTAssertEqual(rest.minY + offset.height, 45.2, accuracy: 0.001)
     }
 
     // MARK: AC-22

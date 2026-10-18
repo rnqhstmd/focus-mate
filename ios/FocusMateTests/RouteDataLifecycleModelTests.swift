@@ -423,8 +423,9 @@ final class RouteDataLifecycleModelTests: XCTestCase {
         XCTAssertEqual(model.launchState, .ready(.initialStationEntry))
     }
 
-    // 깨짐: 도착한 여정에서 confirmNewJourney가 저장하거나 .done이면 실패한다 (도착 여정은 하차로만 끝낸다, W09).
-    func testConfirmNewJourneyIsRejectedAfterArrivalRegardlessOfAvailability() async throws {
+    // 깨짐: 도착한 여정의 confirmNewJourney가 정류장 데이터 상태에 따라 거부되거나 저장이 1회가 아니면 실패한다.
+    // AC-21 시안 우선 변경(R34): 도착 여정도 새 여정으로 정리하고, 도달 정류장은 저장된 도착 정류장이다.
+    func testConfirmNewJourneyAfterArrivalEndsJourneyRegardlessOfAvailability() async throws {
         let stores: [RouteCatalogStore] = [
             F.loadingStore(try F.single()), RouteCatalogStore(ready: try F.single()), await F.failedStore(),
         ]
@@ -434,10 +435,10 @@ final class RouteDataLifecycleModelTests: XCTestCase {
                 snapshot: F.appSnapshot(active: F.journey(elapsedSeconds: 1500)), routeData: store, probe: probe
             )
 
-            XCTAssertEqual(model.confirmNewJourney(), .rejected)
+            XCTAssertEqual(model.confirmNewJourney(), .done)
 
-            XCTAssertEqual(probe.attempts, 0)
-            XCTAssertNotNil(model.activeJourney)
+            XCTAssertEqual(probe.attempts, 1)
+            XCTAssertNil(model.activeJourney)
         }
     }
 

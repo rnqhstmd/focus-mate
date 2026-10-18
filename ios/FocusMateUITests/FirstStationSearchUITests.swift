@@ -125,7 +125,8 @@ final class FirstStationSearchUITests: XCTestCase {
         element("search.confirm", in: app).tap()
         XCTAssertTrue(element("screen.time", in: app).waitForExistence(timeout: timeout))
 
-        let backButton = app.navigationBars.buttons.firstMatch
+        // 시안 R04: 시스템 뒤로 버튼 대신 패널 안 `<` 버튼.
+        let backButton = element("time.back", in: app)
         XCTAssertTrue(backButton.waitForExistence(timeout: timeout))
         backButton.tap()
 

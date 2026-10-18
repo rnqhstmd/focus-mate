@@ -67,7 +67,7 @@ final class JourneyPlanDraftTests: XCTestCase {
         XCTAssertEqual(d.candidates(origin: origin, catalog: catalog), [])
         let state = d.proceedState(origin: origin, catalog: catalog)
         XCTAssertEqual(state, .noCandidates)
-        XCTAssertEqual(state.title, "이 시간에 맞는 버스가 없어요")
+        XCTAssertEqual(state.title, "이 시간의 도착 후보가 없어요")
         XCTAssertFalse(state.isEnabled)
     }
 

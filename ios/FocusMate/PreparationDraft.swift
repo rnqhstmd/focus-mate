@@ -94,7 +94,7 @@ struct PreparationDraft: Equatable {
     private(set) var tags = PreparationTag.defaults
     private(set) var selectedTagID: String?
     private(set) var task = ""
-    private(set) var sound: JourneySound = .bus
+    private(set) var sound: JourneySound = .none
     var selectedTag: PreparationTag? { tags.first { $0.id == selectedTagID } }
     var trimmedTask: String { task.trimmingCharacters(in: .whitespacesAndNewlines) }
     var isComplete: Bool { selectedTag != nil && !trimmedTask.isEmpty }

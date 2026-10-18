@@ -57,7 +57,7 @@ final class BoardingLargeTextUITests: XCTestCase {
         XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
         XCTAssertTrue(h.element("main.activeJourney").waitForExistence(timeout: timeout))
 
-        for id in ["open.preparation", "open.records", "open.settings", "open.profile", "open.cardCustomization"] {
+        for id in ["open.preparation", "open.records", "open.profile"] {
             let button = h.app.buttons[id]
             XCTAssertTrue(button.waitForExistence(timeout: timeout), id)
             var attempts = 0

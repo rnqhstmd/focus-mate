@@ -95,8 +95,8 @@ private struct JourneyScreen: View {
                 }
             } else { Color.clear }
         }
-        // 하단 자리를 예약하므로 큰 글씨에서도 타이머 버튼과 겹치지 않는다. 일시정지가 아니면 버튼 없이 아래 여백만 남는다.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // 포기 X(R15)와 확인 창(R16)은 타이머 화면 위에 겹친다. 버튼·창 밖의 터치는 아래로 넘어간다.
+        .overlay {
             if let timer, !awaitingDeparture { JourneyAbandonBar(abandoner: model, timer: timer) }
         }
         .accessibilityElement(children: .contain)
@@ -145,7 +145,7 @@ private struct JourneyScreen: View {
                     if briefing.showsStart {
                         Button { briefing.confirm() } label: {
                             Text("시작")
-                                .font(.system(.body, weight: .semibold)).padding(.horizontal, 24)
+                                .font(FontCatalog.style(.body, weight: .semibold)).padding(.horizontal, 24)
                                 .frame(minWidth: 160, minHeight: 52)
                                 .foregroundStyle(.black)
                                 .background(Color(white: 0.95), in: Capsule())
@@ -158,7 +158,7 @@ private struct JourneyScreen: View {
                         .accessibilityFocused($startFocused)
                     }
                     if briefing.showsSaveFailure {
-                        Text("출발을 저장하지 못했어요. 다시 눌러주세요.").font(.subheadline).foregroundStyle(.orange)
+                        Text("출발을 저장하지 못했어요. 다시 눌러주세요.").font(FontCatalog.style(.subheadline)).foregroundStyle(.orange)
                             .accessibilityIdentifier("journey.saveFailure")
                     }
                 }
@@ -187,14 +187,14 @@ private struct JourneyScreen: View {
     @ViewBuilder private var sentences: some View {
         if briefing.showsAll {
             VStack(spacing: 12) {
-                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(.system(.title2, weight: .semibold)) }
+                ForEach(DepartureBriefingController.sentences, id: \.self) { Text($0).font(FontCatalog.style(.title2, weight: .semibold)) }
             }
             .accessibilityElement(children: .combine)
             .accessibilityValue(DepartureBriefingController.sentences.joined(separator: " "))
             .accessibilityIdentifier("journey.briefingSentence")
         } else {
             let sentence = DepartureBriefingController.sentences[briefing.visibleIndex]
-            Text(sentence).font(.system(.title2, weight: .semibold))
+            Text(sentence).font(FontCatalog.style(.title2, weight: .semibold))
                 .id(briefing.visibleIndex)
                 .transition(.opacity)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: briefing.visibleIndex)
@@ -223,10 +223,10 @@ private struct JourneyScreen: View {
     }
 
     private func testButton(_ label: String, id: String, action: @escaping () -> Void) -> some View {
-        // 거의 투명한 opacity는 히트 테스트에서 빠질 수 있어, 불투명 뷰에 글자만 투명하게 두고 터치 영역을 명시한다.
+        // 화면(지도)을 가리지 않게 거의 투명하게 두되, 터치 영역은 contentShape로 명시해 히트 테스트에 남긴다.
         Button(action: action) {
             Text(label).font(.system(size: 1)).foregroundStyle(.clear)
-                .frame(width: 44, height: 44).background(Color.black).contentShape(Rectangle())
+                .frame(width: 44, height: 44).background(Color.black.opacity(0.02)).contentShape(Rectangle())
         }
         .accessibilityLabel(label)
         .accessibilityIdentifier(id)

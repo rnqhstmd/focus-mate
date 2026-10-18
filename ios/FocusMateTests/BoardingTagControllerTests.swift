@@ -24,8 +24,9 @@ final class BoardingTagControllerTests: XCTestCase {
         let box: FinishBox
     }
 
-    // 태그 영역 (0,0,238,160), 카드 휴식 위치 (-15,300,268,168). dy -240 → 겹침 238x100/238x160 = 0.625 접촉,
-    // dy -150 → 238x10 → 0.0625 미접촉. 위로 최대 -300, 아래로 +20, 좌우 ±26.
+    // 시안 R27 기하: 태그 영역 (0,0,149,76), 카드 휴식 위치 (-60.5,260,270,158).
+    // dy -240 → 카드 위쪽 20, 겹침 149x56/149x76 = 0.737 접촉, dy -150 → 위쪽 110, 겹침 없음 미접촉.
+    // 위로 최대 -260, 아래로 +20, 좌우 ±26.
     private func rig(results: [Bool] = [true]) -> Rig {
         let boarder = FakeJourneyBoarder(results: results)
         let haptics = FakeIssuanceHaptics(isSupported: true)
@@ -40,8 +41,8 @@ final class BoardingTagControllerTests: XCTestCase {
             onFinished: { box.finishedPhases.append(box.controller?.phase ?? .ready) })
         box.controller = controller
         controller.updateLayout(
-            cardRest: CGRect(x: -15, y: 300, width: 268, height: 168),
-            tagArea: CGRect(x: 0, y: 0, width: 238, height: 160))
+            cardRest: CGRect(x: -60.5, y: 260, width: 270, height: 158),
+            tagArea: CGRect(x: 0, y: 0, width: 149, height: 76))
         return Rig(controller: controller, boarder: boarder, haptics: haptics, announcer: announcer,
                    sleeper: sleeper, holdSleeper: holdSleeper, box: box)
     }
@@ -120,13 +121,14 @@ final class BoardingTagControllerTests: XCTestCase {
         XCTAssertEqual(r.boarder.calls, 0)
     }
 
-    // 깨짐: activate 가 activationOffset(0,-196)으로 두지 않거나 낭독을 1회가 아니게 하면 실패.
-    // h = 0.3*160 + 8 = 56 → 카드 위쪽 104 → offset y = 104-300 = -196, 중심 정렬이라 x 0.
+    // 깨짐: activate 가 activationOffset(0,-214.8)으로 두지 않거나 낭독을 1회가 아니게 하면 실패.
+    // h = 0.3*76 + 8 = 30.8 → 카드 위쪽 45.2 → offset y = 45.2-260 = -214.8, 중심 정렬이라 x 0.
     func testAC10_activate는_활성_위치로_옮기고_낭독_1회_저장_1회() async {
         let r = rig()
         r.controller.activate(reduceMotion: false)
 
-        XCTAssertEqual(r.controller.cardOffset, CGSize(width: 0, height: -196))
+        XCTAssertEqual(r.controller.cardOffset.width, 0, accuracy: 0.001)
+        XCTAssertEqual(r.controller.cardOffset.height, -214.8, accuracy: 0.001)
         XCTAssertEqual(r.controller.phase, .contacting)
         await r.sleeper.untilSuspended()
         r.sleeper.resume()

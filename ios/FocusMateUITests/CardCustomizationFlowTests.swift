@@ -32,7 +32,7 @@ final class CardCustomizationFlowTests: XCTestCase {
         }
         capture(h, "basic")
         try tap(h, "close")
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         XCTAssertFalse(control(h, "discard").exists)
         XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
         XCTAssertEqual(try canonical(h.snapshot()), try canonical(snapshot))
@@ -73,7 +73,7 @@ final class CardCustomizationFlowTests: XCTestCase {
         XCTAssertEqual(try style(h).canUndo, changed.canUndo)
         try tap(h, "close"); try confirmation(h)
         try tapConfirmation(h, "discard", label: "변경 버리기")
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         XCTAssertEqual(try h.diagnostic("test.persistedBytes"), bytes)
         try open(h)
         XCTAssertEqual(try style(h).draft, baseline)
@@ -216,7 +216,7 @@ final class CardCustomizationFlowTests: XCTestCase {
         try fixtureButton(h); try waitState(h) { $0.isImporting }
         try tap(h, "close"); try confirmation(h)
         try tapConfirmation(h, "discard", label: "변경 버리기")
-        XCTAssertTrue(h.element("screen.main").waitForExistence(timeout: timeout))
+        XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
         try open(h)
         XCTAssertEqual(try style(h).draft, baseline)
         // A new batch must arm again; release its real gate, not an artificial ignore-cancel loader.
@@ -465,9 +465,16 @@ final class CardCustomizationFlowTests: XCTestCase {
         h.element(helperID(suffix))
     }
     private func open(_ h: FocusMateUIHarness) throws {
-        let entry = h.element("open.cardCustomization")
+        // 시안 R01: 메인에는 기록·마이페이지만 있다. 카드 꾸미기는 마이페이지에서 연다.
+        let entry = h.element("profile.customize")
+        if !entry.exists {
+            let profile = h.element("open.profile")
+            XCTAssertTrue(profile.waitForExistence(timeout: timeout))
+            profile.tap()
+            XCTAssertTrue(h.element("screen.profile").waitForExistence(timeout: timeout))
+        }
         XCTAssertTrue(entry.waitForExistence(timeout: timeout))
-        // 큰 글자에서는 메인 방면 줄이 길어져 버튼이 화면 아래로 밀린다. 메인은 스크롤된다.
+        // 큰 글자에서는 버튼이 화면 아래로 밀린다. 마이페이지는 스크롤된다.
         var swipes = 0
         while (!entry.isHittable || entry.frame.maxY > h.app.frame.maxY - 120) && swipes < 4 { h.app.swipeUp(); swipes += 1 }
         entry.tap()
@@ -502,24 +509,40 @@ final class CardCustomizationFlowTests: XCTestCase {
             }
             return target.isHittable && viewport.contains(target.frame)
         }
+        // 방향이 뒤집히면(지나침) 끄는 거리를 절반으로 줄인다 — 큰 글자에서 조작이 커 보이는 창이 좁으면 같은 거리로는 오가기만 한다.
+        var span: CGFloat = 0.6
+        var lastUp: Bool?
         for _ in 0..<12 {
             if reachable() { break }
             let lowerBound = visibleBody().minY
             let upperBound = visibleBody().maxY
+            let up: Bool
             if target.frame.maxY > upperBound {
-                try scrollBody(body, contentUp: true)
+                up = true
             } else if target.frame.minY < lowerBound {
-                try scrollBody(body, contentUp: false)
+                up = false
             } else {
-                try scrollBody(body, contentUp: target.frame.midY >= body.frame.midY)
+                up = target.frame.midY >= body.frame.midY
             }
+            if let lastUp, lastUp != up { span = max(0.15, span / 2) }
+            lastUp = up
+            try scrollBody(body, contentUp: up, span: span)
         }
         XCTAssertTrue(reachable(), "본문/조작 도달 실패: " + target.identifier)
     }
-    private func scrollBody(_ body: XCUIElement, contentUp: Bool) throws {
+    private func scrollBody(_ body: XCUIElement, contentUp: Bool, span: CGFloat = 0.6) throws {
         XCTAssertTrue(body.waitForExistence(timeout: timeout))
-        let start = body.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: contentUp ? 0.8 : 0.2))
-        let end = body.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: contentUp ? 0.2 : 0.8))
+        // 본문 ScrollView 프레임은 고정 저장 버튼(safeAreaInset) 아래까지 이어진다. 큰 글자에서 저장 영역이 커지면
+        // 본문 프레임 기준 80% 지점이 저장 영역 위에 떨어져 끌어도 스크롤되지 않으므로, 저장 위 보이는 본문 안에서만 끈다.
+        let save = XCUIApplication().descendants(matching: .any)[helperID("save")]
+        let bottom = save.exists ? min(body.frame.maxY, save.frame.minY) : body.frame.maxY
+        let height = max(1, bottom - body.frame.minY)
+        func point(_ fraction: CGFloat) -> XCUICoordinate {
+            body.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: body.frame.width * 0.02, dy: height * fraction))
+        }
+        let start = point(contentUp ? 0.5 + span / 2 : 0.5 - span / 2)
+        let end = point(contentUp ? 0.5 - span / 2 : 0.5 + span / 2)
         start.press(forDuration: 0.01, thenDragTo: end)
     }
     private func confirmation(_ h: FocusMateUIHarness) throws {
@@ -590,7 +613,7 @@ final class CardCustomizationFlowTests: XCTestCase {
     }
     private func successfulSave(_ h: FocusMateUIHarness, expected: Style) throws -> StyleState {
         let editor = h.element("screen.cardCustomization")
-        let main = h.element("screen.main")
+        let main = h.element("screen.profile")
         let savedNotice = control(h, "savedNotice")
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             !editor.exists && main.exists && savedNotice.exists

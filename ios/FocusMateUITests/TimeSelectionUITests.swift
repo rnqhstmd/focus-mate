@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class TimeSelectionUITests: XCTestCase {
     private let timeout: TimeInterval = 5
-    private let noCandidates = "이 시간에 맞는 버스가 없어요"
+    private let noCandidates = "이 시간의 도착 후보가 없어요"
     private let needsSelection = "버스와 도착지를 선택하세요"
     private let ready = "이 여정 준비하기"
 

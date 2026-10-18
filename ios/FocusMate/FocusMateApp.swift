@@ -16,7 +16,6 @@ struct FocusMateApp: App {
     #endif
 
     init() {
-        FontCatalog.register()
         do {
             let support = try FileManager.default.url(for: .applicationSupportDirectory,
                 in: .userDomainMask, appropriateFor: nil, create: false)

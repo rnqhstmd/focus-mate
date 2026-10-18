@@ -55,7 +55,7 @@ struct DataSourceView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(Destination.dataSource.title).font(FontCatalog.text(23, bold: true, relativeTo: .title2)).accessibilityAddTraits(.isHeader)
+                Text(Destination.dataSource.title).font(FontCatalog.text(23, weight: .bold, relativeTo: .title2)).accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("screen.dataSource")
                 switch model.routeAvailability {
                 case .loading:

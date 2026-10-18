@@ -6,15 +6,16 @@ final class PreparationEditorUITests: XCTestCase {
     private let timeout: TimeInterval = 5
     override func setUp() { super.setUp(); continueAfterFailure = false }
 
+    // 시안 R07: 소리 기본값은 "소리 없음".
     // 깨짐: 최초 준비가 태그를 자동 선택하거나 숨겨야 할 입력/활성 confirm을 노출한다.
-    func testAC1_InitialHubHasNoTagOrTaskAndBusSound() throws {
+    func testAC1_InitialHubHasNoTagOrTaskAndNoSound() throws {
         let h = try openPreparation()
         XCTAssertTrue(h.app.staticTexts["무엇을 할까요?"].exists)
         for id in ["reading", "study", "work", "rest"] { XCTAssertFalse(h.element("preparation.tag.\(id)").isSelected, id) }
         XCTAssertFalse(h.element("preparation.task").exists)
         XCTAssertFalse(h.element("preparation.confirm").isEnabled)
         XCTAssertEqual(try h.diagnostic("test.preparedPreparation"), "null")
-        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
+        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "소리 없음")
         attachScreen(h.app, named: "w03-preparation-empty")
     }
     // 깨짐: 태그 선택이 할 일을 자동 입력하거나 공백 할 일을 확정한다.
@@ -39,14 +40,14 @@ final class PreparationEditorUITests: XCTestCase {
         tap(h.element("preparation.confirm"), in: h.app)
         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         XCTAssertEqual(try preparation(h)["task"] as? String, String(repeating: "a", count: 80))
-        h.app.navigationBars.buttons.firstMatch.tap()
+        h.element("board.back").tap()
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
         replaceText(h.element("preparation.task"), in: h.app, with: "  책 읽기  ")
         tap(h.element("preparation.confirm"), in: h.app)
         XCTAssertTrue(h.element("screen.board").waitForExistence(timeout: timeout))
         let payload = try preparation(h)
         XCTAssertEqual(payload["task"] as? String, "책 읽기")
-        XCTAssertEqual(payload["sound"] as? String, "bus")
+        XCTAssertEqual(payload["sound"] as? String, "none")
         let journey = try XCTUnwrap(payload["journey"] as? [String: Any])
         XCTAssertEqual(journey["minutes"] as? Int, 60); XCTAssertEqual(journey["busID"] as? String, "2014-r")
         XCTAssertEqual(journey["busNumber"] as? String, "2014")
@@ -106,13 +107,13 @@ final class PreparationEditorUITests: XCTestCase {
         wait(h.element("tagEditor.name"), key: "exists", equals: false)
         XCTAssertEqual(h.app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "preparation.tag.")).count, tags)
         XCTAssertTrue(h.element("preparation.tag.reading").isSelected)
-        h.app.navigationBars.buttons.firstMatch.tap()
+        h.element("preparation.close").tap()
         XCTAssertTrue(h.element("screen.time").waitForExistence(timeout: timeout))
         tap(h.element("time.proceed"), in: h.app)
         XCTAssertTrue(h.element("screen.preparation").waitForExistence(timeout: timeout))
         XCTAssertEqual(try stringValue(h.element("preparation.task")), "유지할 일")
         XCTAssertTrue(h.element("preparation.tag.reading").isSelected)
-        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
+        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "소리 없음")
         XCTAssertEqual(try h.diagnostic("test.journeySelection"), before)
     }
     // 깨짐: 소리 선택만으로 재생하거나 취소가 확정값을 변경하거나 저장이 전달되지 않는다.
@@ -124,14 +125,14 @@ final class PreparationEditorUITests: XCTestCase {
             let option = h.element("sound.option.\(id)")
             XCTAssertTrue(option.exists, id); XCTAssertEqual(option.label, title, id)
         }
-        XCTAssertTrue(h.element("sound.option.bus").isSelected)
+        XCTAssertTrue(h.element("sound.option.none").isSelected)
         XCTAssertEqual(h.element("sound.preview").label, "선택한 소리 미리 듣기")
         attachScreen(h.app, named: "w03-sound-options")
         tap(h.element("sound.option.forest"), in: h.app)
         waitPreview(h, phase: "stopped")
         tap(h.element("sound.cancel"), in: h.app)
         wait(h.element("sound.save"), key: "exists", equals: false)
-        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
+        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "소리 없음")
         XCTAssertEqual(try stringValue(h.element("preparation.task")), "읽기")
         tap(h.element("preparation.sound"), in: h.app)
         tap(h.element("sound.option.rainBus"), in: h.app)
@@ -174,6 +175,8 @@ final class PreparationEditorUITests: XCTestCase {
     // 깨짐: 실제 preview 토글/시트 dismiss가 stop하지 않거나 재열기가 자동 재생한다.
     func testAC17_AC18_AC22_RealPreviewStartStopAndDismissReopenStayStopped() throws {
         let h = try openPreparation(); tap(h.element("preparation.sound"), in: h.app)
+        // 기본값이 "소리 없음"(R07)이라 미리 듣기가 꺼져 있다. 버스를 골라 시작한다.
+        tap(h.element("sound.option.bus"), in: h.app)
         tap(h.element("sound.preview"), in: h.app); waitPreview(h, phase: "playing")
         XCTAssertEqual(h.element("sound.preview").label, "미리 듣기 중지")
         XCTAssertEqual(try stringValue(h.element("sound.preview")), "playing")
@@ -223,7 +226,7 @@ final class PreparationEditorUITests: XCTestCase {
         XCTAssertFalse(h.element("preparation.task").exists)
         XCTAssertFalse(h.element("preparation.tag.reading").isSelected)
         XCTAssertEqual(h.app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "preparation.tag.")).count, 4)
-        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "버스")
+        XCTAssertEqual(try stringValue(h.element("preparation.sound")), "소리 없음")
         XCTAssertEqual(try h.diagnostic("test.preparedPreparation"), "null")
     }
 

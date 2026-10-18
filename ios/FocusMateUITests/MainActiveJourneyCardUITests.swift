@@ -87,19 +87,19 @@ final class MainActiveJourneyCardUITests: XCTestCase {
         let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
         let card = h.element("main.activeJourney")
         XCTAssertTrue(card.waitForExistence(timeout: timeout))
-        XCTAssertTrue(card.label.contains("도착한 여정이 있어요"), card.label)
+        XCTAssertTrue(card.label.contains("마지막 태그가 남았어요."), card.label)
         XCTAssertFalse(h.element("main.resumeJourney").exists)
         XCTAssertTrue(h.app.buttons["open.alighting"].exists)
     }
 
-    // 깨짐: 도착 여정 카드에 하차하기가 없거나 새 여정 시작 경로(open.preparation)·"새 여정 시작"이 남는다.
-    func testAC24_도착_여정은_하차하기만_있고_새_여정_시작_경로가_없다() throws {
+    // 깨짐: 도착 여정 카드의 하차 버튼 문구가 시안("이전 여정 이어가기")과 다르거나 "새 여정 시작"이 없다(AC-21 시안 우선 변경, R34).
+    func testAC24_도착_여정은_하차_버튼과_새_여정_시작이_있다() throws {
         let h = FocusMateUIHarness.launchLifecycle(seed: "lifeArrived")
         let alight = h.app.buttons["open.alighting"]
         XCTAssertTrue(alight.waitForExistence(timeout: timeout))
-        XCTAssertEqual(alight.label, "하차하기")
-        XCTAssertFalse(h.element("open.preparation").exists)
-        XCTAssertFalse(h.app.buttons["새 여정 시작"].exists)
+        XCTAssertEqual(alight.label, "이전 여정 이어가기")
+        XCTAssertEqual(h.app.buttons["open.preparation"].label, "새 여정 시작")
+        XCTAssertFalse(h.element("main.resumeJourney").exists)
     }
 
     // MARK: AC-25

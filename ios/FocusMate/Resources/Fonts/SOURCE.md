@@ -1,12 +1,23 @@
-# 서울알림체 출처
+# Noto Sans KR 출처
 
-제작·제공: 서울특별시.
-공식 소개·이용 안내: https://www.seoul.go.kr/seoul/font.do
-공식 수동 설치 원본: https://www.seoul.go.kr/upload/seoul/font/seoul_font3.zip
-다운로드일: 2026-10-11.
+제작: Google · Adobe (Noto Sans CJK / Source Han Sans 계열).
+원본: https://github.com/google/fonts/raw/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf (가변 글꼴)
+라이선스: SIL Open Font License 1.1 — 전문은 같은 폴더의 `NotoSansKR-OFL.txt`.
+다운로드일: 2026-10-17.
 
-원본 ZIP의 서울알림/TTF/SeoulAlrimTTF-Medium.ttf와 SeoulAlrimTTF-Bold.ttf를 이름만 정리해 로컬 프로토타입에서 사용한다. 폰트 파일은 수정하지 않았다.
+## 가공 내용
+fonttools로 가변 글꼴에서 굵기 400/600/700 정적 인스턴스를 만들고 아래 문자만 남겨 서브셋했다.
+힌팅은 제거했다. 글리프 모양은 바꾸지 않았다.
 
-서울시 안내: 누구나 무료로 다운로드해 자유롭게 사용 가능. 서체 판매·유상양도·무단배포는 허용하지 않는다. 공식 안내 페이지에는 공공누리 제1유형(출처표시)이 표기되어 있다. 외부 배포 시 공식 이용 조건을 함께 유지한다.
+- ASCII `U+0020–007E`, Latin-1 `U+00A0–00FF`(· × ° 등)
+- 일반 문장부호 `U+2010–206F`(— – … ‹ › 등), 화살표 `U+2190–21FF`, 도형 `U+25A0–25FF`, ≤ ≥ ⌖ ™
+- CJK 기호 `U+3000–303F`, 한글 자모 `U+3131–318E`, 현대 한글 11,172자 `U+AC00–D7A3`, 전각 `U+FF01–FF5E`
 
-서울알림체는 서울시가 공공안내에 최적화된 기능 서체로 소개한 글꼴이다. 모든 버스 정류장에 실제로 같은 서체가 쓰였다고 확인한 것은 아니다.
+| 파일 | PostScript 이름 | 굵기 |
+|---|---|---|
+| NotoSansKR-Regular.ttf | NotoSansKR-Regular | 400 |
+| NotoSansKR-SemiBold.ttf | NotoSansKR-SemiBold | 600 |
+| NotoSansKR-Bold.ttf | NotoSansKR-Bold | 700 |
+
+"Noto"는 OFL Reserved Font Name이 아니므로 서브셋 후에도 이름을 유지했다(원본 저작권 문구의 RFN 'Source'는 이 이름과 무관).
+글꼴은 Info.plist `UIAppFonts`로 등록한다.

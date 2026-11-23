@@ -1,8 +1,10 @@
 import Foundation
 
-/// 첫 출발지 검색 화면의 상태. 선택은 현재 검색 결과 안에 있을 때만 유효하다.
+/// 출발지 검색 화면과 미리보기의 상태.
 struct StationSearchState: Equatable {
-    var query: String = ""
+    var query: String = "" {
+        didSet { if query != oldValue { clearSelection() } }
+    }
     private(set) var selectedID: String?
 
     func result(in catalog: RouteCatalog) -> StationSearchResult { StationSearch.search(query, in: catalog) }
@@ -14,20 +16,19 @@ struct StationSearchState: Equatable {
         Self.options(of: result).first { $0.id == selectedID }
     }
 
-    func confirmationText(in catalog: RouteCatalog) -> String? { selectedOption(in: catalog).map(Self.confirmationText(for:)) }
-
-    /// "이름 · 방면에서 출발". 방면이 없는 정류장은 "이름에서 출발"이다.
-    static func confirmationText(for option: StopSearchOption) -> String {
-        option.boundLabel.map { "\(option.name) · \($0)에서 출발" } ?? "\(option.name)에서 출발"
-    }
-
     func canConfirm(in catalog: RouteCatalog) -> Bool { selectedOption(in: catalog) != nil }
 
     mutating func select(_ optionID: String, in catalog: RouteCatalog) -> Bool {
-        guard Self.options(of: result(in: catalog)).contains(where: { $0.id == optionID }) else { return false }
+        select(optionID, from: result(in: catalog))
+    }
+
+    mutating func select(_ optionID: String, from result: StationSearchResult) -> Bool {
+        guard Self.options(of: result).contains(where: { $0.id == optionID }) else { return false }
         selectedID = optionID
         return true
     }
+
+    mutating func clearSelection() { selectedID = nil }
 
     private static func options(of result: StationSearchResult) -> [StopSearchOption] {
         if case let .results(options, _) = result { return options }

@@ -309,6 +309,8 @@ final class AppModel {
         return saveFailure == nil
     }
 
+    func dismissSaveFailure() { saveFailure = nil }
+
     /// 실패를 호출자가 그 화면에서 직접 안내하는 저장(W07). 실패해도 상태가 바뀌지 않았으므로 일반 `saveFailure`를 남기지 않는다.
     func saveHandlingFailure(_ candidate: AppSnapshot) -> Bool {
         guard !isRecovering, persist(candidate) == nil else { return false }

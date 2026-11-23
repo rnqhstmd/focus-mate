@@ -17,8 +17,8 @@ struct SceneMapBackdrop: View {
     /// Trip summary (R17·R30): the leg is a finished trip. Thin white line (45% so it reads over aerial imagery; Pen 27%), grey passed stop dots and the bus
     /// at the arrival stop. Requires `leg`.
     var finished = false
-    /// Shown when no stop is selected yet (first station search): Seoul Forest area.
-    var fallbackCoordinate: CLLocationCoordinate2D? = nil
+    /// Search only previews a selected origin. It never falls back to the saved stop or a route.
+    var isStationSearchPreview = false
 
     @State private var position: MapCameraPosition = .automatic
     /// MapKit이 지도를 처음 만들 때 함께 넘긴 표식(Annotation)과 덮개 다각형을 그리지 않는 일이 있다(선은 그려짐).
@@ -35,8 +35,6 @@ struct SceneMapBackdrop: View {
     /// Pen main camera: a wide oblique aerial view (G-global 4-3, A C2).
     static let cameraDistance: Double = 3_000
     static let cameraPitch: Double = 55
-    /// Seoul Forest, used behind the first station search before any stop exists.
-    static let defaultCoordinate = CLLocationCoordinate2D(latitude: 37.5444, longitude: 127.0374)
 
     private var routeColor: Color {
         guard let routeID, let catalog = model.routeCatalog, let index = catalog.routeIndex(id: routeID) else {
@@ -135,7 +133,9 @@ struct SceneMapBackdrop: View {
     var body: some View {
         GeometryReader { geometry in
             Group {
-                if let stop {
+                if isStationSearchPreview {
+                    searchPreview(viewHeight: geometry.size.height)
+                } else if let stop {
                     let coordinate = CLLocationCoordinate2D(latitude: stop.point.latitude, longitude: stop.point.longitude)
                     let route = routeCoordinates
                     let shape = legShape
@@ -218,12 +218,6 @@ struct SceneMapBackdrop: View {
                     }
                     .task(id: leg) { await shapes.load(requestsToLoad) }
                     .id(stop.id)
-                } else if let fallbackCoordinate {
-                    Map(initialPosition: Self.camera(at: fallbackCoordinate), interactionModes: [])
-                        .mapStyle(FMDesign.cityMapStyle)
-                        .mapControls { }
-                        .overlay { FMMapScrim() }
-                        .safeAreaPadding(.bottom, min(max(0, bottomInset), max(0, geometry.size.height - 160)))
                 } else {
                     FMDesign.mapBase.overlay { FMMapScrim() }
                 }
@@ -233,6 +227,19 @@ struct SceneMapBackdrop: View {
         .background(FMDesign.mapBase)
         .environment(\.colorScheme, .dark)
         .accessibilityHidden(true)
+    }
+
+    private func searchPreview(viewHeight: CGFloat) -> some View {
+        ZStack(alignment: .top) {
+            FMDesign.mapBase
+            if let target = StationSearchMapTarget(stationID: stationID, catalog: model.routeCatalog),
+               let height = StationSearchMapTarget.visibleHeight(viewHeight: viewHeight, bottomInset: bottomInset) {
+                StationSearchMap(target: target)
+                    .id(target)
+                    .frame(height: height)
+                    .frame(maxWidth: .infinity)
+            }
+        }
     }
 
     /// A box well beyond the visible area around the stop, used as the in-map scrim.

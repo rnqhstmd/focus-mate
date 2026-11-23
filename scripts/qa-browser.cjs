@@ -15,6 +15,7 @@ async function completeFirstUse(page){
     await page.waitForFunction(()=>!passIssuing&&!!currentPass());
   }
   await page.locator('#issueCardAction').click();
+  await page.locator('#searchResults .search-result').first().click();
   await page.locator('#searchConfirm').click();
   await page.evaluate(()=>show('main'));
 }

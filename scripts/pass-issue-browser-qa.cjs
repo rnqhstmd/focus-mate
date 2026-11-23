@@ -3,7 +3,43 @@ const {chromium,browserOptions,completeFirstUse}=require('./qa-browser.cjs');
 const out=path.resolve(__dirname,'../.impeccable/review/pass-issue'),url='http://127.0.0.1:8796/animation-preview.html';fs.mkdirSync(out,{recursive:true});
 (async()=>{const browser=await chromium.launch(browserOptions());try{
  const page=await browser.newPage({viewport:{width:1280,height:1040},timezoneId:'Asia/Seoul'}),errors=[],results=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(()=>{window.testHaptics=[];Object.defineProperty(navigator,'vibrate',{configurable:true,value:pattern=>{window.testHaptics.push(pattern);return true}})});await page.goto(url);assert.deepEqual(errors,[]);assert.equal(await page.evaluate(()=>scene),'issue');assert(await page.locator('#main').isHidden());assert(await page.locator('#issueEmpty').isVisible());assert.equal(await page.evaluate(()=>issuedPass),null);await page.locator('#issueCardAction').click();assert(await page.locator('#issueCardAction').isDisabled());assert(await page.locator('#issueStage').evaluate(e=>e.classList.contains('printing')));const issued=await page.evaluate(()=>issuedPass);assert(/^FM-\d{8}$/.test(issued.id));assert.equal(await page.evaluate(()=>localStorage.getItem(passStorageKey)),JSON.stringify(issued));await page.evaluate(()=>issueTransitPass());assert.equal(await page.evaluate(()=>issuedPass.id),issued.id);await page.waitForTimeout(1000);assert(await page.locator('#issueStamp').isVisible());assert.equal(await page.locator('#issueCardAction').innerText(),'출발지 선택하기');assert.equal(await page.evaluate(()=>window.testHaptics.length),2);
- await page.reload();assert.equal(await page.evaluate(()=>scene),'issue');assert.equal(await page.evaluate(()=>issuedPass.id),issued.id);assert(!(await page.locator('#issueStage').evaluate(e=>e.classList.contains('printing'))));await page.locator('#issueCardAction').focus();await page.keyboard.press('Enter');assert.equal(await page.evaluate(()=>scene),'search');await page.locator('#searchClose').click();assert.equal(await page.evaluate(()=>scene),'issue');assert.equal(await page.evaluate(()=>issuedPass.id),issued.id);await page.locator('#issueCardAction').click();await page.locator('#stationSearch').fill('성수역');await page.locator('#searchResults .search-result').first().click();await page.locator('#searchConfirm').click();assert.equal(await page.evaluate(()=>scene),'time');assert.equal(await page.evaluate(()=>onboarded),true);results.push('fresh launch starts with issue; press prints one persistent card, disables duplicates and requests supported haptics; reload/cancel preserve the same card; direct departure selection skips the old intro');
+ await page.reload();assert.equal(await page.evaluate(()=>scene),'issue');assert.equal(await page.evaluate(()=>issuedPass.id),issued.id);assert(!(await page.locator('#issueStage').evaluate(e=>e.classList.contains('printing'))));await page.locator('#issueCardAction').focus();await page.keyboard.press('Enter');assert.equal(await page.evaluate(()=>scene),'search');await page.locator('#searchClose').click();assert.equal(await page.evaluate(()=>scene),'issue');assert.equal(await page.evaluate(()=>issuedPass.id),issued.id);await page.locator('#issueCardAction').click();await page.setViewportSize({width:320,height:568});
+ assert(await page.locator('#searchConfirm').isHidden());
+ await page.locator('#stationSearch').fill('없는 정류장');assert(await page.locator('#searchEmpty').isVisible());
+ await page.locator('#searchReset').click();assert.equal(await page.locator('#searchResults button').count(),3);
+ await page.setViewportSize({width:320,height:340});
+ await page.waitForFunction(()=>$('search').classList.contains('short-search'));
+ const lastPlatform=page.locator('#searchResults button').last();
+ await lastPlatform.scrollIntoViewIfNeeded();
+ const compact=await lastPlatform.evaluate(el=>({
+   bottom:el.getBoundingClientRect().bottom,
+   viewport:visualViewport.height,
+   scrolls:$('stationBrowse').scrollHeight>$('stationBrowse').clientHeight
+ }));
+ assert(compact.scrolls&&compact.bottom<=compact.viewport,'keyboard-sized viewport must scroll the last result into view');
+ await page.setViewportSize({width:320,height:568});
+ await page.locator('#stationSearch').fill('성수역');
+ const platforms=page.locator('#searchResults .search-result');
+ assert.equal(await platforms.count(),2);
+ await platforms.nth(1).press('Enter');
+ assert.equal(await page.locator('#stationPreviewNext').innerText(),'성수사거리');
+ assert.equal(await page.evaluate(()=>document.activeElement.id),'stationPreviewName');
+ const reverseLine=await page.locator('#stationMapSection').getAttribute('points');
+ assert.equal(await page.evaluate(()=>localStorage.getItem(locationStorageKey)),null);
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('#stationSearch').inputValue(),'성수역');
+ assert(await platforms.nth(1).evaluate(el=>document.activeElement===el));
+ await platforms.first().press('Enter');
+ assert.equal(await page.locator('#stationPreviewNext').innerText(),'성수동');
+ assert.notEqual(await page.locator('#stationMapSection').getAttribute('points'),reverseLine);
+ const previewFits=await page.evaluate(()=>{
+   const panel=$('search').getBoundingClientRect(),phone=document.querySelector('.phone').getBoundingClientRect(),button=$('searchConfirm').getBoundingClientRect();
+   return panel.left>=phone.left&&panel.right<=phone.right+1&&button.bottom<=phone.bottom&&button.height>=44&&$('stationPreview').scrollWidth<=$('stationPreview').clientWidth;
+ });
+ assert(previewFits,'320px station preview and confirmation must fit the phone');
+ await page.locator('#searchConfirm').click();
+ await page.setViewportSize({width:1280,height:1040});
+ results.push('two directions show distinct route geometry and next stops; browsing, keyboard editing, and 320px preview are isolated from persistence');assert.equal(await page.evaluate(()=>scene),'time');assert.equal(await page.evaluate(()=>onboarded),true);results.push('fresh launch starts with issue; press prints one persistent card, disables duplicates and requests supported haptics; reload/cancel preserve the same card; direct departure selection skips the old intro');
  await page.evaluate(()=>{captureFrozen=true;chooseTimeJourney('2014');selectedTag=pendingTag='read';hasTaskSelection=true;draftTask=taskText='카드 한 장으로 독서';$('taskInput').value=taskText;completePreparation()});await page.locator('#boardEnter').click();assert.equal(await page.locator('#card [data-pass-number]').innerText(),await page.locator('#issue [data-pass-number]').innerText());assert.equal(await page.locator('#card [data-pass-name]').innerText(),'집중동행카드');await page.locator('#card').press('Enter');await page.waitForFunction(()=>scene==='focus');await page.evaluate(()=>confirmDeparture());assert.equal(await page.evaluate(()=>scene),'focus');await page.evaluate(()=>show('alighting'));assert.equal(await page.locator('#alightCard [data-pass-number]').innerText(),await page.locator('#card [data-pass-number]').innerText());await page.locator('#alightCard').press('Enter');await page.waitForTimeout(1100);assert.equal(await page.evaluate(()=>scene),'arrival');await page.locator('#arrivalHome').click();await page.reload();assert.equal(await page.evaluate(()=>scene),'main');assert.equal(await page.evaluate(()=>issuedPass.id),issued.id);await page.locator('#mainStart').click();assert.equal(await page.evaluate(()=>scene),'time');results.push('issued identity is shared by boarding and alighting; repeat trips and completed-trip reload never reissue the pass');
  const stored=await page.evaluate(()=>({pass:localStorage.getItem(passStorageKey),location:localStorage.getItem(locationStorageKey),records:localStorage.getItem(recordStorageKey)}));for(const key of ['issue','issue-printing','issue-done'])await page.evaluate(key=>flowStudy.studyScene(key),key);assert.deepEqual(await page.evaluate(()=>({pass:localStorage.getItem(passStorageKey),location:localStorage.getItem(locationStorageKey),records:localStorage.getItem(recordStorageKey)})),stored);await page.evaluate(()=>flowStudy.studyScene('issue'));assert(await page.locator('#issueEmpty').isVisible());await page.locator('#issueCardAction').click();await page.waitForTimeout(1000);assert.equal(await page.evaluate(()=>localStorage.getItem(passStorageKey)),stored.pass);results.push('issuance gallery and interactive example printing do not change real pass, location or history');
  const interrupted=await browser.newPage();await interrupted.goto(url);await interrupted.locator('#issueCardAction').click();const interruptID=await interrupted.evaluate(()=>issuedPass.id);await interrupted.reload();assert.equal(await interrupted.evaluate(()=>issuedPass.id),interruptID);assert(await interrupted.locator('#issueStamp').isVisible());await interrupted.close();results.push('closing/reloading during print resumes its completed card instead of minting another');

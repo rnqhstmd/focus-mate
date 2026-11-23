@@ -72,4 +72,23 @@ final class RouteCatalogStoreTests: XCTestCase {
         let result = await store.loaded()
         XCTAssertEqual(result, .failed)
     }
+
+    func testExplicitRetryAfterFailureSharesTheNewLoad() async throws {
+        let c = try catalog()
+        let counter = CallCounter()
+        let store = RouteCatalogStore {
+            counter.increment()
+            if counter.count == 1 { throw LoadFailure() }
+            return c
+        }
+        await store.startLoading().value
+        await store.startLoading().value
+        XCTAssertEqual(store.availability, .failed)
+        let first = store.startLoading(retryFailed: true)
+        let second = store.startLoading(retryFailed: true)
+        await first.value
+        await second.value
+        XCTAssertEqual(store.availability, .ready(c))
+        XCTAssertEqual(counter.count, 2)
+    }
 }

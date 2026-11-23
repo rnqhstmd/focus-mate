@@ -103,6 +103,22 @@ final class TimeSelectionUITests: XCTestCase {
         XCTAssertTrue(proceed.isEnabled)
     }
 
+    func testOriginPreviewCanBeCancelledOrConfirmedAfterChoosingABus() throws {
+        let app = try openTimeScreen()
+        element("time.candidate.2014", in: app).tap()
+        app.buttons["time.changeOrigin"].tap()
+        app.typeStationQuery("성수역")
+        element("search.result.seongsu-r", in: app).tap()
+        app.buttons["취소"].tap()
+        XCTAssertTrue(element("time.candidate.2014", in: app).isSelected)
+        app.buttons["time.changeOrigin"].tap()
+        app.typeStationQuery("성수역")
+        element("search.result.seongsu-r", in: app).tap()
+        app.buttons["search.confirm"].tap()
+        XCTAssertEqual(try value("time.minutesLabel", in: app), "25")
+        XCTAssertFalse(element("time.proceed", in: app).isEnabled)
+    }
+
     func testChangingMinutesClearsSelectionImmediately() throws {
         let app = try openTimeScreen()
         try setMinutes(60, in: app)

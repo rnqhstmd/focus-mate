@@ -11,19 +11,19 @@ final class FirstStationSearchUITests: XCTestCase {
     }
 
     // 깨짐(AC-6): 검색어가 비어 있는데 결과를 나열하거나 안내 문구가 사라진다.
-    func testInitialSearchScreenShowsPromptWithoutResultsAndDisabledConfirm() throws {
+    func testInitialSearchScreenShowsTopSearchAndNoConfirmationAction() throws {
         let app = launch()
 
         XCTAssertTrue(element("screen.initialStationEntry", in: app).waitForExistence(timeout: timeout))
-        XCTAssertTrue(element("search.query", in: app).waitForExistence(timeout: timeout))
+        let query = element("search.query", in: app)
+        XCTAssertTrue(query.waitForExistence(timeout: timeout))
         let prompt = element("search.prompt", in: app)
         XCTAssertTrue(prompt.waitForExistence(timeout: timeout))
         XCTAssertEqual(prompt.label, "정류장 이름이나 번호를 입력하세요")
         XCTAssertEqual(resultButtons(in: app).count, 0)
         XCTAssertFalse(element("search.resetNotice", in: app).exists)
-        let confirm = element("search.confirm", in: app)
-        XCTAssertTrue(confirm.exists)
-        XCTAssertFalse(confirm.isEnabled)
+        XCTAssertLessThan(query.frame.midY, app.frame.midY)
+        XCTAssertFalse(element("search.confirm", in: app).exists)
     }
 
     // 깨짐: 이름 부분 일치 검색이 좁혀지지 않거나 같은 이름의 양방향 승강장이 하나로 합쳐진다.
@@ -65,18 +65,15 @@ final class FirstStationSearchUITests: XCTestCase {
         XCTAssertTrue(empty.waitForExistence(timeout: timeout))
         XCTAssertEqual(empty.label, "결과가 없어요")
         XCTAssertEqual(resultButtons(in: app).count, 0)
-        let confirm = element("search.confirm", in: app)
-        XCTAssertTrue(confirm.exists)
-        XCTAssertFalse(confirm.isEnabled)
-
-        confirm.tap()
+        XCTAssertFalse(element("search.confirm", in: app).exists)
         XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), before)
         XCTAssertTrue(element("screen.initialStationEntry", in: app).exists)
     }
 
-    func testSelectingResultShowsConfirmationMarksSelectedAndEnablesConfirm() throws {
+    func testSelectingResultShowsPreviewAndClosesKeyboardWithoutSaving() throws {
         let app = launch()
         let query = try searchField(in: app)
+        let before = try diagnosticValue("test.persistedBytes", in: app)
         query.tap()
         query.typeText("성수역")
         let result = element("search.result.seongsu-r", in: app)
@@ -88,9 +85,47 @@ final class FirstStationSearchUITests: XCTestCase {
 
         let confirmation = element("search.confirmation", in: app)
         XCTAssertTrue(confirmation.waitForExistence(timeout: timeout))
-        XCTAssertEqual(confirmation.label, "성수역 · 성수사거리 방면에서 출발")
-        XCTAssertTrue(result.isSelected)
-        XCTAssertTrue(element("search.confirm", in: app).isEnabled)
+        XCTAssertEqual(confirmation.label, "성수역")
+        XCTAssertEqual(element("search.previewDirection", in: app).label, "성수사거리 방면")
+        XCTAssertEqual(element("search.previewRoutes", in: app).label, "2014")
+        XCTAssertFalse(element("search.previewARS", in: app).exists)
+        XCTAssertFalse(result.exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        let confirm = element("search.confirm", in: app)
+        XCTAssertTrue(confirm.isEnabled)
+        XCTAssertEqual(confirm.label, "출발지로 선택")
+        XCTAssertEqual(try diagnosticValue("test.persistedBytes", in: app), before)
+    }
+
+    func testReselectPreservesSearchAndEditingClearsAStillMatchingPreview() throws {
+        let app = launch()
+        let query = try searchField(in: app)
+        query.tap()
+        query.typeText("알파")
+        let first = element("search.result.S1", in: app)
+        XCTAssertTrue(first.waitForExistence(timeout: timeout))
+        XCTAssertEqual(first.label, "알파, 베타 방면, 정류장 번호 10001")
+        first.tap()
+
+        let ars = element("search.previewARS", in: app)
+        XCTAssertTrue(ars.waitForExistence(timeout: timeout))
+        XCTAssertEqual(ars.label, "정류장 번호 10001")
+        XCTAssertTrue(element("search.previewRoutes", in: app).label.contains("1111"))
+
+        element("search.reselect", in: app).tap()
+        let opposite = element("search.result.S1b", in: app)
+        XCTAssertTrue(opposite.waitForExistence(timeout: timeout))
+        XCTAssertEqual(query.value as? String, "알파")
+        XCTAssertFalse(element("search.confirm", in: app).exists)
+        opposite.tap()
+        XCTAssertTrue(ars.waitForExistence(timeout: timeout))
+        XCTAssertEqual(ars.label, "정류장 번호 10002")
+
+        query.tap()
+        query.typeText(" ")
+        XCTAssertTrue(opposite.waitForExistence(timeout: timeout))
+        XCTAssertFalse(element("search.confirmation", in: app).exists)
+        XCTAssertFalse(element("search.confirm", in: app).exists)
     }
 
     func testKeyboardPathSearchSelectConfirmOpensTimeScreenWithSavedStation() throws {

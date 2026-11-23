@@ -13,7 +13,6 @@ final class StationSearchStateTests: XCTestCase {
         XCTAssertEqual(state.result(in: catalog), .prompt)
         XCTAssertNil(state.selectedOption(in: catalog))
         XCTAssertFalse(state.canConfirm(in: catalog))
-        XCTAssertNil(state.confirmationText(in: catalog))
     }
 
     // 깨짐: 결과가 없을 때 카탈로그 id 선택을 허용하면 실패한다.
@@ -30,28 +29,27 @@ final class StationSearchStateTests: XCTestCase {
         XCTAssertFalse(state.canConfirm(in: catalog))
     }
 
-    // 깨짐: 방면을 확인 문구에 넣지 않거나 구분자가 다르면 실패한다.
-    func test_방면이_있는_정류장을_선택하면_확인_문구에_방면이_붙는다() throws {
+    func testSelectedPreviewKeepsStationDirection() throws {
         let catalog = try catalog()
         var state = StationSearchState()
         state.query = "알파"
 
         XCTAssertTrue(state.select("S1", in: catalog))
 
-        XCTAssertEqual(state.confirmationText(in: catalog), "알파 · 베타 방면에서 출발")
+        XCTAssertEqual(state.selectedOption(in: catalog)?.boundLabel, "베타 방면")
         XCTAssertTrue(state.canConfirm(in: catalog))
         XCTAssertEqual(state.selectedOption(in: catalog)?.id, "S1")
     }
 
-    // 깨짐: 방면이 없는데 구분자나 빈 방면 문구가 남으면 실패한다.
-    func test_방면이_없는_정류장의_확인_문구는_이름만_쓴다() throws {
+    func testStationWithoutDirectionCanStillBeConfirmed() throws {
         let catalog = try catalog()
         var state = StationSearchState()
         state.query = "알파센터"
 
         XCTAssertTrue(state.select("S9", in: catalog))
 
-        XCTAssertEqual(state.confirmationText(in: catalog), "알파센터에서 출발")
+        XCTAssertNil(state.selectedOption(in: catalog)?.boundLabel)
+        XCTAssertTrue(state.canConfirm(in: catalog))
     }
 
     // 깨짐: 검색어가 바뀌어 결과에서 빠진 선택을 유지하면 실패한다.
@@ -65,7 +63,53 @@ final class StationSearchStateTests: XCTestCase {
 
         XCTAssertNil(state.selectedOption(in: catalog))
         XCTAssertFalse(state.canConfirm(in: catalog))
-        XCTAssertNil(state.confirmationText(in: catalog))
+    }
+
+    func testEditingQueryClearsPreviewEvenWhenTheSameResultStillMatches() throws {
+        let catalog = try catalog()
+        var state = StationSearchState()
+        state.query = "알파"
+        XCTAssertTrue(state.select("S1", in: catalog))
+
+        state.query = "알파 "
+
+        XCTAssertNil(state.selectedID)
+        XCTAssertFalse(state.canConfirm(in: catalog))
+        state.query = "알파"
+        XCTAssertNil(state.selectedOption(in: catalog))
+    }
+
+    func testReselectReturnsToTheSameSearchResultsAndAnotherOriginCanBeChosen() throws {
+        let catalog = try catalog()
+        var state = StationSearchState()
+        state.query = "알파"
+        let results = state.result(in: catalog)
+        XCTAssertTrue(state.select("S1", from: results))
+
+        state.clearSelection()
+
+        XCTAssertEqual(state.query, "알파")
+        XCTAssertEqual(state.result(in: catalog), results)
+        XCTAssertFalse(state.canConfirm(in: catalog))
+        XCTAssertTrue(state.select("S1b", from: results))
+        XCTAssertEqual(state.selectedOption(in: catalog)?.id, "S1b")
+    }
+
+    func testPreviewServingBusNumbersComeOnlyFromSelectedStopVisits() throws {
+        let catalog = try catalog()
+        var state = StationSearchState()
+        state.query = "알파"
+        XCTAssertTrue(state.select("S1", in: catalog))
+        let station = try XCTUnwrap(state.selectedOption(in: catalog))
+        let expected = catalog.visits(stopIndex: station.stopIndex).map { catalog.routes[$0.route].number }
+
+        XCTAssertFalse(expected.isEmpty)
+        let buses = station.servingBusNumbers(in: catalog)
+        XCTAssertEqual(Set(buses), Set(expected))
+        XCTAssertEqual(buses.count, Set(buses).count)
+        state.query = "알파센터"
+        XCTAssertTrue(state.select("S9", in: catalog))
+        XCTAssertEqual(state.selectedOption(in: catalog)?.servingBusNumbers(in: catalog), [])
     }
 
     // 깨짐: 현재 결과 밖 id 선택을 받아들이거나 기존 선택을 지우면 실패한다.

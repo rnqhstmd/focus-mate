@@ -19,8 +19,8 @@ extension AppModel {
 
     /// 정류장 데이터를 백그라운드에서 읽는다. 끝나면 저장된 현재 정류장이 데이터에 없는지 한 번 확인한다(BR-16).
     @discardableResult
-    func startRouteData() -> Task<Void, Never> {
-        let loading = routeData.startLoading()
+    func startRouteData(retryFailed: Bool = false) -> Task<Void, Never> {
+        let loading = routeData.startLoading(retryFailed: retryFailed)
         return Task { [weak self] in
             await loading.value
             self?.resolveStationAfterRouteDataReady()
@@ -85,6 +85,25 @@ extension AppModel {
     var preparedJourney: JourneySelection? {
         if case let .ready(selection) = journeyProceedState { return selection }
         return nil
+    }
+
+    @discardableResult
+    func replaceJourneyOrigin(_ option: StopSearchOption) -> Bool {
+        guard launchState == .ready(.main), path.last == .time,
+              let current = snapshot, current.journey.active == nil,
+              let catalog = routeCatalog, let index = catalog.stopIndex(id: option.snapshot.id) else { return false }
+        let stop = catalog.stops[index]
+        let station = StationSnapshot(id: stop.id, name: stop.name)
+        if current.currentStation == station {
+            dismissSaveFailure()
+            return true
+        }
+        guard save(current.updatingStage(cardIssued: current.cardIssued,
+                                         initialStation: current.initialStation, currentStation: station)) else { return false }
+        let minutes = journeyPlan.minutes
+        journeyPlan = JourneyPlanDraft()
+        journeyPlan.setMinutes(minutes)
+        return true
     }
 
     /// 최초 정류장 설정 화면에서만 한 번 저장한다. 성공하면 메인 위에 시간 선택을 연다.

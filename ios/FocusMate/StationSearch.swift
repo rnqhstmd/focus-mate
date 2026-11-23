@@ -9,7 +9,14 @@ struct StopSearchOption: Identifiable, Equatable {
     let boundLabel: String?
 
     var accessibilityLabel: String {
-        ([name, ars, boundLabel] as [String?]).compactMap { $0 }.joined(separator: ", ")
+        ([name, boundLabel, ars.map { "정류장 번호 \($0)" }] as [String?]).compactMap { $0 }.joined(separator: ", ")
+    }
+
+    func servingBusNumbers(in catalog: RouteCatalog) -> [String] {
+        guard catalog.stops.indices.contains(stopIndex), catalog.stops[stopIndex].id == id else { return [] }
+        var seen = Set<String>()
+        let numbers = catalog.visits(stopIndex: stopIndex).map { catalog.routes[$0.route].number }
+        return numbers.filter { seen.insert($0).inserted }
     }
 }
 
@@ -19,15 +26,14 @@ enum StationSearchResult: Equatable {
     case results([StopSearchOption], overflow: Bool)
 }
 
-/// BR-9 정류장 검색. 숫자만 입력하면 번호(정확 → 앞자리), 그 밖은 이름(정확 → 앞부분 → 부분) 일치 순이다.
+/// 정류장 번호는 숫자와 구분 공백·하이픈을 받아 정확 또는 앞자리로 찾는다. 이름은 정확, 앞부분, 부분 일치 순이다.
 enum StationSearch {
     static let limit = 50
 
     static func search(_ query: String, in catalog: RouteCatalog) -> StationSearchResult {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !term.isEmpty else { return .prompt }
-        let ranked = term.allSatisfy { $0.isASCII && $0.isNumber }
-            ? numberMatches(term, in: catalog) : nameMatches(term, in: catalog)
+        let ranked = arsDigits(in: term).map { numberMatches($0, in: catalog) } ?? nameMatches(term, in: catalog)
         guard !ranked.isEmpty else { return .empty }
         let options = ranked.prefix(limit).map { index in
             let stop = catalog.stops[index]
@@ -36,6 +42,14 @@ enum StationSearch {
         }
         return .results(options, overflow: ranked.count > limit)
     }
+
+    private static func arsDigits(in term: String) -> String? {
+        guard let first = term.first, let last = term.last, isDigit(first), isDigit(last),
+              term.allSatisfy({ isDigit($0) || $0.isWhitespace || $0 == "-" }) else { return nil }
+        return String(term.filter(isDigit))
+    }
+
+    private static func isDigit(_ character: Character) -> Bool { character.isASCII && character.isNumber }
 
     private static func numberMatches(_ term: String, in catalog: RouteCatalog) -> [Int] {
         catalog.stops.indices.compactMap { index -> (stage: Int, ars: String, id: String, index: Int)? in

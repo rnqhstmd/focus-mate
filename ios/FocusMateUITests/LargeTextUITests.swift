@@ -20,6 +20,10 @@ final class LargeTextUITests: XCTestCase {
         try reach(result, in: app)
         result.tap()
 
+        let preview = element("search.confirmation", in: app)
+        XCTAssertTrue(preview.waitForExistence(timeout: timeout))
+        XCTAssertEqual(preview.label, "성수역")
+        XCTAssertTrue(element("search.reselect", in: app).isHittable, "다시 선택 버튼이 닿지 않음")
         let confirm = element("search.confirm", in: app)
         XCTAssertTrue(confirm.waitForExistence(timeout: timeout))
         XCTAssertTrue(confirm.isHittable, "확인 버튼이 스크롤 없이 닿지 않음")

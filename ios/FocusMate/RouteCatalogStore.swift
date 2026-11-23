@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// 번들 정류장 데이터를 읽는 중인지, 읽었는지, 읽지 못했는지(번들 결함 — 재시도하지 않는다).
+/// 번들 정류장 데이터의 로딩 상태.
 enum RouteDataAvailability: Equatable {
     case loading
     case ready(RouteCatalog)
@@ -32,7 +32,11 @@ final class RouteCatalogStore {
     }
 
     @discardableResult
-    func startLoading() -> Task<Void, Never> {
+    func startLoading(retryFailed: Bool = false) -> Task<Void, Never> {
+        if retryFailed, availability == .failed {
+            task = nil
+            availability = .loading
+        }
         if let task { return task }
         guard availability == .loading else {
             let done = Task {}

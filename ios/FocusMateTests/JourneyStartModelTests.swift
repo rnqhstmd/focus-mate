@@ -53,6 +53,24 @@ final class JourneyStartModelTests: XCTestCase {
     // MARK: confirmInitialStation
 
     @MainActor
+    func testChangingOriginKeepsFirstStationAndTimeAndRetriesFailedSave() throws {
+        let probe = Probe()
+        let model = try readyModel(probe)
+        model.open(.time)
+        model.journeyPlan.setMinutes(33)
+        let option = try reverseOption()
+        probe.shouldFail = true
+        XCTAssertFalse(model.replaceJourneyOrigin(option))
+        XCTAssertEqual(model.snapshot?.currentStation, Self.seongsuForward)
+        probe.shouldFail = false
+        XCTAssertTrue(model.replaceJourneyOrigin(option))
+        XCTAssertEqual(model.snapshot?.currentStation, option.snapshot)
+        XCTAssertEqual(model.snapshot?.initialStation, Self.seongsuForward)
+        XCTAssertEqual(model.journeyPlan.minutes, 33)
+        XCTAssertEqual(model.path, [.time])
+    }
+
+    @MainActor
     func test카드만_발급된_상태에서_성수역_역방향_정류장을_확정하면_true와_함께_한번_저장한다() throws {
         let probe = Probe()
         let model = try cardOnlyModel(probe)
@@ -131,6 +149,23 @@ final class JourneyStartModelTests: XCTestCase {
         model.journeyPlan.setMinutes(60)
         BoardingFixtures.chooseRoute("2014", in: model)
         return model
+    }
+
+    @MainActor
+    func testConfirmingSameOriginPreservesSelectedRouteWithoutAnotherWrite() throws {
+        let probe = Probe()
+        let model = try selectedModel(probe)
+        guard case let .results(options, _) = StationSearch.search("성수역", in: BoardingFixtures.uiCatalog()) else {
+            return XCTFail("성수역 검색 결과가 없다")
+        }
+        let original = try XCTUnwrap(options.first { $0.id == Self.seongsuForward.id })
+        probe.shouldFail = true
+        XCTAssertFalse(model.replaceJourneyOrigin(try reverseOption()))
+        XCTAssertTrue(model.replaceJourneyOrigin(original))
+        XCTAssertNil(model.saveFailure)
+        XCTAssertEqual(probe.writes.count, 0)
+        XCTAssertEqual(model.journeyPlan.selectedRouteID, "2014")
+        XCTAssertEqual(model.journeyPlan.minutes, 60)
     }
 
     @MainActor

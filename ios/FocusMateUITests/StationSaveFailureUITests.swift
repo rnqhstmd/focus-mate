@@ -50,11 +50,14 @@ final class StationSaveFailureUITests: XCTestCase {
         let bytesBefore = try diagnosticValue("test.persistedBytes", in: app)
         confirm.tap()
         XCTAssertTrue(element("search.saveFailure", in: app).waitForExistence(timeout: timeout))
+        XCTAssertEqual(element("search.confirmation", in: app).label, "성수역")
+        XCTAssertEqual(element("search.previewDirection", in: app).label, "성수사거리 방면")
         XCTAssertTrue(confirm.isEnabled)
 
         confirm.tap()
 
         XCTAssertTrue(element("search.saveFailure", in: app).waitForExistence(timeout: timeout))
+        XCTAssertEqual(element("search.confirmation", in: app).label, "성수역")
         XCTAssertEqual(element("search.saveFailure", in: app).label, searchFailureMessage)
         XCTAssertTrue(element("screen.initialStationEntry", in: app).exists)
         XCTAssertFalse(element("screen.time", in: app).waitForExistence(timeout: 1))

@@ -96,7 +96,61 @@ audio.run('show("prepare");openSoundEditor();chooseSound("none");applySound();co
 console.log('PASS: optional audio backend model start/pause/resume/hide/return/arrival stop and silent choice. Browser playback and audible quality remain unverified.');
 
 assert(!/opposite|반대편/i.test(html),'obsolete direction confirmation UI/code remains');
-const firstSetup=makeFixture();issueAndSearch(firstSetup);assert.equal(firstSetup.byId('searchSubtitle').textContent,'출발 정류장을 골라주세요.');firstSetup.byId('searchClose').onclick();assert.equal(firstSetup.run('scene'),'issue');assert.equal(firstSetup.run('onboarded'),false);
+const firstSetup=makeFixture();issueAndSearch(firstSetup);assert.equal(firstSetup.byId('searchSubtitle').textContent,'가상 승차장 3곳');firstSetup.byId('searchClose').onclick();assert.equal(firstSetup.run('scene'),'issue');assert.equal(firstSetup.run('onboarded'),false);
+{
+  const f=makeFixture();
+  issueAndSearch(f);
+  const key=f.run('locationStorageKey');
+  assert.equal(f.byId('stationSearch').value,'');
+  assert.equal(f.run('confirmStation()'),false);
+  f.byId('stationSearch').value='성수역';
+  f.run("searchStations('성수역');selectStation(0,-1)");
+  assert.equal(f.storageData.has(key),false);
+  assert.equal(f.byId('stationPreviewNext').textContent,'성수사거리');
+  assert.equal(f.active,f.byId('stationPreviewName'));
+  const reverse=f.byId('stationMapSection').attrs.points;
+  f.byId('search').onkeydown({key:'Escape',isComposing:true,preventDefault(){throw Error('IME Escape intercepted')}});
+  assert.equal(f.byId('stationPreview').hidden,false);
+  f.byId('stationEdit').onclick();
+  assert.equal(f.byId('stationSearch').value,'성수역');
+  assert.equal(f.active,f.byId('searchResults').children[1]);
+  assert.equal(f.run('confirmStation()'),false);
+  f.byId('searchResults').children[0].onclick();
+  assert.equal(f.byId('stationPreviewNext').textContent,'성수동');
+  assert.notEqual(f.byId('stationMapSection').attrs.points,reverse);
+  f.byId('searchConfirm').onclick();
+  f.run("snapRuler(40,false);chooseTimeJourney('421')");
+  const previous=f.run('selectedJourneyKey'),stored=f.storageData.get(key);
+  f.byId('timeChangeStation').onclick();
+  f.run('selectStation(4,1)');
+  f.byId('searchClose').onclick();
+  assert.equal(f.active,f.byId('timeChangeStation'));
+  assert.equal(f.run('selectedJourneyKey'),previous);
+  assert.equal(f.storageData.get(key),stored);
+  f.byId('timeChangeStation').onclick();
+  f.run('selectStation(0,1);confirmStation()');
+  assert.equal(f.run('selectedJourneyKey'),previous);
+  f.byId('timeChangeStation').onclick();
+  f.run("selectStation(0,-1);const originalStationWrite=localStorage.setItem;localStorage.setItem=()=>{throw Error('full')}");
+  assert.equal(f.run('confirmStation()'),false);
+  assert.equal(f.run('scene'),'search');
+  assert.equal(f.byId('stationSaveError').hidden,false);
+  assert.equal(f.run('direction'),1);
+  assert.equal(f.run('selectedJourneyKey'),previous);
+  assert.equal(f.storageData.get(key),stored);
+  f.run('localStorage.setItem=originalStationWrite;confirmStation()');
+  assert.equal(f.run('direction'),-1);
+  assert.equal(f.run('duration'),40);
+  assert.equal(f.run('selectedJourneyKey'),null);
+  assert.equal(JSON.parse(f.storageData.get(key)).direction,-1);
+  const real=f.storageData.get(key);
+  f.run("rememberViewerOrigin();viewerJourney=passDemoMode=true;openSearch('time');selectStation(4,1);confirmStation()");
+  assert.equal(f.run('startOffset'),4);
+  assert.equal(f.storageData.get(key),real);
+  f.run('restoreViewerOrigin()');
+  assert.equal(f.run('startOffset'),0);
+  assert.equal(f.run('direction'),-1);
+}
 issueAndSearch(firstSetup);firstSetup.byId('stationSearch').value='성수역';const bounds=Array.from(firstSetup.run('searchStations("성수역")'));assert.equal(bounds.length,2);assert(bounds.every(item=>item.name==='성수역'));for(const item of bounds){const setup=makeFixture();issueAndSearch(setup);setup.run(`selectStation(${item.index},${item.direction});confirmStation()`);const expected=setup.run(`stationBound(${item.index},${item.direction})`);assert(setup.byId('stationDirection').textContent.includes(expected));assert(setup.byId('homeDirection').textContent.includes(expected));const saved=makeFixture({seed:[...setup.storageData]});assert.equal(saved.run('scene'),'main');saved.byId('mainStart').onclick();assert.equal(saved.run('scene'),'time');assert.equal(saved.run('direction'),item.direction);assert.equal(saved.run('openSearch("home")'),false);saved.run('show("search")');assert.equal(saved.run('scene'),'time');assert.equal(saved.run('startOffset'),item.index);}
 const preview=makeFixture();preview.run('show("home")');for(const bus of busIds){preview.run(`chooseBus('${bus}')`);assert(!preview.byId('mapScene').classes.has('route-muted'));assert.equal(preview.byId('routePath').attrs.stroke,preview.run('busOptions[selectedBus].color'));assert.equal(preview.byId('endMarker').attrs.stroke,preview.run('busOptions[selectedBus].color'));assert(preview.byId('homePreviewDestination').textContent.includes(preview.run('destination')));const n=preview.run('stopIndex(totalStops)'),q=n*100;assert.equal(Number(preview.byId('endMarker').attrs.cx),q/3);assert.equal(preview.run('scene'),'home');assert.equal(preview.byId('homeBusButton').attrs['aria-expanded'],'false');}
 assert(/#home\s*\{[^}]*overflow\s*:\s*hidden/.test(html),'home outer panel scroll not disabled');assert(/\.phone\s*,\s*\.phone\s+\*\s*\{[^}]*scrollbar-width\s*:\s*none/.test(html),'phone descendants native scrollbar not hidden');assert(/\.phone::-webkit-scrollbar\s*,\s*\.phone\s+\*::-webkit-scrollbar\s*\{[^}]*display\s*:\s*none/.test(html),'phone descendants WebKit scrollbar not hidden');assert(/\.bus-option\s*\{[^}]*min-height\s*:\s*56px/.test(html),'bus option compact size missing');assert(/\.home-footer\s*\{[^}]*flex-shrink\s*:\s*0/.test(html),'CTA footer may shrink');
@@ -168,12 +222,46 @@ for(const type of ['travel','preview']){const decoding=makeFixture({audioSupport
 assert(simpleBoard.header.classes.has('hidden'),'ticket still shows duplicate global bus header');
 console.log('PASS: independently delayed decode cancellation for travel pause/preview choice and global ticket header removal.');
 
-const previewPath=makeFixture();for(const dir of [1,-1])for(const minutes of [15,360]){previewPath.run(`show('home');direction=${dir};snapRuler(${minutes},false);show('time')`);assert(previewPath.run('previewRunning'));previewPath.run('tick(1000)');const previewMs=previewPath.run('previewDuration');previewPath.run(`tick(${1000+previewMs/2})`);assert(Math.abs(previewPath.run('previewProgress')-.5)<1e-8);assert.equal(previewPath.run('progress'),0);assert.equal(previewPath.run('sessionRecords.length'),0);assert.equal(previewPath.audioMetrics.started,0);const expected=previewPath.run('wrap(startOffset+direction*9*.5)/9*length');assert.equal(previewPath.run('lastBusPoint.x'),expected/3);previewPath.run(`tick(${1000+previewMs})`);assert.equal(previewPath.run('previewProgress'),1);assert(!previewPath.run('previewRunning'));assert.equal(previewMs,12000);assert.equal(previewPath.byId('bus').attrs.transform.match(/translate\(([^ ]+)/)[1],String(previewPath.run('lastBusPoint.x')));previewPath.run('show("prepare")');assert(!previewPath.run('previewRunning'));assert.equal(previewPath.run('previewProgress'),0);}
-previewPath.run('show("time");tick(1000);tick(3000);snapRuler(60,false)');assert.equal(previewPath.run('previewProgress'),0);assert(!previewPath.run('previewRunning'));previewPath.byId('routePreview').onclick();assert(previewPath.run('previewRunning'));previewPath.byId('reduce').checked=true;previewPath.run('reduced()');assert.equal(previewPath.run('previewProgress'),1);assert(!previewPath.run('previewRunning'));previewPath.run('tick(99999)');assert.equal(previewPath.run('previewProgress'),1);
+const previewPath=makeFixture();
+for(const dir of [1,-1])for(const minutes of [15,360]){
+  previewPath.run(`show('home');direction=${dir};snapRuler(${minutes},false);show('time')`);
+  assert(!previewPath.run('previewRunning'));
+  previewPath.byId('routePreview').onclick();
+  previewPath.run('tick(1000)');
+  const ms=previewPath.run('previewDuration');
+  previewPath.run(`tick(${1000+ms/2})`);
+  assert.equal(previewPath.run('previewProgress'),.5);
+  assert.equal(previewPath.run('lastBusPoint.x'),previewPath.run('route.getPointAtLength(length*wrap(startOffset+direction*totalStops*.5)/9).x'));
+  assert.equal(previewPath.run('progress'),0);
+  assert.equal(previewPath.run('sessionRecords.length'),0);
+  assert.equal(previewPath.audioMetrics.started,0);
+  previewPath.run(`tick(${1000+ms})`);
+  assert.equal(previewPath.run('previewProgress'),1);
+  assert(!previewPath.run('previewRunning'));
+  assert.equal(previewPath.run('lastBusPoint.x'),previewPath.run('route.getPointAtLength(length*stopIndex(totalStops)/9).x'));
+  previewPath.run('show("prepare")');
+  assert.equal(previewPath.run('previewProgress'),0);
+}
+previewPath.run('show("time");startTimePreview();tick(1000);tick(3000);snapRuler(60,false)');
+assert.equal(previewPath.run('previewProgress'),0);
+assert(!previewPath.run('previewRunning'));
+previewPath.byId('routePreview').onclick();
+assert(previewPath.run('previewRunning'));
+previewPath.byId('routePreview').onclick();
+assert(!previewPath.run('previewRunning'));
+previewPath.byId('reduce').checked=true;
+previewPath.run('reduced()');
+assert.equal(previewPath.run('previewProgress'),0);
+previewPath.byId('routePreview').onclick();
+assert.equal(previewPath.run('previewProgress'),1);
+assert(!previewPath.run('previewRunning'));
+previewPath.byId('routePreview').onclick();
+assert.equal(previewPath.run('previewProgress'),0);
+
 const fitted=makeFixture();fitted.byId('mapViewport').clientWidth=272;fitted.byId('mapViewport').clientHeight=656;fitted.phone.rect={top:12,bottom:668,left:8,right:280};fitted.header.rect={top:72,bottom:120,left:24,right:150};fitted.stationOverview.rect={top:72,bottom:145,left:24,right:264};fitted.appTabs.rect={top:592,bottom:648,left:24,right:264};fitted.byId('routePath').getPointAtLength=n=>{const a=n/900*2*Math.PI;return{x:221+149*Math.cos(a),y:196+151*Math.sin(a)}};for(const screen of ['home','search','buses','time','prepare','task','tags','sound','tagEdit','board','arrival','records','settings']){fitted.byId(screen).rect={top:screen==='time'?392:screen==='home'?410:335,bottom:648,left:18,right:270};fitted.run(`show('intro');show('${screen}')`);const area=fitted.run('mapAvailableRect()');assert(area.top<area.bottom);assert.equal(fitted.run('cameraAngle'),0);for(let j=0;j<72;j++){fitted.run(`updateCamera(route.getPointAtLength(length*${j}/72))`);const screenX=fitted.run('cameraX+cameraZoom*lastMapPoint.x'),screenY=fitted.run('cameraY+cameraZoom*lastMapPoint.y');assert(screenX>=area.left-1e-8&&screenX<=area.right+1e-8,'map horizontal clipping '+screen);assert(screenY>=area.top-1e-8&&screenY<=area.bottom+1e-8,'marker overlaps measured overlays '+screen);}}
 fitted.run('show("focus");toggleRail()');fitted.byId('stationRail').rect={top:184,bottom:434,left:20,right:148};fitted.run('draw()');const anchor=fitted.run('focusCameraAnchor()');assert(anchor.x>fitted.byId('stationRail').rect.right-fitted.phone.rect.left);assert.equal(fitted.run('cameraX+cameraZoom*(Math.cos(cameraAngle*Math.PI/180)*lastMapPoint.x-Math.sin(cameraAngle*Math.PI/180)*lastMapPoint.y)'),anchor.x);
 const cleanArrival=makeFixture();cleanArrival.run('show("arrival")');assert.equal(cleanArrival.byId('arrivaltitle').textContent,'나를 위한 '+cleanArrival.run('formatTime(duration)'));assert.equal(cleanArrival.run('sessionRecords.length'),0);assert.equal(cleanArrival.byId('arrivalDestination').textContent,cleanArrival.run('destination'));
-console.log('PASS: independent short/6-hour constant-speed single-lap time preview, choice/scene/reduced cancellation, no trip progress/record/audio side effects, measured-overlay marker bounds at 272×656 and expanded-rail focus anchor, total-minute-only timer and simple arrival.');
+console.log('PASS: on-demand selected-route preview for short and six-hour trips, reduced-motion endpoints, unchanged journey progress, records and audio, overlay marker bounds and expanded-rail focus anchor.');
 
 const previewColor=makeFixture();previewColor.run('show("home");snapRuler(360,false);show("time")');const initialLine=previewColor.byId('routePath').style.strokeDasharray;previewColor.run('previewProgress=1;draw()');assert.equal(previewColor.byId('routePath').style.strokeDasharray,initialLine);previewColor.run('show("focus");progress=.999999;draw()');assert.equal(previewColor.byId('timer').textContent,'1 min');assert(/\.phone #board \.pass-stations\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(html));assert(/\.phone #board \.pass-stats\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/.test(html));assert(/\.phone #board \.pass-arrow\s*\{[^}]*display:none/.test(html));assert(/\.phone #time #timeContext[^{}]*\{[^}]*display:none!important/.test(html));assert(/\.phone #railToggle\s*\{[^}]*top:116px/.test(html));
 console.log('PASS: selected route color persists at preview endpoint, unfinished trip keeps at least 1 min, equal ticket columns/no arrow, compact time details and rail directly below pause.');
@@ -183,12 +271,30 @@ console.log('PASS: expanded-rail overview marker bounds and cameraOverview persi
 
 fitted.byId('time').offsetParent=fitted.phone;fitted.byId('time').offsetTop=380;fitted.byId('time').offsetLeft=10;fitted.byId('time').offsetWidth=252;fitted.byId('time').offsetHeight=256;fitted.byId('time').rect={top:480,bottom:736,left:18,right:270};fitted.run('show("time")');assert.equal(fitted.run('visibleOverlayRect($("time")).top'),380);assert.equal(fitted.run('mapAvailableRect().bottom'),360);console.log('PASS: overlay layout offsets take precedence over temporary entry-transform rectangles.');
 
-const singleLap=makeFixture();for(const dir of [1,-1])for(const bus of busIds){let baseline;for(const minutes of [15,60,360]){singleLap.run(`show('home');direction=${dir};startOffset=4;chooseBus('${bus}');snapRuler(${minutes},false);show('time');tick(1000);tick(4000)`);assert.equal(singleLap.run('previewDuration'),12000);assert.equal(singleLap.run('previewProgress'),.25);const point=JSON.stringify(singleLap.run('lastBusPoint'));if(!baseline)baseline=point;else assert.equal(point,baseline,'preview speed depends on trip length');singleLap.run('tick(13000)');assert.equal(singleLap.run('previewProgress'),1);assert(!singleLap.run('previewRunning'));assert.equal(singleLap.run('lastBusPoint.x'),singleLap.run('route.getPointAtLength(length*startOffset/9).x'));}}
+const selectedLeg=makeFixture();
+for(const dir of [1,-1]){
+  for(const bus of busIds){
+    const threeStops=selectedLeg.run(`busOptions['${bus}'].minutesPerStop*3`);
+    for(const minutes of [threeStops,360]){
+      selectedLeg.run(`show('home');direction=${dir};startOffset=4;beginTimeSelection(${minutes})`);
+      assert(selectedLeg.run(`chooseTimeJourney('${bus}')`));
+      assert(!selectedLeg.run('previewRunning'));
+      selectedLeg.byId('routePreview').onclick();
+      selectedLeg.run('tick(1000);tick(1000+previewDuration)');
+      assert.equal(selectedLeg.run('previewProgress'),1);
+      assert.equal(selectedLeg.run('lastBusPoint.x'),selectedLeg.run('route.getPointAtLength(length*stopIndex(totalStops)/9).x'));
+      assert.equal(selectedLeg.run('stopNames[stopIndex(totalStops)]'),selectedLeg.run('currentTimeJourney().destination'));
+    }
+  }
+}
+selectedLeg.run("beginTimeSelection(60)");
+assert.equal(selectedLeg.run("chooseTimeJourney('421')"),false);
+assert.equal(selectedLeg.run('startTimePreview()'),false);
 const pauseControls=makeFixture();for(const target of ['followMap','routeOverview','stationRail']){pauseControls.run('show("home");show("focus")');if(target==='stationRail')pauseControls.run('toggleRail()');pauseControls.byId(target).focus();pauseControls.run('togglePause()');assert(pauseControls.byId('mapTools').classes.has('hidden'));assert(pauseControls.byId('followMap').disabled&&pauseControls.byId('routeOverview').disabled);assert(!pauseControls.byId('quitJourney').classes.has('hidden'));assert.equal(pauseControls.active,pauseControls.byId('focusPause'));const cameraState=pauseControls.run('JSON.stringify([following,cameraX,cameraY,cameraZoom,cameraAngle])');pauseControls.byId('followMap').onclick();pauseControls.byId('routeOverview').onclick();assert.equal(pauseControls.run('JSON.stringify([following,cameraX,cameraY,cameraZoom,cameraAngle])'),cameraState,'paused map guard fails');pauseControls.byId('quitJourney').focus();pauseControls.run('togglePause()');assert.equal(pauseControls.active,pauseControls.byId('focusPause'));assert(pauseControls.byId('quitJourney').classes.has('hidden'));assert(!pauseControls.byId('mapTools').classes.has('hidden'));assert(!pauseControls.byId('followMap').disabled&&!pauseControls.byId('routeOverview').disabled);}
 assert(/\.phone\.is-focus #quitJourney\s*\{[^}]*right:16px[^}]*width:46px[^}]*background:#D13A42/.test(html));
-console.log('PASS: equal 12-second single-lap preview speed across short/long trips and all bus profiles; paused upper-right quit, map-tool hidden/disabled guards and focus restoration on pause/resume; centered colored ticket badge.');
+console.log('PASS: on-demand previews finish at the selected destination across trip lengths, headings and bus profiles; paused upper-right quit, map-tool hidden/disabled guards and focus restoration on pause/resume; centered colored ticket badge.');
 
-const initialOnly=makeFixture({validPreparation:false});assert.equal(initialOnly.run('openSearch("home")'),false);assert.equal(initialOnly.run('scene'),'issue');issueAndSearch(initialOnly);initialOnly.byId('stationSearch').value='missing';initialOnly.run('searchStations("missing")');assert.equal(initialOnly.run('confirmStation()'),false);assert.equal(initialOnly.run('scene'),'issue');issueAndSearch(initialOnly);initialOnly.byId('stationSearch').value='';initialOnly.run('searchStations("");selectStation(4,1);confirmStation()');assert.equal(initialOnly.run('startOffset'),4);assert.equal(initialOnly.run('direction'),1);for(const id of ['changeStation','settingsFirstUse']){assert(initialOnly.byId(id).hidden);assert(initialOnly.byId(id).disabled);assert.equal(initialOnly.byId(id).attrs.tabindex,'-1');initialOnly.byId(id).onclick();assert.equal(initialOnly.run('scene'),'time');}assert.equal(initialOnly.run('openSearch("intro")'),false);initialOnly.run('selectStation(0,1)');assert.equal(initialOnly.run('confirmStation()'),false);assert.equal(initialOnly.run('startOffset'),4);const savedInitial=makeFixture({seed:[...initialOnly.storageData]});assert.equal(savedInitial.run('scene'),'main');savedInitial.byId('mainStart').onclick();savedInitial.run('show("search")');assert.equal(savedInitial.run('scene'),'time');assert.equal(savedInitial.run('startOffset'),4);assert.equal(savedInitial.run('direction'),1);
+const initialOnly=makeFixture({validPreparation:false});assert.equal(initialOnly.run('openSearch("home")'),false);assert.equal(initialOnly.run('scene'),'issue');issueAndSearch(initialOnly);initialOnly.byId('stationSearch').value='missing';initialOnly.run('searchStations("missing")');assert.equal(initialOnly.run('confirmStation()'),false);assert.equal(initialOnly.run('scene'),'search');issueAndSearch(initialOnly);initialOnly.byId('stationSearch').value='';initialOnly.run('searchStations("");selectStation(4,1);confirmStation()');assert.equal(initialOnly.run('startOffset'),4);assert.equal(initialOnly.run('direction'),1);for(const id of ['changeStation','settingsFirstUse']){assert(initialOnly.byId(id).hidden);assert(initialOnly.byId(id).disabled);assert.equal(initialOnly.byId(id).attrs.tabindex,'-1');initialOnly.byId(id).onclick();assert.equal(initialOnly.run('scene'),'time');}assert.equal(initialOnly.run('openSearch("intro")'),false);initialOnly.run('selectStation(0,1)');assert.equal(initialOnly.run('confirmStation()'),false);assert.equal(initialOnly.run('startOffset'),4);const savedInitial=makeFixture({seed:[...initialOnly.storageData]});assert.equal(savedInitial.run('scene'),'main');savedInitial.byId('mainStart').onclick();savedInitial.run('show("search")');assert.equal(savedInitial.run('scene'),'time');assert.equal(savedInitial.run('startOffset'),4);assert.equal(savedInitial.run('direction'),1);
 console.log('PASS: intro-only initial station setup/cancel/no-result, read-only home station, disabled settings reset, saved-launch/direct API search guards and arrival station persistence; external reset remains an explicitly labeled demo.');
 
 const landing=makeFixture({validPreparation:false});assert.equal(landing.run('scene'),'issue');assert(!landing.run('onboarded'));issueAndSearch(landing);landing.byId('searchClose').onclick();assert.equal(landing.run('scene'),'issue');issueAndSearch(landing);landing.run('selectStation(4,1);confirmStation()');assert.equal(landing.run('scene'),'time');landing.byId('backHome').onclick();assert.equal(landing.run('scene'),'main');assert.equal(landing.byId('mainLocation').textContent,landing.run('stopNames[startOffset]'));for(const [open,close,screen]of[['mainRecords','recordsClose','records'],['mainSettings','profileBack','profile']]){landing.byId(open).onclick();assert.equal(landing.run('scene'),screen);landing.byId(close).onclick();assert.equal(landing.run('scene'),'main');}const savedLanding=makeFixture({seed:[...landing.storageData]});assert.equal(savedLanding.run('scene'),'main');savedLanding.byId('mainStart').onclick();assert.equal(savedLanding.run('scene'),'time');assert.equal(savedLanding.run('startOffset'),4);assert(/\.phone \.app-tabs\s*\{[^}]*display:none!important/.test(html)||/\.phone\.is-home \.app-tabs\s*\{[^}]*display:none!important/.test(html));

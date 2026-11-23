@@ -11,7 +11,10 @@ const out=path.resolve(__dirname,'../.impeccable/review/home-preview');fs.mkdirS
    await page.evaluate(minutes=>{beginTimeSelection(minutes);chooseTimeJourney('2014')},minutes);await page.waitForTimeout(250);
    const layout=await page.evaluate(()=>{const phone=document.querySelector('.phone').getBoundingClientRect(),panel=$('time').getBoundingClientRect(),scroll=$('time').querySelector('.sheet-scroll'),footer=$('time').querySelector('.sheet-footer').getBoundingClientRect();return {panel:panel.left>=phone.left&&panel.right<=phone.right&&panel.top>=phone.top,footer:footer.bottom<=phone.bottom-10,scroll:scroll.scrollWidth<=scroll.clientWidth+1,legacyHidden:$('home').classList.contains('hidden')&&$('startJourney').getClientRects().length===0};});assert(Object.values(layout).every(Boolean),JSON.stringify({width,height,minutes,layout}));cases.push({width,height,minutes,layout});
   }
-  await page.locator('#routePreview').click();assert.equal(await page.evaluate(()=>previewDuration),12000);assert.equal(await page.evaluate(()=>progress),0);
+  assert.equal(await page.evaluate(()=>previewRunning),false);
+  await page.locator('#routePreview').click();
+  assert.equal(await page.evaluate(()=>previewRunning),true);
+  assert.equal(await page.evaluate(()=>progress),0);
   await page.locator('#timeRuler').focus();await page.keyboard.press('ArrowLeft');assert.equal(await page.evaluate(()=>previewRunning),false);
   await page.evaluate(()=>{selectTime(40);chooseTimeJourney('2014')});await page.locator('#book').click();assert.equal(await page.evaluate(()=>scene),'prepare');await page.close();
  }

@@ -65,7 +65,7 @@ final class StationSearchTests: XCTestCase {
         let result = try options("알파", in: try F.acceptance())
         let s1 = try XCTUnwrap(result.options.first { $0.id == "S1" })
         XCTAssertEqual(s1.boundLabel, "베타 방면")
-        XCTAssertEqual(s1.accessibilityLabel, "알파, 10001, 베타 방면")
+        XCTAssertEqual(s1.accessibilityLabel, "알파, 베타 방면, 정류장 번호 10001")
     }
 
     // 깨짐: 번호를 숫자로 바꿔 앞의 0을 잃으면 "001" 검색이 실패한다.
@@ -74,6 +74,21 @@ final class StationSearchTests: XCTestCase {
         let catalog = try F.make(stops: stops, routes: [])
         XCTAssertEqual(try options("001", in: catalog).options.map(\.ars), ["00123"])
         XCTAssertEqual(try options("78", in: catalog).options.map(\.ars), ["7832"])
+    }
+
+    func testFormattedARSInputPreservesLeadingZerosAndPrefixRanking() throws {
+        let stops = [
+            F.stop("A", "출발 정류장", ars: "04186", 1),
+            F.stop("B", "다음 정류장", ars: "04189", 2),
+            F.stop("C", "04-정류장", ars: "05789", 3)
+        ]
+        let catalog = try F.make(stops: stops, routes: [])
+
+        XCTAssertEqual(try options("04-186", in: catalog).options.map(\.id), ["A"])
+        XCTAssertEqual(try options("04 186", in: catalog).options.map(\.id), ["A"])
+        XCTAssertEqual(try options("04 - 18", in: catalog).options.map(\.id), ["A", "B"])
+        XCTAssertEqual(StationSearch.search("04186-", in: catalog), .empty)
+        XCTAssertEqual(try options("04-정류장", in: catalog).options.map(\.id), ["C"])
     }
 
     // 깨짐: 번호 없는 정류장의 라벨에 번호 자리가 남거나 ars가 채워지면 실패한다.
@@ -95,7 +110,7 @@ final class StationSearchTests: XCTestCase {
     func testAccessibilityLabelOmitsBoundWhenNil() throws {
         let result = try options("알파센터", in: try F.acceptance())
         XCTAssertNil(result.options.first?.boundLabel)
-        XCTAssertEqual(result.options.first?.accessibilityLabel, "알파센터, 10007")
+        XCTAssertEqual(result.options.first?.accessibilityLabel, "알파센터, 정류장 번호 10007")
     }
 
     // 깨짐: 부분 일치(3단계)를 지원하지 않으면 0건이 된다.

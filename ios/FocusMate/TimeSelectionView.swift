@@ -8,6 +8,7 @@ struct TimeSelectionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var panelHeight: CGFloat = 0
     @State private var contentHeight: CGFloat = 0
+    @State private var choosingOrigin = false
 
     private var selectedCandidate: RouteCandidate? {
         model.journeyCandidates.first { $0.routeID == model.journeyPlan.selectedRouteID }
@@ -24,12 +25,8 @@ struct TimeSelectionView: View {
                                  leg: selectedCandidate?.leg.stopIndices)
                     .ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 0) {
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        ZStack(alignment: .topLeading) {
-                            originSummary
-                            if let selectedCandidate { routeChip(selectedCandidate) }
-                        }
-                        .padding(.leading, 16).padding(.top, -2)
+                    if !dynamicTypeSize.isAccessibilitySize, let selectedCandidate {
+                        routeChip(selectedCandidate).padding(.leading, 16).padding(.top, -2)
                     }
                     Spacer(minLength: 16)
                     panel(maxHeight: maxPanel)
@@ -41,6 +38,18 @@ struct TimeSelectionView: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $choosingOrigin) {
+            NavigationStack {
+                InitialStationSearchView(model: model) { option in
+                    if model.replaceJourneyOrigin(option) { choosingOrigin = false }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("취소") { choosingOrigin = false }
+                    }
+                }
+            }
+        }
     }
 
     private func panel(maxHeight: CGFloat) -> some View {
@@ -96,7 +105,9 @@ struct TimeSelectionView: View {
                 Spacer(minLength: 0)
             }
             .padding(.leading, 19).padding(.trailing, 20)
-            if dynamicTypeSize.isAccessibilitySize { origin.padding(.horizontal, 20).padding(.top, 8) }
+            if let station = model.snapshot?.currentStation {
+                originRow(station).padding(.horizontal, 20).padding(.top, 4)
+            }
             duration.frame(maxWidth: .infinity).padding(.top, 7)
             MinuteRuler(value: minutes, range: JourneyPlanner.minuteRange)
                 .padding(.horizontal, 19).padding(.top, 8)
@@ -117,17 +128,6 @@ struct TimeSelectionView: View {
             .accessibilityIdentifier("time.minutesLabel")
     }
 
-    /// 출발 정류장은 지도 표식(시각)으로 보인다. 지도는 낭독에서 빠지므로 같은 정보를 보이지 않는 요소로 둔다.
-    @ViewBuilder private var originSummary: some View {
-        if let station = model.snapshot?.currentStation {
-            Color.clear.frame(width: 1, height: 1)
-                .accessibilityElement()
-                .accessibilityLabel(["출발 정류장", model.currentStationBound].compactMap { $0 }.joined(separator: ", "))
-                .accessibilityValue(station.name)
-                .accessibilityIdentifier("time.origin")
-        }
-    }
-
     /// R06 왼쪽 위 노선 칩: 반투명 검정 판 위 노선 배지(높이 38).
     private func routeChip(_ candidate: RouteCandidate) -> some View {
         RouteBadge(kind: candidate.busKind, number: candidate.busNumber, height: 38)
@@ -138,20 +138,30 @@ struct TimeSelectionView: View {
             .accessibilityIdentifier("time.routeChip")
     }
 
-    @ViewBuilder private var origin: some View {
-        if let station = model.snapshot?.currentStation {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("출발 정류장").font(FontCatalog.text(12, relativeTo: .caption)).foregroundStyle(FMDesign.secondaryText)
-                Text(station.name).font(FontCatalog.text(20, weight: .bold, relativeTo: .title3))
-                    .accessibilityValue(station.name).accessibilityIdentifier("time.origin")
+    private func originRow(_ station: StationSnapshot) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("출발 · \(station.name)")
+                    .font(FontCatalog.text(15, weight: .semibold))
+                    .accessibilityLabel("출발 정류장").accessibilityValue(station.name)
+                    .accessibilityIdentifier("time.origin")
                 if let bound = model.currentStationBound {
-                    Text(bound).font(FontCatalog.text(15, relativeTo: .subheadline)).foregroundStyle(FMDesign.secondaryText)
-                        .accessibilityIdentifier("time.bound")
+                    Text(bound).font(FontCatalog.text(13, relativeTo: .subheadline))
+                        .foregroundStyle(FMDesign.secondaryText).accessibilityIdentifier("time.bound")
                 }
             }
-            .padding(12)
-            .background(FMDesign.panel.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button { choosingOrigin = true } label: {
+                Text("변경").font(FontCatalog.text(14, weight: .semibold))
+                    .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).accessibilityLabel("출발 정류장 변경").accessibilityIdentifier("time.changeOrigin")
         }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .background(FMDesign.rowFill, in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder private var candidates: some View {
